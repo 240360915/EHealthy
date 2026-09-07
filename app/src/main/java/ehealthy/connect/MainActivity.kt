@@ -57,5 +57,10 @@ fun AppNavGraph() {
                 onSkip = { navController.navigate("choose") }
             )
         }
+        composable("onboarding4") {
+            OnboardingFour(
+                onGetStarted = { navController.navigate("choose") }
+            )
+        }
     }
 }

@@ -38,7 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun OnboardingThree(
+fun OnBoardingScreenThree(
     onContinue: () -> Unit,
     onSkip: () -> Unit
 ) {
@@ -317,12 +317,7 @@ fun OnboardingThree(
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(
-                        text = "Tap to jump",
-                        color = green,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
@@ -339,7 +334,7 @@ fun OnboardingThree(
                             )
                         },
                         title = "Find Doctor",
-                        step = "Step 2"
+                        step = "Step 1"
                     )
                     JourneyItem(
                         modifier = Modifier.weight(1f),
@@ -352,7 +347,7 @@ fun OnboardingThree(
                             )
                         },
                         title = "Book & Consult",
-                        step = "Step 3"
+                        step = "Step 2"
                     )
                     JourneyItem(
                         modifier = Modifier.weight(1f),
@@ -365,7 +360,7 @@ fun OnboardingThree(
                             )
                         },
                         title = "Get Organized",
-                        step = "Step 4"
+                        step = "Step 3"
                     )
                 }
             }

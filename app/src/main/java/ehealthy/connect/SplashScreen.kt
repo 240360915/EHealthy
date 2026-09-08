@@ -27,7 +27,7 @@ import kotlin.time.Duration.Companion.milliseconds
 fun SplashScreen(onFinished: () -> Unit) {
 
     LaunchedEffect(Unit) {
-        delay(3000.milliseconds)
+        delay(2000.milliseconds)
         onFinished()
     }
 

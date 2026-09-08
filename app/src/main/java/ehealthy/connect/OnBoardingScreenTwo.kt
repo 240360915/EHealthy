@@ -102,7 +102,7 @@ fun OnboardingScreenTwo(
                     color = darkText,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
-                    modifier = Modifier.clickable { onSkip }
+                    modifier = Modifier.clickable{onSkip()}
                 )
             }
 
@@ -317,12 +317,7 @@ fun OnboardingScreenTwo(
                         fontWeight = FontWeight.Bold
                     )
 
-                    Text(
-                        text = "Tap to jump",
-                        color = green,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
@@ -340,7 +335,7 @@ fun OnboardingScreenTwo(
                             )
                         },
                         title = "Find Doctor",
-                        step = "Step 2"
+                        step = "Step 1"
                     )
 
                     JourneyItem(
@@ -354,7 +349,7 @@ fun OnboardingScreenTwo(
                             )
                         },
                         title = "Book & Consult",
-                        step = "Step 3"
+                        step = "Step 2"
                     )
 
                     JourneyItem(
@@ -368,7 +363,7 @@ fun OnboardingScreenTwo(
                             )
                         },
                         title = "Get Organized",
-                        step = "Step 4"
+                        step = "Step 3"
                     )
                 }
             }
@@ -380,7 +375,7 @@ fun OnboardingScreenTwo(
             // ------------------------------------------------
 
             Button(
-                onClick = { onContinue },
+                onClick = onContinue ,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(66.dp),

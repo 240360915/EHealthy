@@ -20,7 +20,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import ehealthy.connect.ui.theme.EHealthyTheme
+import io.github.jan.supabase.auth.OtpType
 import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.providers.builtin.OTP
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.launch
 
@@ -91,28 +93,112 @@ fun AppNavGraph() {
             val context = LocalContext.current
             val scope = rememberCoroutineScope()
             var isLoading by remember { mutableStateOf(false) }
+            var email by remember { mutableStateOf("") }
 
             PatientLogin(
                 isLoading = isLoading,
+                email = email,
+                onEmailChange = { email = it },
                 onContinueWithGoogle = {
                     scope.launch {
                         isLoading = true
                         val result = signInWithGoogle(context)
                         isLoading = false
                         result.onSuccess { info ->
-                            PatientSignupState.email = info.email
-                            PatientSignupState.firstName = info.firstName
-                            PatientSignupState.lastName = info.lastName
-                            PatientSignupState.userId =
-                                SupabaseClientProvider.client.auth.currentUserOrNull()?.id ?: ""
-                            navController.navigate("patientPhoneEntry")
-                        }.onFailure { error ->
+                            // Check if this Google email already has a patient record
+                            val existing = SupabaseClientProvider.client.postgrest
+                                .from("patients")
+                                .select { filter { eq("email", info.email) } }
+                                .decodeSingleOrNull<Map<String, String>>()
+
+                            if (existing != null) {
+                                // Returning user — skip signup, go straight in
+                                navController.navigate("patientDashboard")
+                            } else {
+                                // New user — start the signup flow you already built
+                                PatientSignupState.email = info.email
+                                PatientSignupState.firstName = info.firstName
+                                PatientSignupState.lastName = info.lastName
+                                PatientSignupState.userId =
+                                    SupabaseClientProvider.client.auth.currentUserOrNull()?.id ?: ""
+                                navController.navigate("patientPhoneEntry")
+                            }
+                        }.onFailure {
                             Toast.makeText(
                                 context,
-                                "Sign-in failed: ${error.message}",
+                                "Sign-in failed: ${it.message}",
                                 Toast.LENGTH_LONG
                             ).show()
                         }
+                    }
+                },
+                onContinueWithEmail = {
+                    scope.launch {
+                        try {
+                            SupabaseClientProvider.client.auth.signInWith(OTP) {
+                                this.email = email
+                            }
+                            navController.navigate("patientEmailOtp?email=$email")
+                        } catch (e: Exception) {
+                            Toast.makeText(
+                                context,
+                                "Couldn't send code: ${e.message}",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                }
+            )
+        }
+
+        composable(
+            "patientEmailOtp?email={email}",
+            arguments = listOf(navArgument("email") { defaultValue = "" })
+        ) { backStackEntry ->
+            val email = backStackEntry.arguments?.getString("email") ?: ""
+            val scope = rememberCoroutineScope()
+            val context = LocalContext.current
+            var otpValues by remember { mutableStateOf(List(6) { "" }) }
+            var errorMessage by remember { mutableStateOf<String?>(null) }
+
+            PatientEmailOtpVerify(
+                email = email,
+                otpValues = otpValues,
+                onOtpValueChange = { index, value ->
+                    otpValues = otpValues.toMutableList().also { it[index] = value }
+                },
+                errorMessage = errorMessage,
+                onVerify = {
+                    scope.launch {
+                        try {
+                            val code = otpValues.joinToString("")
+                            SupabaseClientProvider.client.auth.verifyEmailOtp(
+                                type = OtpType.Email.EMAIL,
+                                email = email,
+                                token = code
+                            )
+
+                            // Confirm this email actually has a patient record
+                            val existing = SupabaseClientProvider.client.postgrest
+                                .from("patients")
+                                .select { filter { eq("email", email) } }
+                                .decodeSingleOrNull<Map<String, String>>()
+
+                            if (existing != null) {
+                                navController.navigate("patientDashboard")
+                            } else {
+                                errorMessage =
+                                    "No account found for this email. Please sign up with Google first."
+                            }
+                        } catch (e: Exception) {
+                            errorMessage = "That code didn't work — try again."
+                        }
+                    }
+                },
+                onResendCode = {
+                    scope.launch {
+                        SupabaseClientProvider.client.auth.signInWith(OTP) { this.email = email }
+                        Toast.makeText(context, "New code sent", Toast.LENGTH_SHORT).show()
                     }
                 }
             )

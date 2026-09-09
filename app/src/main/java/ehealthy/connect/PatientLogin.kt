@@ -14,9 +14,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -32,7 +36,10 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun PatientLogin(
     isLoading: Boolean = false,
-    onContinueWithGoogle: () -> Unit
+    email: String,
+    onEmailChange: (String) -> Unit,
+    onContinueWithGoogle: () -> Unit,
+    onContinueWithEmail: () -> Unit
 ) {
     val background = Color(0xFFFAF9FF)
     val darkText = Color(0xFF182033)
@@ -49,10 +56,6 @@ fun PatientLogin(
                 .padding(paddingValues),
             verticalArrangement = Arrangement.Center
         ) {
-
-            // ------------------------------------------------
-            // BRAND MARK
-            // ------------------------------------------------
 
             Box(
                 modifier = Modifier
@@ -92,7 +95,7 @@ fun PatientLogin(
             Spacer(modifier = Modifier.height(10.dp))
 
             Text(
-                text = "Sign in to book appointments and manage\nyour care — no forms to fill out.",
+                text = "New here? Sign up in seconds.\nAlready registered? Sign in below.",
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center,
                 color = greyText,
@@ -100,10 +103,10 @@ fun PatientLogin(
                 lineHeight = 22.sp
             )
 
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(40.dp))
 
             // ------------------------------------------------
-            // CONTINUE WITH GOOGLE
+            // CONTINUE WITH GOOGLE (new signup or existing account)
             // ------------------------------------------------
 
             Button(
@@ -127,7 +130,6 @@ fun PatientLogin(
                     )
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-
                         Box(
                             modifier = Modifier
                                 .size(20.dp)
@@ -136,7 +138,7 @@ fun PatientLogin(
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = "Continue with Google",
+                            "Continue with Google",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -146,8 +148,65 @@ fun PatientLogin(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier
+                    .weight(1f)
+                    .height(1.dp)
+                    .background(Color(0xFFE2E5EC)))
+                Text(
+                    "  OR SIGN IN WITH EMAIL  ",
+                    color = Color(0xFF9099A6),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Box(modifier = Modifier
+                    .weight(1f)
+                    .height(1.dp)
+                    .background(Color(0xFFE2E5EC)))
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // ------------------------------------------------
+            // RETURNING USER — EMAIL ONLY (verified via OTP next screen)
+            // ------------------------------------------------
+
+            OutlinedTextField(
+                value = email,
+                onValueChange = onEmailChange,
+                placeholder = { Text("your@email.com") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                shape = RoundedCornerShape(16.dp),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = green),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(58.dp)
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Button(
+                onClick = onContinueWithEmail,
+                enabled = email.contains("@") && email.contains("."),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(58.dp),
+                shape = RoundedCornerShape(30.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF293147))
+            ) {
+                Text(
+                    "Continue",
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             Text(
-                text = "By continuing, you agree to our Terms &\nPrivacy Policy",
+                text = "By continuing, you agree to our Terms & Privacy Policy",
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center,
                 color = Color(0xFF9099A6),
@@ -157,4 +216,3 @@ fun PatientLogin(
         }
     }
 }
-

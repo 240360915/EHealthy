@@ -118,6 +118,56 @@ fun AppNavGraph() {
             )
         }
 
+        composable("doctorLogin") {
+            val context = LocalContext.current
+            val scope = rememberCoroutineScope()
+            var email by remember { mutableStateOf("") }
+            var password by remember { mutableStateOf("") }
+            var isLoading by remember { mutableStateOf(false) }
+            var isGoogleLoading by remember { mutableStateOf(false) }
+            var errorMessage by remember { mutableStateOf<String?>(null) }
+
+            DoctorLogin(
+                email = email,
+                password = password,
+                onEmailChange = { email = it },
+                onPasswordChange = { password = it },
+                isLoading = isLoading,
+                isGoogleLoading = isGoogleLoading,
+                errorMessage = errorMessage,
+                onLogin = {
+                    scope.launch {
+                        isLoading = true
+                        errorMessage = null
+                        val result = signInDoctorWithEmail(email, password)
+                        isLoading = false
+                        result.onSuccess {
+                            navController.navigate("doctorDashboard")
+                        }.onFailure { error ->
+                            errorMessage = error.message
+                        }
+                    }
+                },
+                onForgotPassword = {
+                    // wire to a doctor password-reset screen when you build one
+                },
+                onRegister = { navController.navigate("doctorRegister") },
+                onContinueWithGoogle = {
+                    scope.launch {
+                        isGoogleLoading = true
+                        errorMessage = null
+                        val result = signInWithGoogle(context)
+                        isGoogleLoading = false
+                        result.onSuccess {
+                            navController.navigate("doctorDashboard")
+                        }.onFailure { error ->
+                            errorMessage = "Google sign-in failed: ${error.message}"
+                        }
+                    }
+                }
+            )
+        }
+
         composable("patientPhoneEntry") {
             var phoneNumber by remember { mutableStateOf("") }
             PatientPhoneEntry(

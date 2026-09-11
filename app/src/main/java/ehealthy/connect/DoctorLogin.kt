@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -67,6 +68,24 @@ fun DoctorLogin(
     val lightBlue = Color(0xFFEFF1FF)
     val greyText = Color(0xFF4F555C)
     val navyButton = Color(0xFF293147)
+    val borderGrey = Color(0xFFE2E5EC)
+
+    // Explicit text field colors so typed text is always visible,
+    // regardless of the app's overall Material theme (light/dark).
+    val textFieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = blue,
+        unfocusedBorderColor = borderGrey,
+        focusedTextColor = darkText,
+        unfocusedTextColor = darkText,
+        disabledTextColor = greyText,
+        cursorColor = blue,
+        focusedLabelColor = blue,
+        unfocusedLabelColor = greyText,
+        focusedContainerColor = Color.White,
+        unfocusedContainerColor = Color.White,
+        focusedPlaceholderColor = greyText,
+        unfocusedPlaceholderColor = greyText
+    )
 
     var passwordVisible by remember { mutableStateOf(false) }
 
@@ -75,6 +94,7 @@ fun DoctorLogin(
             modifier = Modifier
                 .fillMaxSize()
                 .background(background)
+                .imePadding()
                 .padding(horizontal = 28.dp)
                 .padding(paddingValues),
             verticalArrangement = Arrangement.Center
@@ -135,7 +155,7 @@ fun DoctorLogin(
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                 shape = RoundedCornerShape(16.dp),
-                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = blue),
+                colors = textFieldColors,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -156,12 +176,13 @@ fun DoctorLogin(
                     IconButton(onClick = { passwordVisible = !passwordVisible }) {
                         Icon(
                             imageVector = if (passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                            contentDescription = if (passwordVisible) "Hide password" else "Show password"
+                            contentDescription = if (passwordVisible) "Hide password" else "Show password",
+                            tint = greyText
                         )
                     }
                 },
                 shape = RoundedCornerShape(16.dp),
-                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = blue),
+                colors = textFieldColors,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -231,7 +252,7 @@ fun DoctorLogin(
                     modifier = Modifier
                         .weight(1f)
                         .height(1.dp)
-                        .background(Color(0xFFE2E5EC))
+                        .background(borderGrey)
                 )
                 Text(
                     text = "  or  ",
@@ -242,7 +263,7 @@ fun DoctorLogin(
                     modifier = Modifier
                         .weight(1f)
                         .height(1.dp)
-                        .background(Color(0xFFE2E5EC))
+                        .background(borderGrey)
                 )
             }
 
@@ -263,7 +284,7 @@ fun DoctorLogin(
                     containerColor = Color.White,
                     contentColor = darkText
                 ),
-                border = BorderStroke(1.dp, Color(0xFFE2E5EC))
+                border = BorderStroke(1.dp, borderGrey)
             ) {
                 if (isGoogleLoading) {
                     CircularProgressIndicator(

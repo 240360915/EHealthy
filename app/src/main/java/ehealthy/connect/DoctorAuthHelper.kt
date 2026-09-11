@@ -4,19 +4,13 @@ import io.github.jan.supabase.auth.OtpType
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.postgrest.postgrest
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
  * Email/password auth for doctors, plus a Google sign-in shortcut for
  * doctors who already registered (see GoogleAuthHelper.kt — same
  * signInWithGoogle() the patient flow uses).
- *
- * NOTE: signInWithGoogle() creates/uses a Supabase auth identity tied to
- * the Google account. If a doctor originally registered with email+password
- * and has never linked Google to that same Supabase user, Supabase will
- * treat the Google sign-in as a *different* user unless "automatic linking
- * by verified email" is enabled in your Supabase Auth settings. Worth
- * checking that setting so "log in with Google" actually resolves to the
- * doctor's existing row in "doctors" rather than a fresh, profile-less user.
  */
 
 data class DoctorRegistrationInfo(
@@ -26,14 +20,14 @@ data class DoctorRegistrationInfo(
     val discipline: String,
     val qualifications: String,
     val operatingHours: String,
-    val consultationFee: String,
-    val medicalAidSchemes: String,
+    val consultationFee: String,     // -> "hourly_rate" (numeric column, parsed below)
+    val medicalAidSchemes: String,   // -> "medical_aids"
     val name: String,
     val surname: String,
     val idNumber: String,
-    val cellNumber: String,
+    val cellNumber: String,          // -> "phone"
     val email: String,
-    val languagesSpoken: String,
+    val languagesSpoken: String,     // -> "language"
     val gender: String,
     val password: String
 )
@@ -46,16 +40,21 @@ suspend fun signInDoctorWithEmail(email: String, password: String): Result<Unit>
         }
         Result.success(Unit)
     } catch (e: Exception) {
-        Result.failure(e)
+        Result.failure(Exception(friendlyAuthError(e)))
     }
 }
 
 /**
  * Creates the auth user, then writes the doctor's profile row.
  *
- * NOTE: the column names below are assumed — they mirror the "patients"
- * insert pattern elsewhere in this app. Adjust to match your actual
- * Supabase "doctors" table.
+ * The row is built as a JsonObject (not a Map<String, Any?>) because the
+ * insert mixes types — mostly strings, but hourly_rate is a Double — and
+ * kotlinx.
+ * serialization can't derive a serializer for a raw "Any" map.
+ * buildJsonObject + put() handles heterogeneous types correctly.
+ *
+ * verification_status defaults to "pending", matching how the web app
+ * flags new sign-ups for admin review before activation.
  *
  * This also assumes "Confirm email" is OFF in your Supabase Auth settings,
  * so a session exists immediately after sign-up. If email confirmation is
@@ -75,29 +74,32 @@ suspend fun registerDoctor(info: DoctorRegistrationInfo): Result<Unit> {
                 Exception("Account created — please confirm your email, then log in.")
             )
 
-        SupabaseClientProvider.client.postgrest.from("doctors").insert(
-            mapOf(
-                "practice_number" to info.practiceNumber,
-                "practice_name" to info.practiceName,
-                "hpcsa_number" to info.hpcsaNumber,
-                "discipline" to info.discipline,
-                "qualifications" to info.qualifications,
-                "operating_hours" to info.operatingHours,
-                "consultation_fee" to info.consultationFee,
-                "medical_aid_schemes" to info.medicalAidSchemes,
-                "name" to info.name,
-                "surname" to info.surname,
-                "id_number" to info.idNumber,
-                "cell_number" to info.cellNumber,
-                "email" to info.email,
-                "languages_spoken" to info.languagesSpoken,
-                "gender" to info.gender,
-                "user_id" to userId
-            )
-        )
+        val hourlyRate = info.consultationFee.trim().toDoubleOrNull()
+
+        val row = buildJsonObject {
+            put("practice_number", info.practiceNumber)
+            put("practice_name", info.practiceName)
+            put("hpcsa_number", info.hpcsaNumber)
+            put("discipline", info.discipline)
+            put("qualifications", info.qualifications)
+            put("operating_hours", info.operatingHours)
+            put("medical_aids", info.medicalAidSchemes)
+            put("name", info.name)
+            put("surname", info.surname)
+            put("id_number", info.idNumber)
+            put("phone", info.cellNumber)
+            put("email", info.email)
+            put("language", info.languagesSpoken)
+            put("gender", info.gender)
+            put("user_id", userId)
+            put("verification_status", "pending")
+            if (hourlyRate != null) put("hourly_rate", hourlyRate)
+        }
+
+        SupabaseClientProvider.client.postgrest.from("doctors").insert(row)
         Result.success(Unit)
     } catch (e: Exception) {
-        Result.failure(e)
+        Result.failure(Exception(friendlyAuthError(e)))
     }
 }
 
@@ -107,18 +109,12 @@ suspend fun sendDoctorPasswordResetEmail(email: String): Result<Unit> {
         SupabaseClientProvider.client.auth.resetPasswordForEmail(email = email)
         Result.success(Unit)
     } catch (e: Exception) {
-        Result.failure(e)
+        Result.failure(Exception(friendlyAuthError(e)))
     }
 }
 
 /**
  * Step 2: verifies the code from that email, then sets the new password.
- *
- * Uses the OTP-code recovery flow rather than the magic-link flow, because
- * the app has no deep link / intent-filter set up to catch a link redirect.
- * For the code to actually arrive by email, the "Reset password" email
- * template in the Supabase dashboard needs to include {{ .Token }} (the
- * 6-digit code) — not just {{ .ConfirmationURL }}, which is the default.
  */
 suspend fun verifyDoctorResetCodeAndSetPassword(
     email: String,
@@ -136,6 +132,33 @@ suspend fun verifyDoctorResetCodeAndSetPassword(
         }
         Result.success(Unit)
     } catch (e: Exception) {
-        Result.failure(e)
+        Result.failure(Exception(friendlyAuthError(e)))
+    }
+}
+
+private fun friendlyAuthError(e: Throwable): String {
+    val raw = e.message ?: return "Something went wrong. Please try again."
+    val firstLine = raw.substringBefore("\nURL:").trim()
+    return when {
+        firstLine.contains("invalid_credentials", ignoreCase = true) ->
+            "Incorrect email or password."
+        firstLine.contains("email_not_confirmed", ignoreCase = true) ->
+            "Please confirm your email before logging in."
+        firstLine.contains("user_not_found", ignoreCase = true) ->
+            "No account found with that email."
+        firstLine.contains("user_already_exists", ignoreCase = true) ->
+            "An account with that email already exists."
+        firstLine.contains("doctors_practice_number_key", ignoreCase = true) ->
+            "That practice number is already registered. Please double-check it or use a different one."
+        firstLine.contains("doctors_hpcsa_number_key", ignoreCase = true) ->
+            "That HPCSA number is already registered."
+        firstLine.contains("doctors_id_number_key", ignoreCase = true) ->
+            "That ID number is already registered."
+        firstLine.contains("doctors_email_key", ignoreCase = true) ->
+            "That email is already registered as a doctor."
+        firstLine.contains("duplicate key value violates unique constraint", ignoreCase = true) ->
+            "Some of these details are already registered to another doctor account."
+        else -> firstLine.substringBefore("(").trim()
+            .ifBlank { "Something went wrong. Please try again." }
     }
 }

@@ -332,9 +332,8 @@ fun AppNavGraph() {
                         }
                     }
                 },
-                onForgotPassword = {
-                    // wire to a doctor password-reset screen when you build one
-                },
+                onForgotPassword = { navController.navigate("forgotPassword") },
+
                 onRegister = { navController.navigate("doctorRegister") },
                 onContinueWithGoogle = {
                     scope.launch {
@@ -346,6 +345,140 @@ fun AppNavGraph() {
                             navController.navigate("doctorDashboard")
                         }.onFailure { error ->
                             errorMessage = "Google sign-in failed: ${error.message}"
+                        }
+                    }
+                }
+            )
+        }
+
+        // ------------------------------------------------
+        // DOCTOR REGISTER
+        // ------------------------------------------------
+
+        composable("doctorRegister") {
+            val context = LocalContext.current
+            val scope = rememberCoroutineScope()
+            var isLoading by remember { mutableStateOf(false) }
+            var errorMessage by remember { mutableStateOf<String?>(null) }
+
+            DoctorRegister(
+                isLoading = isLoading,
+                errorMessage = errorMessage,
+                onRegister = { info ->
+                    scope.launch {
+                        isLoading = true
+                        errorMessage = null
+                        val result = registerDoctor(info)
+                        isLoading = false
+                        result.onSuccess {
+                            navController.navigate("doctorDashboard") {
+                                popUpTo("doctorLogin") { inclusive = true }
+                            }
+                        }.onFailure { error ->
+                            val message = error.message ?: "Registration failed — please try again."
+                            if (message.contains("confirm your email", ignoreCase = true)) {
+                                // Email confirmation required, no session yet — not a real
+                                // error, just send them to log in once they've confirmed.
+                                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                                navController.navigate("doctorLogin") {
+                                    popUpTo("doctorRegister") { inclusive = true }
+                                }
+                            } else {
+                                errorMessage = message
+                            }
+                        }
+                    }
+                },
+                onBack = { navController.popBackStack() },
+                onLogin = {
+                    navController.navigate("doctorLogin") {
+                        popUpTo("doctorRegister") { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        // ------------------------------------------------
+        // FORGOT PASSWORD (request code)
+        // ------------------------------------------------
+
+        composable("forgotPassword") {
+            val scope = rememberCoroutineScope()
+            var email by remember { mutableStateOf("") }
+            var isLoading by remember { mutableStateOf(false) }
+            var errorMessage by remember { mutableStateOf<String?>(null) }
+
+            DoctorForgotPassword(
+                email = email,
+                onEmailChange = { email = it; errorMessage = null },
+                isLoading = isLoading,
+                errorMessage = errorMessage,
+                onSendCode = {
+                    scope.launch {
+                        isLoading = true
+                        val result = sendDoctorPasswordResetEmail(email)
+                        isLoading = false
+                        result.onSuccess {
+                            navController.navigate("resetPassword?email=$email")
+                        }.onFailure { error ->
+                            errorMessage = error.message ?: "Couldn't send the code — please try again."
+                        }
+                    }
+                }
+            )
+        }
+
+        // ------------------------------------------------
+        // RESET PASSWORD (enter code + new password)
+        // ------------------------------------------------
+
+        composable(
+            "resetPassword?email={email}",
+            arguments = listOf(navArgument("email") { defaultValue = "" })
+        ) { backStackEntry ->
+            val email = backStackEntry.arguments?.getString("email") ?: ""
+            val context = LocalContext.current
+            val scope = rememberCoroutineScope()
+            var isLoading by remember { mutableStateOf(false) }
+            var errorMessage by remember { mutableStateOf<String?>(null) }
+
+            DoctorResetPassword(
+                email = email,
+                isLoading = isLoading,
+                errorMessage = errorMessage,
+                onSubmit = { code, newPassword ->
+                    scope.launch {
+                        isLoading = true
+                        val result = verifyDoctorResetCodeAndSetPassword(email, code, newPassword)
+                        isLoading = false
+                        result.onSuccess {
+                            Toast.makeText(context, "Password updated — please log in.", Toast.LENGTH_LONG).show()
+                            navController.navigate("doctorLogin") {
+                                popUpTo("forgotPassword") { inclusive = true }
+                            }
+                        }.onFailure { error ->
+                            errorMessage = error.message ?: "That code didn't work — please try again."
+                        }
+                    }
+                },
+                onResendCode = {
+                    scope.launch { sendDoctorPasswordResetEmail(email) }
+                }
+            )
+        }
+
+        // ------------------------------------------------
+        // DOCTOR DASHBOARD (placeholder)
+        // ------------------------------------------------
+
+        composable("doctorDashboard") {
+            val scope = rememberCoroutineScope()
+            DoctorDashboard(
+                onLogOut = {
+                    scope.launch {
+                        SupabaseClientProvider.client.auth.signOut()
+                        navController.navigate("choose") {
+                            popUpTo("doctorDashboard") { inclusive = true }
                         }
                     }
                 }

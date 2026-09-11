@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -53,6 +54,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.focus.onFocusEvent
 
 private val genderOptions = listOf("Male", "Female", "Prefer not to say")
 
@@ -76,7 +79,19 @@ fun DoctorRegister(
     val lightBlue = Color(0xFFEFF1FF)
     val greyText = Color(0xFF4F555C)
     val navyButton = Color(0xFF293147)
-    val fieldColors = OutlinedTextFieldDefaults.colors(focusedBorderColor = blue)
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = blue,
+        unfocusedBorderColor = Color(0xFFE2E5EC),
+        focusedTextColor = darkText,
+        unfocusedTextColor = darkText,
+        cursorColor = blue,
+        focusedLabelColor = blue,
+        unfocusedLabelColor = greyText,
+        focusedContainerColor = Color.White,
+        unfocusedContainerColor = Color.White,
+        focusedPlaceholderColor = greyText,
+        unfocusedPlaceholderColor = greyText
+    )
     val fieldShape = RoundedCornerShape(16.dp)
 
     // Practice information
@@ -103,8 +118,14 @@ fun DoctorRegister(
     var confirmPassword by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var confirmPasswordVisible by remember { mutableStateOf(false) }
+    var passwordFieldFocused by remember { mutableStateOf(false) }
 
-    val passwordsMatch = confirmPassword.isEmpty() || password == confirmPassword
+    // Only flag a mismatch once they've typed at least as many characters as
+    // the password itself — otherwise every keystroke briefly shows "wrong".
+    val passwordsMatch = confirmPassword.isEmpty() ||
+            confirmPassword.length < password.length ||
+            password == confirmPassword
+
     val canSubmit = !isLoading &&
             practiceNumber.isNotBlank() &&
             practiceName.isNotBlank() &&
@@ -118,7 +139,7 @@ fun DoctorRegister(
             cellNumber.isNotBlank() &&
             email.isNotBlank() &&
             languagesSpoken.isNotBlank() &&
-            password.isNotBlank() &&
+            isPasswordValid(password) &&
             password == confirmPassword
 
     Scaffold { paddingValues ->
@@ -127,6 +148,7 @@ fun DoctorRegister(
                 .fillMaxSize()
                 .background(background)
                 .verticalScroll(rememberScrollState())
+                .imePadding()
                 .padding(horizontal = 28.dp)
                 .padding(paddingValues)
                 .padding(vertical = 20.dp)
@@ -429,8 +451,17 @@ fun DoctorRegister(
                 },
                 shape = fieldShape,
                 colors = fieldColors,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusEvent { passwordFieldFocused = it.isFocused }
             )
+
+            if (passwordFieldFocused || password.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                PasswordStrengthMeter(password = password)
+                Spacer(modifier = Modifier.height(10.dp))
+                PasswordRequirementsChecklist(password = password)
+            }
 
             Spacer(modifier = Modifier.height(14.dp))
 

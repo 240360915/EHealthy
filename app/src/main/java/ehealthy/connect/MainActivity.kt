@@ -3,6 +3,7 @@ package ehealthy.connect
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -421,7 +422,8 @@ fun AppNavGraph() {
                         result.onSuccess {
                             navController.navigate("resetPassword?email=$email")
                         }.onFailure { error ->
-                            errorMessage = error.message ?: "Couldn't send the code — please try again."
+                            errorMessage =
+                                error.message ?: "Couldn't send the code — please try again."
                         }
                     }
                 }
@@ -452,12 +454,17 @@ fun AppNavGraph() {
                         val result = verifyDoctorResetCodeAndSetPassword(email, code, newPassword)
                         isLoading = false
                         result.onSuccess {
-                            Toast.makeText(context, "Password updated — please log in.", Toast.LENGTH_LONG).show()
+                            Toast.makeText(
+                                context,
+                                "Password updated — please log in.",
+                                Toast.LENGTH_LONG
+                            ).show()
                             navController.navigate("doctorLogin") {
                                 popUpTo("forgotPassword") { inclusive = true }
                             }
                         }.onFailure { error ->
-                            errorMessage = error.message ?: "That code didn't work — please try again."
+                            errorMessage =
+                                error.message ?: "That code didn't work — please try again."
                         }
                     }
                 },

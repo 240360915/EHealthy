@@ -34,14 +34,14 @@ import androidx.compose.ui.unit.sp
  * Rules: 8+ characters, at least one uppercase, one lowercase, one digit,
  * and one special (non-alphanumeric) character.
  */
-data class PasswordRequirement(val label: String, val isMet: (String) -> Boolean)
+data class PasswordRequirements(val label: String, val isMet: (String) -> Boolean)
 
 val passwordRequirements = listOf(
-    PasswordRequirement("At least 8 characters") { it.length >= 8 },
-    PasswordRequirement("One uppercase letter (A-Z)") { pw -> pw.any { it.isUpperCase() } },
-    PasswordRequirement("One lowercase letter (a-z)") { pw -> pw.any { it.isLowerCase() } },
-    PasswordRequirement("One number (0-9)") { pw -> pw.any { it.isDigit() } },
-    PasswordRequirement("One special character (e.g. !@#\$%)") { pw -> pw.any { !it.isLetterOrDigit() } }
+    PasswordRequirements("At least 8 characters") { it.length >= 8 },
+    PasswordRequirements("One uppercase letter (A-Z)") { pw -> pw.any { it.isUpperCase() } },
+    PasswordRequirements("One lowercase letter (a-z)") { pw -> pw.any { it.isLowerCase() } },
+    PasswordRequirements("One number (0-9)") { pw -> pw.any { it.isDigit() } },
+    PasswordRequirements("One special character (e.g. !@#\$%)") { pw -> pw.any { !it.isLetterOrDigit() } }
 )
 
 fun isPasswordValid(password: String): Boolean =
@@ -54,7 +54,8 @@ fun isPasswordValid(password: String): Boolean =
 @Composable
 fun PasswordStrengthMeter(password: String, modifier: Modifier = Modifier) {
     val metCount = passwordRequirements.count { it.isMet(password) }
-    val targetFraction = if (password.isEmpty()) 0f else metCount / passwordRequirements.size.toFloat()
+    val targetFraction =
+        if (password.isEmpty()) 0f else metCount / passwordRequirements.size.toFloat()
 
     val animatedFraction by animateFloatAsState(
         targetValue = targetFraction,
@@ -100,7 +101,9 @@ fun PasswordRequirementsChecklist(
                     imageVector = if (met) Icons.Outlined.Check else Icons.Outlined.Close,
                     contentDescription = null,
                     tint = if (met) metColor else unmetColor,
-                    modifier = Modifier.height(14.dp).width(14.dp)
+                    modifier = Modifier
+                        .height(14.dp)
+                        .width(14.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(

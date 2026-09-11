@@ -14,7 +14,8 @@ import kotlinx.serialization.json.Json
 
 object SupabaseAuthRest {
     private const val URL = "https://gqyhkccupbeudenvsdsf.supabase.co"
-    private const val ANON_KEY = "YOUR_ANON_KEY"
+    private const val ANON_KEY =
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdxeWhrY2N1cGJldWRlbnZzZHNmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1MDgyMjgsImV4cCI6MjA5MTA4NDIyOH0.C6dtGH1277KKiMBpXtWSxRY9JQrfbbo7eYKIgomoap8"
 
     private val http = HttpClient {
         install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
@@ -22,10 +23,13 @@ object SupabaseAuthRest {
 
     @Serializable
     data class PasswordLogin(val email: String, val password: String)
+
     @Serializable
     data class OtpRequest(val email: String)
+
     @Serializable
     data class OtpVerify(val email: String, val token: String, val type: String = "email")
+
     @Serializable
     data class AuthResult(val access_token: String? = null, val error: String? = null)
 

@@ -1,5 +1,6 @@
 package ehealthy.connect
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -10,7 +11,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -113,66 +114,7 @@ fun OnboardingFour(
                         .border(1.dp, Color(0xFFE9E9F5), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-
-                    // Folder back panel
-
-                    Box(
-                        modifier = Modifier
-                            .width(130.dp)
-                            .height(96.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(Color(0xFF27A88E))
-                    )
-
-                    // Folder front flap
-
-                    Box(
-                        modifier = Modifier
-                            .width(130.dp)
-                            .height(56.dp)
-                            .offset(y = 20.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(Color(0xFF087A66))
-                    )
-
-                    // Document tab peeking out
-
-                    Box(
-                        modifier = Modifier
-                            .size(width = 40.dp, height = 50.dp)
-                            .offset(y = (-16).dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0xFF6BE2C6))
-                    )
-
-                    // Floating dots for depth (same language as steps 1-3)
-
-                    Box(
-                        modifier = Modifier
-                            .size(12.dp)
-                            .align(Alignment.TopCenter)
-                            .offset(y = 16.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF55B5A4))
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .size(14.dp)
-                            .align(Alignment.BottomStart)
-                            .offset(x = 30.dp, y = (-42).dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFB8C1DA))
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .align(Alignment.CenterEnd)
-                            .offset(x = (-20).dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF79A39F))
-                    )
+                    Image(painterResource(R.drawable.organise), null)
                 }
 
                 // Bottom pill — closing trust signal
@@ -312,7 +254,7 @@ fun OnboardingFour(
                             )
                         },
                         title = "Find Doctor",
-                        step = "Step 2"
+                        step = "Step 1"
                     )
                     JourneyItem(
                         modifier = Modifier.weight(1f),
@@ -325,7 +267,7 @@ fun OnboardingFour(
                             )
                         },
                         title = "Book & Consult",
-                        step = "Step 3"
+                        step = "Step 2"
                     )
                     JourneyItem(
                         modifier = Modifier.weight(1f),
@@ -338,7 +280,7 @@ fun OnboardingFour(
                             )
                         },
                         title = "Get Organized",
-                        step = "Step 4"
+                        step = "Step 3"
                     )
                 }
             }
@@ -365,15 +307,6 @@ fun OnboardingFour(
                 )
             }
 
-            Spacer(modifier = Modifier.height(15.dp))
-
-            Text(
-                text = "Encrypted with HIPAA-compliant health grade security",
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center,
-                color = Color(0xFF737A80),
-                fontSize = 12.5.sp
-            )
 
             Spacer(modifier = Modifier.height(8.dp))
         }

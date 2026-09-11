@@ -1,5 +1,6 @@
 package ehealthy.connect
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,7 +12,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -102,7 +103,7 @@ fun OnboardingScreenTwo(
                     color = darkText,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
-                    modifier = Modifier.clickable{onSkip()}
+                    modifier = Modifier.clickable { onSkip() }
                 )
             }
 
@@ -131,55 +132,7 @@ fun OnboardingScreenTwo(
                         .border(1.dp, Color(0xFFE9E9F5), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-
-                    // Magnifier ring
-
-                    Box(
-                        modifier = Modifier
-                            .size(90.dp)
-                            .clip(CircleShape)
-                            .border(14.dp, Color(0xFF27A88E), CircleShape)
-                    )
-
-                    // Magnifier handle
-
-                    Box(
-                        modifier = Modifier
-                            .size(width = 16.dp, height = 60.dp)
-                            .align(Alignment.Center)
-                            .offset(x = 55.dp, y = 55.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Color(0xFF087A66))
-                    )
-
-                    // Small doctor-pin dot inside ring
-
-                    Box(
-                        modifier = Modifier
-                            .size(20.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF6BE2C6))
-                    )
-
-                    // Floating dots for depth (same language as step 1)
-
-                    Box(
-                        modifier = Modifier
-                            .size(12.dp)
-                            .align(Alignment.TopCenter)
-                            .offset(y = 16.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF55B5A4))
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .size(14.dp)
-                            .align(Alignment.BottomStart)
-                            .offset(x = 30.dp, y = (-42).dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFB8C1DA))
-                    )
+                    Image(painterResource(R.drawable.doctor), null)
                 }
 
                 // Bottom pill — trust signal for this step
@@ -375,7 +328,7 @@ fun OnboardingScreenTwo(
             // ------------------------------------------------
 
             Button(
-                onClick = onContinue ,
+                onClick = onContinue,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(66.dp),
@@ -390,15 +343,6 @@ fun OnboardingScreenTwo(
                 )
             }
 
-            Spacer(modifier = Modifier.height(15.dp))
-
-            Text(
-                text = "Encrypted with HIPAA-compliant health grade security",
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center,
-                color = Color(0xFF737A80),
-                fontSize = 12.5.sp
-            )
 
             Spacer(modifier = Modifier.height(8.dp))
         }

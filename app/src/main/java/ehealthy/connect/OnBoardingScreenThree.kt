@@ -1,5 +1,6 @@
 package ehealthy.connect
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,7 +12,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -119,78 +120,11 @@ fun OnBoardingScreenThree(
                     modifier = Modifier
                         .size(210.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFFF7F7FF))
+                        .background(Color(0xEEFFFFFF))
                         .border(1.dp, Color(0xFFE9E9F5), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-
-                    // Calendar card body
-
-                    Box(
-                        modifier = Modifier
-                            .width(120.dp)
-                            .height(110.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(Color(0xFF27A88E))
-                    )
-
-                    // Calendar header strip
-
-                    Box(
-                        modifier = Modifier
-                            .width(120.dp)
-                            .height(30.dp)
-                            .offset(y = (-40).dp)
-                            .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                            .background(Color(0xFF087A66))
-                    )
-
-                    // Camera lens circle (video-call cue) sitting on the card
-
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .offset(y = 20.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF6BE2C6)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(16.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFF087A66))
-                        )
-                    }
-
-                    // Floating dots for depth (same language as steps 1 & 2)
-
-                    Box(
-                        modifier = Modifier
-                            .size(12.dp)
-                            .align(Alignment.TopCenter)
-                            .offset(y = 16.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF55B5A4))
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .size(14.dp)
-                            .align(Alignment.BottomStart)
-                            .offset(x = 30.dp, y = (-42).dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFB8C1DA))
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .align(Alignment.CenterEnd)
-                            .offset(x = (-20).dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF79A39F))
-                    )
+                    Image(painterResource(R.drawable.book), null)
                 }
 
                 // Bottom pill — trust signal for this step
@@ -387,15 +321,6 @@ fun OnBoardingScreenThree(
                 )
             }
 
-            Spacer(modifier = Modifier.height(15.dp))
-
-            Text(
-                text = "Encrypted with HIPAA-compliant health grade security",
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center,
-                color = Color(0xFF737A80),
-                fontSize = 12.5.sp
-            )
 
             Spacer(modifier = Modifier.height(8.dp))
         }

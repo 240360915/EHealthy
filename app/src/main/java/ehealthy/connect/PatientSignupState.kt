@@ -7,4 +7,3 @@ object PatientSignupState {
     var lastName: String = ""
     var userId: String = ""
 }
-

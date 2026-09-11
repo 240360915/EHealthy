@@ -1,5 +1,6 @@
 package ehealthy.connect
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,7 +12,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -109,64 +110,13 @@ fun OnboardingOne(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(210.dp)
+                        .size(120.dp)
                         .clip(CircleShape)
                         .background(Color(0xFFF7F7FF))
                         .border(width = 1.dp, color = Color(0xFFE9E9F5), shape = CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .width(38.dp)
-                            .height(134.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(Color(0xFF087A66))
-                    )
-                    Box(
-                        modifier = Modifier
-                            .width(134.dp)
-                            .height(38.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(Color(0xFF27A88E))
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clip(RoundedCornerShape(9.dp))
-                            .background(Color(0xFF6BE2C6)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(9.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFF087A66))
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .size(12.dp)
-                            .align(Alignment.TopCenter)
-                            .offset(y = 16.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF55B5A4))
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(14.dp)
-                            .align(Alignment.BottomStart)
-                            .offset(x = 30.dp, y = (-42).dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFB8C1DA))
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .align(Alignment.CenterEnd)
-                            .offset(x = (-20).dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF79A39F))
-                    )
+                    Image(painter = painterResource(R.drawable.logo), contentDescription = null)
                 }
 
                 Row(
@@ -266,12 +216,7 @@ fun OnboardingOne(
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(
-                        text = "Tap to jump",
-                        color = green,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
@@ -288,7 +233,7 @@ fun OnboardingOne(
                             )
                         },
                         title = "Find Doctor",
-                        step = "Step 2"
+                        step = "Step 1"
                     )
                     JourneyItem(
                         modifier = Modifier.weight(1f),
@@ -301,7 +246,7 @@ fun OnboardingOne(
                             )
                         },
                         title = "Book & Consult",
-                        step = "Step 3"
+                        step = "Step 2"
                     )
                     JourneyItem(
                         modifier = Modifier.weight(1f),
@@ -314,7 +259,7 @@ fun OnboardingOne(
                             )
                         },
                         title = "Get Organized",
-                        step = "Step 4"
+                        step = "Step 3"
                     )
                 }
             }
@@ -337,15 +282,6 @@ fun OnboardingOne(
                 )
             }
 
-            Spacer(modifier = Modifier.height(15.dp))
-
-            Text(
-                text = "Encrypted with HIPAA-compliant health grade security",
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center,
-                color = Color(0xFF737A80),
-                fontSize = 12.5.sp
-            )
 
             Spacer(modifier = Modifier.height(8.dp))
         }

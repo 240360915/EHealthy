@@ -1,4 +1,4 @@
-package ehealthy.connect
+package ehealthy.connect.ui.splash
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +20,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ehealthy.connect.R
 import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.milliseconds
 

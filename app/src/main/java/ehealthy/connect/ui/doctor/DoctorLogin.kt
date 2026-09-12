@@ -1,4 +1,4 @@
-package ehealthy.connect
+package ehealthy.connect.ui.doctor
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background

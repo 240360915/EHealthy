@@ -1,4 +1,4 @@
-package ehealthy.connect
+package ehealthy.connect.util
 
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body

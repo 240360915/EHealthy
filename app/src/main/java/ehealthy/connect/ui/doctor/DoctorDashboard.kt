@@ -1,4 +1,4 @@
-package ehealthy.connect
+package ehealthy.connect.ui.doctor
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement

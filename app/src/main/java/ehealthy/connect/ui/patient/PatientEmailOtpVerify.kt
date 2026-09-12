@@ -1,4 +1,4 @@
-package ehealthy.connect
+package ehealthy.connect.ui.patient
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable

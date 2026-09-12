@@ -1,4 +1,4 @@
-package ehealthy.connect
+package ehealthy.connect.ui.patient
 
 import android.os.Build
 import androidx.annotation.RequiresApi
@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ehealthy.connect.util.parseSaIdNumber
 import java.time.format.DateTimeFormatter
 
 private val titleOptions = listOf("Mr", "Mrs", "Ms", "Dr", "Prof")

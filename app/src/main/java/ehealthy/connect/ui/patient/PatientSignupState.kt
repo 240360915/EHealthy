@@ -1,5 +1,5 @@
 // PatientSignupState.kt
-package ehealthy.connect
+package ehealthy.connect.ui.patient
 
 object PatientSignupState {
     var email: String = ""

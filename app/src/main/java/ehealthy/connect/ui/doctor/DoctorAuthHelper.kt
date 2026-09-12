@@ -1,5 +1,6 @@
-package ehealthy.connect
+package ehealthy.connect.ui.doctor
 
+import ehealthy.connect.util.SupabaseClientProvider
 import io.github.jan.supabase.auth.OtpType
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
@@ -142,22 +143,31 @@ private fun friendlyAuthError(e: Throwable): String {
     return when {
         firstLine.contains("invalid_credentials", ignoreCase = true) ->
             "Incorrect email or password."
+
         firstLine.contains("email_not_confirmed", ignoreCase = true) ->
             "Please confirm your email before logging in."
+
         firstLine.contains("user_not_found", ignoreCase = true) ->
             "No account found with that email."
+
         firstLine.contains("user_already_exists", ignoreCase = true) ->
             "An account with that email already exists."
+
         firstLine.contains("doctors_practice_number_key", ignoreCase = true) ->
             "That practice number is already registered. Please double-check it or use a different one."
+
         firstLine.contains("doctors_hpcsa_number_key", ignoreCase = true) ->
             "That HPCSA number is already registered."
+
         firstLine.contains("doctors_id_number_key", ignoreCase = true) ->
             "That ID number is already registered."
+
         firstLine.contains("doctors_email_key", ignoreCase = true) ->
             "That email is already registered as a doctor."
+
         firstLine.contains("duplicate key value violates unique constraint", ignoreCase = true) ->
             "Some of these details are already registered to another doctor account."
+
         else -> firstLine.substringBefore("(").trim()
             .ifBlank { "Something went wrong. Please try again." }
     }

@@ -1,6 +1,7 @@
-package ehealthy.connect
+package ehealthy.connect.ui.patient
 
 import android.annotation.SuppressLint
+import android.app.DatePickerDialog
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -49,6 +50,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ehealthy.connect.ui.common.PasswordStrengthChecklist
+import ehealthy.connect.ui.common.isPasswordStrong
 import java.util.Calendar
 
 enum class RegisterStep(val label: String) {
@@ -83,13 +86,14 @@ data class PatientRegistrationData(
     val disability: String,
     val emergencyContactName: String,
     val emergencyContactPhone: String,
-    val emergencyContactRelationship: String
+    val emergencyContactRelationship: String,
+    val email: String
 )
 
 @SuppressLint("DefaultLocale")
 @Composable
 fun PatientRegister(
-    email: String,
+    initialEmail: String,
     isLoading: Boolean,
     errorMessage: String?,
     onRegister: (PatientRegistrationData) -> Unit,
@@ -104,7 +108,7 @@ fun PatientRegister(
 
     var step by remember { mutableStateOf(RegisterStep.PERSONAL) }
     val context = LocalContext.current
-
+    var email by remember { mutableStateOf(initialEmail) }
     var name by remember { mutableStateOf("") }
     var surname by remember { mutableStateOf("") }
     var title by remember { mutableStateOf("") }
@@ -208,7 +212,8 @@ fun PatientRegister(
                             disability,
                             emergencyName,
                             emergencyPhone,
-                            emergencyRelationship
+                            emergencyRelationship,
+                            email
                         )
                     )
                 }
@@ -354,7 +359,7 @@ fun PatientRegister(
                                 imageVector = Icons.Default.DateRange,
                                 contentDescription = "Select date",
                                 modifier = Modifier.clickable {
-                                    android.app.DatePickerDialog(
+                                    DatePickerDialog(
                                         context,
                                         { _, year, month, day ->
                                             dateOfBirth = String.format(
@@ -404,7 +409,7 @@ fun PatientRegister(
                 RegisterStep.CONTACT -> {
                     OutlinedTextField(
                         value = email,
-                        onValueChange = {},
+                        onValueChange = { email = it },
                         label = { Text("Email address") },
                         singleLine = true,
                         colors = fieldColors(),

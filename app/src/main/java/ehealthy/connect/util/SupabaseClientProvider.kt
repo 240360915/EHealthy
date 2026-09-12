@@ -1,7 +1,7 @@
-package ehealthy.connect
+package ehealthy.connect.util
 
-import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.auth.Auth
+import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
 
 object SupabaseClientProvider {

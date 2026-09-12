@@ -19,7 +19,32 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import ehealthy.connect.ui.common.PrivacyPolicyScreen
+import ehealthy.connect.ui.common.isPasswordStrong
+import ehealthy.connect.ui.doctor.DoctorDashboard
+import ehealthy.connect.ui.doctor.DoctorForgotPassword
+import ehealthy.connect.ui.doctor.DoctorLogin
+import ehealthy.connect.ui.doctor.DoctorRegister
+import ehealthy.connect.ui.doctor.DoctorResetPassword
+import ehealthy.connect.ui.doctor.registerDoctor
+import ehealthy.connect.ui.doctor.sendDoctorPasswordResetEmail
+import ehealthy.connect.ui.doctor.signInDoctorWithEmail
+import ehealthy.connect.ui.doctor.verifyDoctorResetCodeAndSetPassword
+import ehealthy.connect.ui.onboarding.ChooseRoleScreen
+import ehealthy.connect.ui.onboarding.OnBoardingScreenThree
+import ehealthy.connect.ui.onboarding.OnboardingFour
+import ehealthy.connect.ui.onboarding.OnboardingOne
+import ehealthy.connect.ui.onboarding.OnboardingScreenTwo
+import ehealthy.connect.ui.patient.CompleteProfile
+import ehealthy.connect.ui.patient.LoginMode
+import ehealthy.connect.ui.patient.PatientLogin
+import ehealthy.connect.ui.patient.PatientPhoneEntry
+import ehealthy.connect.ui.patient.PatientRegister
+import ehealthy.connect.ui.patient.PatientSignupState
+import ehealthy.connect.ui.splash.SplashScreen
 import ehealthy.connect.ui.theme.EHealthyTheme
+import ehealthy.connect.util.SupabaseClientProvider
+import ehealthy.connect.util.signInWithGoogle
 import io.github.jan.supabase.auth.OtpType
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
@@ -238,7 +263,7 @@ fun AppNavGraph() {
             var errorMessage by remember { mutableStateOf<String?>(null) }
 
             PatientRegister(
-                email = prefilledEmail,
+                initialEmail = prefilledEmail,
                 isLoading = isLoading,
                 errorMessage = errorMessage,
                 onBackToLogin = { navController.popBackStack() },

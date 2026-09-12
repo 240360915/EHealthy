@@ -1,4 +1,4 @@
-package ehealthy.connect
+package ehealthy.connect.ui.common
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row

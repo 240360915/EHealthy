@@ -1,4 +1,4 @@
-package ehealthy.connect
+package ehealthy.connect.ui.patient
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -38,6 +38,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ehealthy.connect.R
+import ehealthy.connect.ui.common.PasswordStrengthChecklist
+import ehealthy.connect.ui.common.isPasswordStrong
 
 enum class LoginMode { LOGIN, FORGOT_REQUEST, FORGOT_VERIFY, FORGOT_RESET }
 

@@ -1,4 +1,4 @@
-package ehealthy.connect
+package ehealthy.connect.ui.doctor
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -41,6 +41,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ehealthy.connect.ui.common.PasswordRequirementsChecklist
+import ehealthy.connect.ui.common.PasswordStrengthMeter
+import ehealthy.connect.ui.common.isPasswordValid
 
 @Composable
 fun DoctorResetPassword(
@@ -82,7 +85,8 @@ fun DoctorResetPassword(
     val passwordsMatch = confirmPassword.isEmpty() ||
             confirmPassword.length < newPassword.length ||
             newPassword == confirmPassword
-    val formValid = code.length == 6 && isPasswordValid(newPassword) && newPassword == confirmPassword
+    val formValid =
+        code.length == 6 && isPasswordValid(newPassword) && newPassword == confirmPassword
 
     Scaffold { paddingValues ->
         Column(
@@ -116,7 +120,9 @@ fun DoctorResetPassword(
 
             OutlinedTextField(
                 value = code,
-                onValueChange = { new -> if (new.length <= 6 && new.all { it.isDigit() }) code = new },
+                onValueChange = { new ->
+                    if (new.length <= 6 && new.all { it.isDigit() }) code = new
+                },
                 label = { Text("6-digit code") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),

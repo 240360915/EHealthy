@@ -1,4 +1,4 @@
-package ehealthy.connect
+package ehealthy.connect.util
 
 import android.content.Context
 import android.util.Log

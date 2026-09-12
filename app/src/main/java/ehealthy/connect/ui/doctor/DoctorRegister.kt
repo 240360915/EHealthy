@@ -1,4 +1,4 @@
-package ehealthy.connect
+package ehealthy.connect.ui.doctor
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -45,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -54,8 +55,9 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.focus.onFocusEvent
+import ehealthy.connect.ui.common.PasswordRequirementsChecklist
+import ehealthy.connect.ui.common.PasswordStrengthMeter
+import ehealthy.connect.ui.common.isPasswordValid
 
 private val genderOptions = listOf("Male", "Female", "Prefer not to say")
 
@@ -344,7 +346,9 @@ fun DoctorRegister(
 
             OutlinedTextField(
                 value = idNumber,
-                onValueChange = { new -> if (new.length <= 13 && new.all { it.isDigit() }) idNumber = new },
+                onValueChange = { new ->
+                    if (new.length <= 13 && new.all { it.isDigit() }) idNumber = new
+                },
                 label = { Text("ID number") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -590,7 +594,12 @@ private fun SectionHeader(icon: ImageVector, text: String, tint: Color) {
             .background(Color(0xFFF1F2F8))
             .padding(horizontal = 14.dp, vertical = 10.dp)
     ) {
-        Icon(imageVector = icon, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(16.dp)
+        )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = text,

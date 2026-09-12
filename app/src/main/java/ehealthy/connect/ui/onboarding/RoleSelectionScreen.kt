@@ -1,4 +1,4 @@
-package ehealthy.connect
+package ehealthy.connect.ui.onboarding
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -131,7 +132,7 @@ private fun RoleCard(
     subtitle: String,
     iconBg: Color,
     iconTint: Color,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     onClick: () -> Unit
 ) {
     Row(

@@ -12,6 +12,13 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.Button
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -20,7 +27,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -60,6 +70,7 @@ import ehealthy.connect.ui.patientDashboard.MedicalRecordDisplay
 import ehealthy.connect.ui.patientDashboard.MedicalRecordsScreen
 import ehealthy.connect.ui.patientDashboard.PatientAppointmentsScreen
 import ehealthy.connect.ui.patientDashboard.PatientDashboard
+import ehealthy.connect.ui.patientDashboard.RescheduleAppointmentScreen
 import ehealthy.connect.ui.patientDashboard.Review
 import ehealthy.connect.ui.patientDashboard.ReviewDisplay
 import ehealthy.connect.ui.splash.SplashScreen
@@ -72,7 +83,6 @@ import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.storage.storage
 import kotlinx.coroutines.launch
-
 
 class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.O)
@@ -647,6 +657,7 @@ fun AppNavGraph() {
                         val last = result?.get("surname")
                         if (first != null) patientName = "$first ${last ?: ""}".trim()
                         patientAvatarUrl = result?.get("profile_image_url")
+                            ?.let { "$it?t=${System.currentTimeMillis()}" }
                     } catch (_: Exception) {
                     }
                 }
@@ -675,7 +686,9 @@ fun AppNavGraph() {
                                 .update({ set("profile_image_url", publicUrl) }) {
                                     filter { eq("user_id", userId) }
                                 }
-                            patientAvatarUrl = publicUrl
+                            // Cache-buster: without this, Coil sees the same URL as before
+                            // and keeps showing the OLD cached image after every re-upload.
+                            patientAvatarUrl = "$publicUrl?t=${System.currentTimeMillis()}"
                         } catch (e: Exception) {
                             Log.e("PhotoUpload", "Upload failed", e)
                         } finally {
@@ -704,6 +717,20 @@ fun AppNavGraph() {
                         navController.navigate("patientLogin") {
                             popUpTo(0) { inclusive = true }
                         }
+                    }
+                },
+                onRescheduleAppointment = { appt ->
+                    navController.navigate("rescheduleAppointment/${appt.id}")
+                },
+                onCancelAppointment = { appointmentId ->
+                    try {
+                        SupabaseClientProvider.client.postgrest.from("appointments")
+                            .update({ set("status", "cancelled") }) {
+                                filter { eq("id", appointmentId) }
+                            }
+                        Result.success(Unit)
+                    } catch (e: Exception) {
+                        Result.failure(e)
                     }
                 },
                 fetchAppointments = {
@@ -742,8 +769,7 @@ fun AppNavGraph() {
                                     .select { filter { isIn("id", doctorIds) } }
                                     .decodeList<Map<String, String?>>()
                                     .associate { doc ->
-                                        (doc["id"]
-                                            ?: "") to "Dr. ${doc["name"] ?: ""} ${doc["surname"] ?: ""}".trim()
+                                        (doc["id"] ?: "") to "Dr. ${doc["name"] ?: ""} ${doc["surname"] ?: ""}".trim()
                                     }
                             }
 
@@ -1018,6 +1044,122 @@ fun AppNavGraph() {
                     }
                 }
             )
+        }
+        composable(
+            "rescheduleAppointment/{appointmentId}",
+            arguments = listOf(navArgument("appointmentId") { defaultValue = "" })
+        ) { backStackEntry ->
+            val appointmentId = backStackEntry.arguments?.getString("appointmentId") ?: ""
+            val scope = rememberCoroutineScope()
+            var appointment by remember { mutableStateOf<Appointment?>(null) }
+            var doctorId by remember { mutableStateOf<String?>(null) }
+            var isLoadingAppt by remember { mutableStateOf(true) }
+            var isSubmitting by remember { mutableStateOf(false) }
+            var errorMessage by remember { mutableStateOf<String?>(null) }
+
+            LaunchedEffect(appointmentId) {
+                try {
+                    val row = SupabaseClientProvider.client.postgrest
+                        .from("appointments")
+                        .select { filter { eq("id", appointmentId) } }
+                        .decodeSingleOrNull<Map<String, String?>>()
+                    doctorId = row?.get("doctor_id")
+                    appointment = Appointment(
+                        id = appointmentId,
+                        doctor_id = doctorId,
+                        patient_name = row?.get("patient_name"),
+                        reason = row?.get("reason"),
+                        date = row?.get("date"),
+                        time = row?.get("time"),
+                        status = row?.get("status"),
+                        payment_method = row?.get("payment_method"),
+                        amount_paid = row?.get("amount_paid")?.toDoubleOrNull()
+                    )
+                } catch (e: Exception) {
+                    errorMessage = "Could not load appointment: ${e.message}"
+                }
+                isLoadingAppt = false
+            }
+
+            when {
+                isLoadingAppt -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        androidx.compose.material3.CircularProgressIndicator()
+                    }
+                }
+                appointment == null || doctorId == null -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(errorMessage ?: "Appointment not found.")
+                    }
+                }
+                else -> {
+                    RescheduleAppointmentScreen(
+                        appointment = appointment!!,
+                        isLoading = isSubmitting,
+                        errorMessage = errorMessage,
+                        onBack = { navController.popBackStack() },
+                        fetchBookedTimes = { date ->
+                            try {
+                                val booked = SupabaseClientProvider.client.postgrest
+                                    .from("appointments")
+                                    .select {
+                                        filter {
+                                            eq("doctor_id", doctorId!!)
+                                            eq("date", date)
+                                            neq("status", "cancelled")
+                                            neq("id", appointmentId) // don't show this booking's own slot as "taken"
+                                        }
+                                    }
+                                    .decodeList<Map<String, String?>>()
+                                    .mapNotNull { it["time"]?.take(5) }
+                                    .toSet()
+                                Result.success(booked)
+                            } catch (e: Exception) {
+                                Result.failure(e)
+                            }
+                        },
+                        onConfirmReschedule = { newDate, newTime ->
+                            scope.launch {
+                                isSubmitting = true
+                                errorMessage = null
+                                try {
+                                    SupabaseClientProvider.client.postgrest.from("appointments")
+                                        .update({
+                                            set("date", newDate)
+                                            set("time", newTime)
+                                            set("status", "pending")
+                                        }) {
+                                            filter { eq("id", appointmentId) }
+                                        }
+                                    isSubmitting = false
+                                    navController.popBackStack()
+                                } catch (e: Exception) {
+                                    isSubmitting = false
+                                    errorMessage = "Reschedule failed: ${e.message}"
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+        }
+
+// ⚠️ PLACEHOLDER — replace with your real BookingConfirmedScreen once you share it.
+// This just stops the app from crashing when a booking succeeds.
+        composable("bookingConfirmed") {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Appointment booked!", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(onClick = {
+                        navController.navigate("patientDashboard") {
+                            popUpTo("patientDashboard") { inclusive = true }
+                        }
+                    }) {
+                        Text("Back to Dashboard")
+                    }
+                }
+            }
         }
 
     }

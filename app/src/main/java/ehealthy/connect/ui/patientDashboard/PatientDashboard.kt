@@ -5,6 +5,7 @@ import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -28,6 +29,7 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.ExitToApp
 import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.RateReview
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -43,6 +45,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,12 +55,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import java.time.LocalDate
 
 @Serializable
 data class Appointment(
     val id: String,
+    val doctor_id: String? = null,
     val patient_name: String? = null,
     val reason: String? = null,
     val date: String? = null,
@@ -100,18 +105,20 @@ fun isUpcomingAppointment(appt: Appointment): Boolean {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PatientDashboard(
-    patientName: String,
-    patientAvatarUrl: String?,
-    isUploadingPhoto: Boolean,
-    onNavigateFindDoctors: () -> Unit,
-    onNavigateAppointments: () -> Unit,
-    onNavigateMedicalRecords: () -> Unit,
-    onNavigateHealthTips: () -> Unit,
-    onUploadPhoto: () -> Unit,
-    onLogout: () -> Unit,
-    fetchAppointments: suspend () -> Result<List<Appointment>>,
-    fetchReviews: suspend () -> Result<List<ReviewDisplay>>
-) {
+        patientName: String,
+        patientAvatarUrl: String?,
+        isUploadingPhoto: Boolean,
+        onNavigateFindDoctors: () -> Unit,
+        onNavigateAppointments: () -> Unit,
+        onNavigateMedicalRecords: () -> Unit,
+         onNavigateHealthTips: () -> Unit,
+        onUploadPhoto: () -> Unit,
+        onLogout: () -> Unit,
+        onRescheduleAppointment: (Appointment) -> Unit,
+        onCancelAppointment: suspend (appointmentId: String) -> Result<Unit>,
+        fetchAppointments: suspend () -> Result<List<Appointment>>,
+        fetchReviews: suspend () -> Result<List<ReviewDisplay>>
+    ) {
     val background = Color(0xFFF0F4F8)
     val navy = Color(0xFF0F1F3D)
     val green = Color(0xFF10B981)
@@ -139,6 +146,12 @@ fun PatientDashboard(
         val result = fetchReviews()
         isLoadingReviews = false
         result.onSuccess { reviews = it }
+    }
+
+    // Called after a successful cancel so the card reflects the new status
+    // immediately, without needing a full re-fetch from Supabase.
+    val onAppointmentUpdated: (Appointment) -> Unit = { updated ->
+        appointments = appointments.map { if (it.id == updated.id) updated else it }
     }
 
     val onTabSelected: (PatientTab) -> Unit = { tab ->
@@ -195,7 +208,10 @@ fun PatientDashboard(
                 onNavigateFindDoctors = onNavigateFindDoctors,
                 onNavigateAppointments = onNavigateAppointments,
                 onNavigateMedicalRecords = onNavigateMedicalRecords,
-                onNavigateHealthTips = onNavigateHealthTips
+                onNavigateHealthTips = onNavigateHealthTips,
+                onRescheduleAppointment = onRescheduleAppointment,
+                onCancelAppointment = onCancelAppointment,
+                onAppointmentUpdated = onAppointmentUpdated
             )
 
             PatientTab.PROFILE -> ProfileTabContent(
@@ -233,9 +249,17 @@ private fun HomeTabContent(
     onNavigateFindDoctors: () -> Unit,
     onNavigateAppointments: () -> Unit,
     onNavigateMedicalRecords: () -> Unit,
-    onNavigateHealthTips: () -> Unit
+    onNavigateHealthTips: () -> Unit,
+    onRescheduleAppointment: (Appointment) -> Unit,
+    onCancelAppointment: suspend (appointmentId: String) -> Result<Unit>,
+    onAppointmentUpdated: (Appointment) -> Unit
 ) {
     val upcoming = remember(appointments) { appointments.filter { isUpcomingAppointment(it) } }
+    val scope = rememberCoroutineScope()
+
+    var sheetAppointment by remember { mutableStateOf<Appointment?>(null) }
+    var detailsAppointment by remember { mutableStateOf<Appointment?>(null) }
+    var cancelError by remember { mutableStateOf<String?>(null) }
 
     LazyColumn(
         modifier = modifier
@@ -305,7 +329,7 @@ private fun HomeTabContent(
             item { EmptyAppointmentsCard(onNavigateFindDoctors) }
         } else {
             items(upcoming.take(3)) { appt ->
-                AppointmentCard(appt)
+                AppointmentCard(appt, onClick = { sheetAppointment = appt })
                 Spacer(modifier = Modifier.height(12.dp))
             }
             if (upcoming.size > 3) {
@@ -362,6 +386,85 @@ private fun HomeTabContent(
         }
 
         item { Spacer(modifier = Modifier.height(24.dp)) }
+    }
+
+    // ------------------------------------------------
+    // TAP-AN-APPOINTMENT ACTIONS
+    // ------------------------------------------------
+
+    sheetAppointment?.let { appt ->
+        AppointmentActionSheet(
+            appointment = appt,
+            onDismiss = { sheetAppointment = null },
+            onViewDetails = {
+                detailsAppointment = appt
+                sheetAppointment = null
+            },
+            onReschedule = {
+                sheetAppointment = null
+                onRescheduleAppointment(appt)
+            },
+            onCancel = {
+                sheetAppointment = null
+                scope.launch {
+                    onCancelAppointment(appt.id)
+                        .onSuccess { onAppointmentUpdated(appt.copy(status = "cancelled")) }
+                        .onFailure { cancelError = it.message ?: "Could not cancel appointment." }
+                }
+            }
+        )
+    }
+
+    detailsAppointment?.let { appt ->
+        AppointmentDetailsDialog(appointment = appt, onDismiss = { detailsAppointment = null })
+    }
+
+    cancelError?.let { message ->
+        AlertDialog(
+            onDismissRequest = { cancelError = null },
+            title = { Text("Couldn't cancel") },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = { cancelError = null }) { Text("OK") }
+            }
+        )
+    }
+}
+
+@Composable
+private fun AppointmentDetailsDialog(appointment: Appointment, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Appointment Details", fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                DetailRow("Date", appointment.date ?: "-")
+                DetailRow("Time", appointment.time ?: "-")
+                DetailRow("Reason", appointment.reason ?: "General consultation")
+                DetailRow(
+                    "Status",
+                    appointment.status?.replaceFirstChar { it.uppercase() } ?: "Unknown"
+                )
+                appointment.payment_method?.let { DetailRow("Payment", it) }
+                appointment.amount_paid?.let { DetailRow("Amount", "R %.2f".format(it)) }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    )
+}
+
+@Composable
+private fun DetailRow(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, color = Color(0xFF64748B), fontSize = 13.sp)
+        Text(value, color = Color(0xFF0F1F3D), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -448,6 +551,21 @@ private fun ProfileTabContent(
                         )
                     }
                 }
+            }
+        } else {
+            // A photo already exists — still let them change it again, as many times as they like.
+            Spacer(modifier = Modifier.height(6.dp))
+            TextButton(
+                onClick = onUploadPhoto,
+                contentPadding = PaddingValues(0.dp),
+                enabled = !isUploadingPhoto
+            ) {
+                Text(
+                    if (isUploadingPhoto) "Uploading…" else "Change photo",
+                    color = Color(0xFF3B82F6),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
 
@@ -628,7 +746,7 @@ private fun ReviewCard(rd: ReviewDisplay) {
 }
 
 @Composable
-private fun AppointmentCard(appt: Appointment) {
+private fun AppointmentCard(appt: Appointment, onClick: () -> Unit) {
     val statusColor = when (appt.status) {
         "confirmed" -> Color(0xFF10B981)
         "pending" -> Color(0xFFF59E0B)
@@ -651,7 +769,9 @@ private fun AppointmentCard(appt: Appointment) {
 
     Card(
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
     ) {
         Row(modifier = Modifier.fillMaxWidth()) {
             Box(
@@ -695,6 +815,8 @@ private fun AppointmentCard(appt: Appointment) {
                     fontWeight = FontWeight.Bold
                 )
             }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text("Tap for options", color = Color(0xFF94A3B8), fontSize = 11.sp)
         }
     }
 }

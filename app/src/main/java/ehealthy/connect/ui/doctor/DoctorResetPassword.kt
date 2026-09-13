@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.sp
 import ehealthy.connect.ui.common.PasswordRequirementsChecklist
 import ehealthy.connect.ui.common.PasswordStrengthMeter
 import ehealthy.connect.ui.common.isPasswordValid
+import android.util.Log
 
 @Composable
 fun DoctorResetPassword(

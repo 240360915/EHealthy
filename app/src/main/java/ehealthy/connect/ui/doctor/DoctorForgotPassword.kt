@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.clickable
 
 @Composable
 fun DoctorForgotPassword(
@@ -33,7 +34,8 @@ fun DoctorForgotPassword(
     onEmailChange: (String) -> Unit,
     isLoading: Boolean = false,
     errorMessage: String? = null,
-    onSendCode: () -> Unit
+    onSendCode: () -> Unit,
+    onBackToLogin: () -> Unit
 ) {
     val background = Color(0xFFFAF9FF)
     val darkText = Color(0xFF182033)
@@ -133,6 +135,17 @@ fun DoctorForgotPassword(
                     )
                 }
             }
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Text(
+                text = "Back to login",
+                color = greyText,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .align(androidx.compose.ui.Alignment.CenterHorizontally)
+                    .clickable { onBackToLogin() }
+            )
         }
     }
 }

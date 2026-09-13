@@ -50,7 +50,8 @@ import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.launch
-
+import ehealthy.connect.ui.doctor.DoctorRegistrationFiles
+import ehealthy.connect.ui.doctor.uriToDoctorFileUpload
 class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -390,11 +391,20 @@ fun AppNavGraph() {
             DoctorRegister(
                 isLoading = isLoading,
                 errorMessage = errorMessage,
-                onRegister = { info ->
+                onRegister = { info, uris ->
                     scope.launch {
                         isLoading = true
                         errorMessage = null
-                        val result = registerDoctor(info)
+                        val files = DoctorRegistrationFiles(
+                            profilePhoto = uris.profilePhoto?.let { uriToDoctorFileUpload(context, it) },
+                            idDocument = uris.idDocument?.let { uriToDoctorFileUpload(context, it) },
+                            hpcsaCertificate = uris.hpcsaCertificate?.let { uriToDoctorFileUpload(context, it) },
+                            medicalDegree = uris.medicalDegree?.let { uriToDoctorFileUpload(context, it) },
+                            specialistCertificate = uris.specialistCertificate?.let { uriToDoctorFileUpload(context, it) },
+                            practiceCertificate = uris.practiceCertificate?.let { uriToDoctorFileUpload(context, it) },
+                            proofOfAddress = uris.proofOfAddress?.let { uriToDoctorFileUpload(context, it) }
+                        )
+                        val result = registerDoctor(info, files)
                         isLoading = false
                         result.onSuccess {
                             navController.navigate("doctorDashboard") {
@@ -403,8 +413,6 @@ fun AppNavGraph() {
                         }.onFailure { error ->
                             val message = error.message ?: "Registration failed — please try again."
                             if (message.contains("confirm your email", ignoreCase = true)) {
-                                // Email confirmation required, no session yet — not a real
-                                // error, just send them to log in once they've confirmed.
                                 Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                                 navController.navigate("doctorLogin") {
                                     popUpTo("doctorRegister") { inclusive = true }
@@ -415,7 +423,6 @@ fun AppNavGraph() {
                         }
                     }
                 },
-                onBack = { navController.popBackStack() },
                 onLogin = {
                     navController.navigate("doctorLogin") {
                         popUpTo("doctorRegister") { inclusive = true }
@@ -451,7 +458,8 @@ fun AppNavGraph() {
                                 error.message ?: "Couldn't send the code — please try again."
                         }
                     }
-                }
+                },
+                onBackToLogin = { navController.popBackStack() }
             )
         }
 

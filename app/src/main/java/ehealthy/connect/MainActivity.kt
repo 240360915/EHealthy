@@ -158,9 +158,10 @@ fun AppNavGraph() {
                             navController.navigate("patientDashboard") {
                                 popUpTo("patientLogin") { inclusive = true }
                             }
-                        } catch (_: Exception) {
+                        } catch (e: Exception) {
                             isLoading = false
-                            errorMessage = "Incorrect email or password."
+                            Log.e("LoginDebug", "Login failed", e)
+                            errorMessage = e.message ?: "Login failed."
                         }
                     }
                 },
@@ -563,4 +564,6 @@ fun AppNavGraph() {
             )
         }
     }
+
+
 }

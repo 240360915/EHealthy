@@ -36,6 +36,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ehealthy.connect.R
@@ -74,7 +75,20 @@ fun PatientLogin(
     val lightGreen = Color(0xFFDFF5F1)
     val greyText = Color(0xFF4F555C)
     val navy = Color(0xFF293147)
-
+    val textFieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = navy,
+        unfocusedBorderColor = green,
+        focusedTextColor = darkText,
+        unfocusedTextColor = darkText,
+        disabledTextColor = greyText,
+        cursorColor = green,
+        focusedLabelColor = green,
+        unfocusedLabelColor = greyText,
+        focusedContainerColor = Color.White,
+        unfocusedContainerColor = Color.White,
+        focusedPlaceholderColor = greyText,
+        unfocusedPlaceholderColor = greyText
+    )
     Scaffold { paddingValues ->
         Column(
             modifier = Modifier
@@ -125,12 +139,16 @@ fun PatientLogin(
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 when (mode) {
-                    LoginMode.LOGIN -> "Enter your email and password to sign in."
+                    LoginMode.LOGIN -> "Sign in to your patient account to book appointments,\nconsult with your doctor, and manage your \nhealth records."
                     LoginMode.FORGOT_REQUEST -> "Enter your email and we'll send you a code."
                     LoginMode.FORGOT_VERIFY -> "Enter the 6-digit code we sent to $email"
                     LoginMode.FORGOT_RESET -> "Set a new password for your account."
                 },
-                color = greyText, fontSize = 15.sp, lineHeight = 22.sp
+                color = Color(0xFF595757),
+                fontSize = 16.sp,
+                lineHeight = 22.sp,
+                textAlign = TextAlign.Center,
+                fontWeight = FontWeight.SemiBold
             )
             Spacer(modifier = Modifier.height(28.dp))
 
@@ -141,24 +159,25 @@ fun PatientLogin(
                     OutlinedTextField(
                         value = email,
                         onValueChange = onEmailChange,
-                        label = { Text("Email address") },
+                        label = { Text("Email address", color = Color.Black, fontSize = 16.sp) },
                         singleLine = true,
                         enabled = !isLoading,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         shape = RoundedCornerShape(16.dp),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = green),
+                        colors = textFieldColors,
+
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     OutlinedTextField(
                         value = password,
                         onValueChange = onPasswordChange,
-                        label = { Text("Password") },
+                        label = { Text("Password", color = Color.Black, fontSize = 16.sp) },
                         singleLine = true,
                         enabled = !isLoading,
                         visualTransformation = PasswordVisualTransformation(),
                         shape = RoundedCornerShape(16.dp),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = green),
+                        colors = textFieldColors,
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(6.dp))
@@ -166,7 +185,7 @@ fun PatientLogin(
                         Text(
                             "Forgot password?",
                             color = green,
-                            fontSize = 13.sp,
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
@@ -256,6 +275,7 @@ fun PatientLogin(
                     LoginMode.FORGOT_VERIFY -> otp.length == 6
                     LoginMode.FORGOT_RESET -> isPasswordStrong(newPassword) && newPassword == confirmPassword
                 },
+
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(58.dp),

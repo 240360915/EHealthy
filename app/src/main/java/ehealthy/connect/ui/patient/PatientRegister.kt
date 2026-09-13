@@ -40,6 +40,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -103,47 +104,63 @@ fun PatientRegister(
     val background = Color(0xFFFAF9FF)
     val darkText = Color(0xFF182033)
     val green = Color(0xFF218B78)
+
     val greyText = Color(0xFF4F555C)
     val navy = Color(0xFF293147)
+    val textFieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = navy,
+        unfocusedBorderColor = green,
+        focusedTextColor = darkText,
+        unfocusedTextColor = darkText,
+        disabledTextColor = greyText,
+        cursorColor = green,
+        focusedLabelColor = green,
+        unfocusedLabelColor = greyText,
+        focusedContainerColor = Color.White,
+        unfocusedContainerColor = Color.White,
+        focusedPlaceholderColor = greyText,
+        unfocusedPlaceholderColor = greyText
+    )
 
-    var step by remember { mutableStateOf(RegisterStep.PERSONAL) }
-    val context = LocalContext.current
-    var email by remember { mutableStateOf(initialEmail) }
-    var name by remember { mutableStateOf("") }
-    var surname by remember { mutableStateOf("") }
-    var title by remember { mutableStateOf("") }
-    var dateOfBirth by remember { mutableStateOf("") }
-    var idNumber by remember { mutableStateOf("") }
-    var gender by remember { mutableStateOf("") }
+    val appContext = LocalContext.current
+    var step by rememberSaveable { mutableStateOf(RegisterStep.PERSONAL) }
 
-    var phone by remember { mutableStateOf("") }
-    var language by remember { mutableStateOf("") }
-    var province by remember { mutableStateOf("") }
-    var address1 by remember { mutableStateOf("") }
-    var address2 by remember { mutableStateOf("") }
-    var address3 by remember { mutableStateOf("") }
-    var postalCode by remember { mutableStateOf("") }
+    var email by rememberSaveable { mutableStateOf(initialEmail) }
+    var name by rememberSaveable { mutableStateOf("") }
+    var surname by rememberSaveable { mutableStateOf("") }
+    var title by rememberSaveable { mutableStateOf("") }
+    var dateOfBirth by rememberSaveable { mutableStateOf("") }
+    var idNumber by rememberSaveable { mutableStateOf("") }
+    var gender by rememberSaveable { mutableStateOf("") }
 
-    var allergies by remember { mutableStateOf("") }
-    var medication by remember { mutableStateOf("") }
-    var conditions by remember { mutableStateOf("") }
-    var chronic by remember { mutableStateOf("") }
-    var surgeries by remember { mutableStateOf("") }
-    var bloodGroup by remember { mutableStateOf("") }
-    var disability by remember { mutableStateOf("") }
+    var phone by rememberSaveable { mutableStateOf("") }
+    var language by rememberSaveable { mutableStateOf("") }
+    var province by rememberSaveable { mutableStateOf("") }
+    var address1 by rememberSaveable { mutableStateOf("") }
+    var address2 by rememberSaveable { mutableStateOf("") }
+    var address3 by rememberSaveable { mutableStateOf("") }
+    var postalCode by rememberSaveable { mutableStateOf("") }
 
-    var emergencyName by remember { mutableStateOf("") }
-    var emergencyPhone by remember { mutableStateOf("") }
-    var emergencyRelationship by remember { mutableStateOf("") }
+    var allergies by rememberSaveable { mutableStateOf("") }
+    var medication by rememberSaveable { mutableStateOf("") }
+    var conditions by rememberSaveable { mutableStateOf("") }
+    var chronic by rememberSaveable { mutableStateOf("") }
+    var surgeries by rememberSaveable { mutableStateOf("") }
+    var bloodGroup by rememberSaveable { mutableStateOf("") }
+    var disability by rememberSaveable { mutableStateOf("") }
 
-    var password by remember { mutableStateOf("") }
-    var confirmPassword by remember { mutableStateOf("") }
-    var consentGiven by remember { mutableStateOf(false) }
+    var emergencyName by rememberSaveable { mutableStateOf("") }
+    var emergencyPhone by rememberSaveable { mutableStateOf("") }
+    var emergencyRelationship by rememberSaveable { mutableStateOf("") }
 
-    var stepError by remember { mutableStateOf<String?>(null) }
+    var password by rememberSaveable { mutableStateOf("") }
+    var confirmPassword by rememberSaveable { mutableStateOf("") }
+    var consentGiven by rememberSaveable { mutableStateOf(false) }
+
+    var stepError by rememberSaveable { mutableStateOf<String?>(null) }
 
     @Composable
-    fun fieldColors() = OutlinedTextFieldDefaults.colors(focusedBorderColor = green)
+    fun fieldColors() = textFieldColors
 
     fun validateAndAdvance() {
         stepError = null
@@ -360,7 +377,7 @@ fun PatientRegister(
                                 contentDescription = "Select date",
                                 modifier = Modifier.clickable {
                                     DatePickerDialog(
-                                        context,
+                                        appContext,
                                         { _, year, month, day ->
                                             dateOfBirth = String.format(
                                                 "%04d-%02d-%02d",

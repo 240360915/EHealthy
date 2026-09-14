@@ -14,7 +14,7 @@ import java.security.MessageDigest
 import java.util.UUID
 
 private const val WEB_CLIENT_ID =
-    "937650946248-q8ej01helfr2jnoq5jjv9cnhvlhnqfcu.apps.googleusercontent.com"
+    "937650946248-jmaau4dbabkgllc5pgb7jq8278k5j9gg.apps.googleusercontent.com"
 
 data class GoogleSignInInfo(
     val email: String,
@@ -22,20 +22,23 @@ data class GoogleSignInInfo(
     val lastName: String
 )
 
-private fun generateNonce(): String {
+private fun generateNonce(): Pair<String, String> {
     val rawNonce = UUID.randomUUID().toString()
     val bytes = rawNonce.toByteArray()
     val md = MessageDigest.getInstance("SHA-256")
     val digest = md.digest(bytes)
-    return digest.joinToString("") { "%02x".format(it) }
+    val hashedNonce = digest.joinToString("") { "%02x".format(it) }
+    return rawNonce to hashedNonce
 }
 
 suspend fun signInWithGoogle(context: Context): Result<GoogleSignInInfo> {
     return try {
+        val (rawNonce, hashedNonce) = generateNonce()
+
         val signInWithGoogleOption = GetSignInWithGoogleOption.Builder(
             serverClientId = WEB_CLIENT_ID
         )
-            .setNonce(generateNonce())
+            .setNonce(hashedNonce)
             .build()
 
         val request = GetCredentialRequest.Builder()
@@ -57,6 +60,7 @@ suspend fun signInWithGoogle(context: Context): Result<GoogleSignInInfo> {
         SupabaseClientProvider.client.auth.signInWith(IDToken) {
             idToken = googleIdTokenCredential.idToken
             provider = Google
+            nonce = rawNonce
         }
 
         val info = GoogleSignInInfo(

@@ -68,7 +68,10 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.material3)
     implementation("androidx.navigation:navigation-compose:2.8.9")
-    implementation("androidx.compose.material:material-icons-extended")   // no version — BOM manages it
+    implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.credentials:credentials:1.3.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")// no version — BOM manages it
 
     implementation("io.coil-kt:coil-compose:2.7.0")
 
@@ -79,4 +82,5 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
+
 }

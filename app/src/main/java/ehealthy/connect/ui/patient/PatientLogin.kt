@@ -1,5 +1,6 @@
 package ehealthy.connect.ui.patient
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -49,6 +51,7 @@ enum class LoginMode { LOGIN, FORGOT_REQUEST, FORGOT_VERIFY, FORGOT_RESET }
 fun PatientLogin(
     mode: LoginMode,
     isLoading: Boolean,
+    isGoogleLoading: Boolean = false,
     email: String,
     password: String,
     otp: String,
@@ -67,7 +70,8 @@ fun PatientLogin(
     onVerifyResetCode: () -> Unit,
     onResetPassword: () -> Unit,
     onBackToLogin: () -> Unit,
-    onGoToRegister: () -> Unit
+    onGoToRegister: () -> Unit,
+    onContinueWithGoogle: () -> Unit = {}
 ) {
     val background = Color(0xFFFAF9FF)
     val darkText = Color(0xFF182033)
@@ -269,7 +273,7 @@ fun PatientLogin(
                     LoginMode.FORGOT_VERIFY -> onVerifyResetCode
                     LoginMode.FORGOT_RESET -> onResetPassword
                 },
-                enabled = !isLoading && when (mode) {
+                enabled = !isLoading && !isGoogleLoading && when (mode) {
                     LoginMode.LOGIN -> email.isNotBlank() && password.isNotBlank()
                     LoginMode.FORGOT_REQUEST -> email.isNotBlank()
                     LoginMode.FORGOT_VERIFY -> otp.length == 6
@@ -298,6 +302,78 @@ fun PatientLogin(
                         },
                         color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold
                     )
+                }
+            }
+
+            if (mode == LoginMode.LOGIN) {
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // ------------------------------------------------
+                // OR DIVIDER
+                // ------------------------------------------------
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(1.dp)
+                            .background(green)
+                    )
+                    Text(
+                        text = "  or  ",
+                        color = greyText,
+                        fontSize = 13.sp
+                    )
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(1.dp)
+                            .background(green)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // ------------------------------------------------
+                // CONTINUE WITH GOOGLE
+                // ------------------------------------------------
+                Button(
+                    onClick = onContinueWithGoogle,
+                    enabled = !isLoading && !isGoogleLoading,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(58.dp),
+                    shape = RoundedCornerShape(30.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.White,
+                        contentColor = darkText
+                    ),
+                    border = BorderStroke(1.dp, green)
+                ) {
+                    if (isGoogleLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = green
+                        )
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF4285F4))
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = "Continue with Google",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
                 }
             }
 

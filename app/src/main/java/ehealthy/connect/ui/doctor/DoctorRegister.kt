@@ -113,6 +113,10 @@ private fun queryDisplayName(context: Context, uri: Uri): String? = try {
 fun DoctorRegister(
     isLoading: Boolean = false,
     errorMessage: String? = null,
+    isGoogleSignup: Boolean = false,
+    initialName: String = "",
+    initialSurname: String = "",
+    initialEmail: String = "",
     onRegister: (DoctorRegistrationInfo, DoctorRegistrationUris) -> Unit,
     onLogin: () -> Unit
 ) {
@@ -150,11 +154,11 @@ fun DoctorRegister(
     var medicalAidSchemes by remember { mutableStateOf("") }
 
     var title by remember { mutableStateOf(titleOptions[0]) }
-    var name by remember { mutableStateOf("") }
-    var surname by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(initialName) }
+    var surname by remember { mutableStateOf(initialSurname) }
     var idNumber by remember { mutableStateOf("") }
     var cellNumber by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf(initialEmail) }
     var languagesSpoken by remember { mutableStateOf("") }
     var gender by remember { mutableStateOf("") }
 
@@ -257,8 +261,8 @@ fun DoctorRegister(
 
             DoctorRegisterStep.SECURITY -> {
                 when {
-                    !isPasswordValid(password) -> stepError = "Your password doesn't meet all requirements yet."
-                    password != confirmPassword -> stepError = "Passwords do not match."
+                    !isGoogleSignup && !isPasswordValid(password) -> stepError = "Your password doesn't meet all requirements yet."
+                    !isGoogleSignup && password != confirmPassword -> stepError = "Passwords do not match."
                     else -> onRegister(
                         DoctorRegistrationInfo(
                             practiceNumber = practiceNumber,
@@ -503,48 +507,54 @@ fun DoctorRegister(
                         proofOfAddressLauncher.launch(documentMimeTypes)
                     }
                 }
-
                 DoctorRegisterStep.SECURITY -> {
-                    OutlinedTextField(
-                        value = password, onValueChange = { password = it }, label = { Text("Password") }, singleLine = true,
-                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        trailingIcon = {
-                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                                Icon(
-                                    imageVector = if (passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                                    contentDescription = if (passwordVisible) "Hide password" else "Show password"
-                                )
-                            }
-                        },
-                        colors = fieldColors(),
-                        modifier = Modifier.fillMaxWidth().onFocusEvent { passwordFieldFocused = it.isFocused }
-                    )
-                    if (passwordFieldFocused || password.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        PasswordStrengthMeter(password = password)
-                        Spacer(modifier = Modifier.height(10.dp))
-                        PasswordRequirementsChecklist(password = password)
-                    }
-                    Spacer(modifier = Modifier.height(14.dp))
-                    OutlinedTextField(
-                        value = confirmPassword, onValueChange = { confirmPassword = it }, label = { Text("Confirm password") }, singleLine = true,
-                        isError = !passwordsMatch,
-                        visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        trailingIcon = {
-                            IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
-                                Icon(
-                                    imageVector = if (confirmPasswordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                                    contentDescription = if (confirmPasswordVisible) "Hide password" else "Show password"
-                                )
-                            }
-                        },
-                        colors = fieldColors(), modifier = Modifier.fillMaxWidth()
-                    )
-                    if (!passwordsMatch) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("Passwords don't match.", color = Color(0xFFD64545), fontSize = 13.sp)
+                    if (isGoogleSignup) {
+                        Text(
+                            "You're signing up with Google, so no password is needed here — you'll always continue with Google to log in.",
+                            color = greyText, fontSize = 13.sp, lineHeight = 18.sp
+                        )
+                    } else {
+                        OutlinedTextField(
+                            value = password, onValueChange = { password = it }, label = { Text("Password") }, singleLine = true,
+                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            trailingIcon = {
+                                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                    Icon(
+                                        imageVector = if (passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                        contentDescription = if (passwordVisible) "Hide password" else "Show password"
+                                    )
+                                }
+                            },
+                            colors = fieldColors(),
+                            modifier = Modifier.fillMaxWidth().onFocusEvent { passwordFieldFocused = it.isFocused }
+                        )
+                        if (passwordFieldFocused || password.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            PasswordStrengthMeter(password = password)
+                            Spacer(modifier = Modifier.height(10.dp))
+                            PasswordRequirementsChecklist(password = password)
+                        }
+                        Spacer(modifier = Modifier.height(14.dp))
+                        OutlinedTextField(
+                            value = confirmPassword, onValueChange = { confirmPassword = it }, label = { Text("Confirm password") }, singleLine = true,
+                            isError = !passwordsMatch,
+                            visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            trailingIcon = {
+                                IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
+                                    Icon(
+                                        imageVector = if (confirmPasswordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                        contentDescription = if (confirmPasswordVisible) "Hide password" else "Show password"
+                                    )
+                                }
+                            },
+                            colors = fieldColors(), modifier = Modifier.fillMaxWidth()
+                        )
+                        if (!passwordsMatch) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Passwords don't match.", color = Color(0xFFD64545), fontSize = 13.sp)
+                        }
                     }
                 }
             }

@@ -43,6 +43,7 @@ import ehealthy.connect.ui.doctor.DoctorLogin
 import ehealthy.connect.ui.doctor.DoctorRegister
 import ehealthy.connect.ui.doctor.DoctorRegistrationFiles
 import ehealthy.connect.ui.doctor.DoctorResetPassword
+import ehealthy.connect.ui.doctor.DoctorSignupState
 import ehealthy.connect.ui.doctor.registerDoctor
 import ehealthy.connect.ui.doctor.sendDoctorPasswordResetEmail
 import ehealthy.connect.ui.doctor.signInDoctorWithEmail
@@ -148,10 +149,12 @@ fun AppNavGraph() {
         }
 
         composable("patientLogin") {
+            val context = LocalContext.current
             val scope = rememberCoroutineScope()
 
             var mode by remember { mutableStateOf(LoginMode.LOGIN) }
             var isLoading by remember { mutableStateOf(false) }
+            var isGoogleLoading by remember { mutableStateOf(false) }
             var email by remember { mutableStateOf("") }
             var password by remember { mutableStateOf("") }
             var otp by remember { mutableStateOf("") }
@@ -163,6 +166,7 @@ fun AppNavGraph() {
             PatientLogin(
                 mode = mode,
                 isLoading = isLoading,
+                isGoogleLoading = isGoogleLoading,
                 email = email,
                 password = password,
                 otp = otp,
@@ -283,6 +287,48 @@ fun AppNavGraph() {
 
                 onGoToRegister = {
                     navController.navigate("patientRegister?email=$email")
+                },
+
+                onContinueWithGoogle = {
+                    scope.launch {
+                        isGoogleLoading = true
+                        errorMessage = null
+                        val result = signInWithGoogle(context)
+                        isGoogleLoading = false
+                        result.onSuccess { info ->
+                            val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
+                            val existingPatient = if (userId == null) null else try {
+                                SupabaseClientProvider.client.postgrest
+                                    .from("patients")
+                                    .select { filter { eq("user_id", userId) } }
+                                    .decodeSingleOrNull<Map<String, String?>>()
+                            } catch (e: Exception) {
+                                null
+                            }
+
+                            if (existingPatient != null) {
+                                // Already registered — go straight to the dashboard.
+                                navController.navigate("patientDashboard") {
+                                    popUpTo("patientLogin") { inclusive = true }
+                                }
+                            } else {
+                                // New Google user — send them to finish registration.
+                                Toast.makeText(
+                                    context,
+                                    "No account found for this Google email — let's get you registered.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                                PatientSignupState.email = info.email
+                                PatientSignupState.firstName = info.firstName
+                                PatientSignupState.lastName = info.lastName
+                                PatientSignupState.userId = userId ?: ""
+                                PatientSignupState.isGoogleSignup = true
+                                navController.navigate("patientRegister?email=${info.email}")
+                            }
+                        }.onFailure { error ->
+                            errorMessage = "Google sign-in failed: ${error.message}"
+                        }
+                    }
                 }
             )
         }
@@ -292,6 +338,7 @@ fun AppNavGraph() {
             arguments = listOf(navArgument("email") { defaultValue = "" })
         ) { backStackEntry ->
             val prefilledEmail = backStackEntry.arguments?.getString("email") ?: ""
+            val isGoogleSignup = PatientSignupState.isGoogleSignup
             val scope = rememberCoroutineScope()
             var isLoading by remember { mutableStateOf(false) }
             var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -300,6 +347,9 @@ fun AppNavGraph() {
                 initialEmail = prefilledEmail,
                 isLoading = isLoading,
                 errorMessage = errorMessage,
+                isGoogleSignup = isGoogleSignup,
+                initialName = if (isGoogleSignup) PatientSignupState.firstName else "",
+                initialSurname = if (isGoogleSignup) PatientSignupState.lastName else "",
                 onBackToLogin = { navController.popBackStack() },
                 onViewPrivacyPolicy = { navController.navigate("privacyPolicy") },
                 onRegister = { data ->
@@ -307,12 +357,20 @@ fun AppNavGraph() {
                         errorMessage = null
                         isLoading = true
                         try {
-                            SupabaseClientProvider.client.auth.signUpWith(Email) {
-                                email = prefilledEmail
-                                password = data.password
+                            val userId: String
+                            if (isGoogleSignup) {
+                                // Already authenticated via Google — reuse that session
+                                // instead of creating a second, disconnected account.
+                                userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
+                                    ?: throw Exception("Your Google session expired — please sign in again.")
+                            } else {
+                                SupabaseClientProvider.client.auth.signUpWith(Email) {
+                                    email = prefilledEmail
+                                    password = data.password
+                                }
+                                userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
+                                    ?: throw Exception("Could not create account")
                             }
-                            val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
-                                ?: throw Exception("Could not create account")
 
                             SupabaseClientProvider.client.postgrest.from("patients").insert(
                                 mapOf(
@@ -346,8 +404,17 @@ fun AppNavGraph() {
                             )
 
                             isLoading = false
-                            navController.navigate("patientLogin") {
-                                popUpTo("patientRegister?email={email}") { inclusive = true }
+
+                            if (isGoogleSignup) {
+                                PatientSignupState.reset()
+                                // Already logged in — skip the login screen entirely.
+                                navController.navigate("patientDashboard") {
+                                    popUpTo("patientLogin") { inclusive = true }
+                                }
+                            } else {
+                                navController.navigate("patientLogin") {
+                                    popUpTo("patientRegister?email={email}") { inclusive = true }
+                                }
                             }
                         } catch (e: Exception) {
                             isLoading = false
@@ -401,8 +468,34 @@ fun AppNavGraph() {
                         errorMessage = null
                         val result = signInWithGoogle(context)
                         isGoogleLoading = false
-                        result.onSuccess {
-                            navController.navigate("doctorDashboard")
+                        result.onSuccess { info ->
+                            val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
+                            val existingDoctor = if (userId == null) null else try {
+                                SupabaseClientProvider.client.postgrest
+                                    .from("doctors")
+                                    .select { filter { eq("user_id", userId) } }
+                                    .decodeSingleOrNull<Map<String, String?>>()
+                            } catch (e: Exception) {
+                                null
+                            }
+
+                            if (existingDoctor != null) {
+                                // Already registered — go straight to the dashboard.
+                                navController.navigate("doctorDashboard")
+                            } else {
+                                // New Google user — send them to finish registration.
+                                Toast.makeText(
+                                    context,
+                                    "No account found for this Google email — let's get you registered.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                                DoctorSignupState.email = info.email
+                                DoctorSignupState.firstName = info.firstName
+                                DoctorSignupState.lastName = info.lastName
+                                DoctorSignupState.userId = userId ?: ""
+                                DoctorSignupState.isGoogleSignup = true
+                                navController.navigate("doctorRegister")
+                            }
                         }.onFailure { error ->
                             errorMessage = "Google sign-in failed: ${error.message}"
                         }
@@ -420,10 +513,15 @@ fun AppNavGraph() {
             val scope = rememberCoroutineScope()
             var isLoading by remember { mutableStateOf(false) }
             var errorMessage by remember { mutableStateOf<String?>(null) }
+            val isGoogleSignup = DoctorSignupState.isGoogleSignup
 
             DoctorRegister(
                 isLoading = isLoading,
                 errorMessage = errorMessage,
+                isGoogleSignup = isGoogleSignup,
+                initialName = if (isGoogleSignup) DoctorSignupState.firstName else "",
+                initialSurname = if (isGoogleSignup) DoctorSignupState.lastName else "",
+                initialEmail = if (isGoogleSignup) DoctorSignupState.email else "",
                 onRegister = { info, uris ->
                     scope.launch {
                         isLoading = true
@@ -472,9 +570,12 @@ fun AppNavGraph() {
                                 )
                             }
                         )
-                        val result = registerDoctor(info, files)
+                        val result = registerDoctor(info, files, skipSignUp = isGoogleSignup)
                         isLoading = false
                         result.onSuccess {
+                            if (isGoogleSignup) DoctorSignupState.reset()
+                            // Either way, the account now exists and is authenticated
+                            // (via Google session, or the email/password just created).
                             navController.navigate("doctorDashboard") {
                                 popUpTo("doctorLogin") { inclusive = true }
                             }

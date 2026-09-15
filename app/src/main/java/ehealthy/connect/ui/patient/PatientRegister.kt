@@ -97,6 +97,9 @@ fun PatientRegister(
     initialEmail: String,
     isLoading: Boolean,
     errorMessage: String?,
+    isGoogleSignup: Boolean = false,
+    initialName: String = "",
+    initialSurname: String = "",
     onRegister: (PatientRegistrationData) -> Unit,
     onBackToLogin: () -> Unit,
     onViewPrivacyPolicy: () -> Unit
@@ -126,8 +129,8 @@ fun PatientRegister(
     var step by rememberSaveable { mutableStateOf(RegisterStep.PERSONAL) }
 
     var email by rememberSaveable { mutableStateOf(initialEmail) }
-    var name by rememberSaveable { mutableStateOf("") }
-    var surname by rememberSaveable { mutableStateOf("") }
+    var name by rememberSaveable { mutableStateOf(initialName) }
+    var surname by rememberSaveable { mutableStateOf(initialSurname) }
     var title by rememberSaveable { mutableStateOf("") }
     var dateOfBirth by rememberSaveable { mutableStateOf("") }
     var idNumber by rememberSaveable { mutableStateOf("") }
@@ -199,10 +202,10 @@ fun PatientRegister(
 
             RegisterStep.SECURITY -> {
                 when {
-                    !isPasswordStrong(password) -> stepError =
+                    !isGoogleSignup && !isPasswordStrong(password) -> stepError =
                         "Your password doesn't meet all requirements yet."
 
-                    password != confirmPassword -> stepError = "Passwords do not match."
+                    !isGoogleSignup && password != confirmPassword -> stepError = "Passwords do not match."
                     !consentGiven -> stepError = "Please accept the consent agreement to continue."
                     else -> onRegister(
                         PatientRegistrationData(
@@ -713,28 +716,36 @@ fun PatientRegister(
                 }
 
                 RegisterStep.SECURITY -> {
-                    OutlinedTextField(
-                        password,
-                        { password = it },
-                        label = { Text("Password") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        colors = fieldColors(),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    PasswordStrengthChecklist(password)
-                    Spacer(modifier = Modifier.height(14.dp))
-                    OutlinedTextField(
-                        confirmPassword,
-                        { confirmPassword = it },
-                        label = { Text("Confirm password") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        colors = fieldColors(),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(20.dp))
+                    if (isGoogleSignup) {
+                        Text(
+                            "You're signing up with Google, so no password is needed here — you'll always continue with Google to log in.",
+                            color = greyText, fontSize = 13.sp, lineHeight = 18.sp
+                        )
+                        Spacer(modifier = Modifier.height(20.dp))
+                    } else {
+                        OutlinedTextField(
+                            password,
+                            { password = it },
+                            label = { Text("Password") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            colors = fieldColors(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        PasswordStrengthChecklist(password)
+                        Spacer(modifier = Modifier.height(14.dp))
+                        OutlinedTextField(
+                            confirmPassword,
+                            { confirmPassword = it },
+                            label = { Text("Confirm password") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            colors = fieldColors(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(20.dp))
+                    }
                     Row(verticalAlignment = Alignment.Top) {
                         Checkbox(checked = consentGiven, onCheckedChange = { consentGiven = it })
                         Column(modifier = Modifier.padding(top = 12.dp)) {

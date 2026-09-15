@@ -61,13 +61,21 @@ suspend fun signInDoctorWithEmail(email: String, password: String): Result<Unit>
  */
 suspend fun registerDoctor(
     info: DoctorRegistrationInfo,
-    files: DoctorRegistrationFiles = DoctorRegistrationFiles()
+    files: DoctorRegistrationFiles = DoctorRegistrationFiles(),
+    skipSignUp: Boolean = false
 ): Result<Unit> {
     return try {
-        SupabaseClientProvider.client.auth.signUpWith(Email) {
-            email = info.email
-            password = info.password
+        if (!skipSignUp) {
+            // Normal email/password signup — creates a brand-new auth user.
+            SupabaseClientProvider.client.auth.signUpWith(Email) {
+                email = info.email
+                password = info.password
+            }
         }
+        // When skipSignUp is true, the person already has an active session
+        // (e.g. from Google sign-in) — calling signUpWith(Email) again here
+        // would create a second, disconnected auth user, so we reuse the
+        // existing session instead.
 
         val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
             ?: return Result.failure(

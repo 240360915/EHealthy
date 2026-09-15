@@ -1,7 +1,7 @@
-// PatientSignupState.kt
-package ehealthy.connect.ui.patient
+// DoctorSignupState.kt
+package ehealthy.connect.ui.doctor
 
-object PatientSignupState {
+object DoctorSignupState {
     var email: String = ""
     var firstName: String = ""
     var lastName: String = ""

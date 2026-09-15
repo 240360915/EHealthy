@@ -64,6 +64,9 @@ import ehealthy.connect.ui.patientDashboard.Appointment
 import ehealthy.connect.ui.patientDashboard.BookAppointmentScreen
 import ehealthy.connect.ui.patientDashboard.DoctorBookingInfo
 import ehealthy.connect.ui.patientDashboard.DoctorListing
+import ehealthy.connect.ui.patientDashboard.DoctorProfile
+import ehealthy.connect.ui.patientDashboard.DoctorProfileScreen
+import ehealthy.connect.ui.patientDashboard.DoctorReviewItem
 import ehealthy.connect.ui.patientDashboard.FindDoctorsScreen
 import ehealthy.connect.ui.patientDashboard.HealthTipsScreen
 import ehealthy.connect.ui.patientDashboard.MedicalRecord
@@ -71,33 +74,55 @@ import ehealthy.connect.ui.patientDashboard.MedicalRecordDisplay
 import ehealthy.connect.ui.patientDashboard.MedicalRecordsScreen
 import ehealthy.connect.ui.patientDashboard.PatientAppointmentsScreen
 import ehealthy.connect.ui.patientDashboard.PatientDashboard
+import ehealthy.connect.ui.patientDashboard.PatientSettings
 import ehealthy.connect.ui.patientDashboard.RescheduleAppointmentScreen
 import ehealthy.connect.ui.patientDashboard.Review
 import ehealthy.connect.ui.patientDashboard.ReviewDisplay
+import ehealthy.connect.ui.patientDashboard.SettingsScreen
 import ehealthy.connect.ui.splash.SplashScreen
 import ehealthy.connect.ui.theme.EHealthyTheme
 import ehealthy.connect.util.SupabaseClientProvider
+import ehealthy.connect.util.ThemeManager
 import ehealthy.connect.util.signInWithGoogle
 import io.github.jan.supabase.auth.OtpType
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.storage.storage
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.put
 
+@kotlinx.serialization.Serializable
+private data class PatientLookup(
+    val id: String? = null,
+    val name: String? = null,
+    val surname: String? = null,
+    val profile_image_url: String? = null
+)
 class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemeManager.init(this)
         enableEdgeToEdge()
         setContent {
-            EHealthyTheme {
+            EHealthyTheme(darkTheme = ThemeManager.isDarkMode) {   // add darkTheme = ThemeManager.isDarkMode
                 AppNavGraph()
             }
         }
     }
 }
 
+
+@kotlinx.serialization.Serializable
+private data class DoctorLookup(
+    val name: String? = null,
+    val surname: String? = null,
+    val discipline: String? = null,
+    val hourly_rate: Double? = null,
+    val operating_hours: String? = null
+)
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun AppNavGraph() {
@@ -114,6 +139,55 @@ fun AppNavGraph() {
             )
         }
 
+        composable("settings") {
+            val scope = rememberCoroutineScope()
+            SettingsScreen(
+                isDarkMode = ThemeManager.isDarkMode,
+                onToggleDarkMode = { ThemeManager.updateDarkMode(it) },
+                onBack = { navController.popBackStack() },
+                onViewPrivacyPolicy = { navController.navigate("privacyPolicy") },
+                onLogout = {
+                    scope.launch {
+                        SupabaseClientProvider.client.auth.signOut()
+                        navController.navigate("patientLogin") { popUpTo(0) { inclusive = true } }
+                    }
+                },
+                fetchSettings = {
+                    val userId = SupabaseClientProvider.client.auth.currentSessionOrNull()?.user?.id
+                    if (userId == null) {
+                        Result.failure(Exception("Not logged in."))
+                    } else {
+                        try {
+                            val row = SupabaseClientProvider.client.postgrest
+                                .from("patients")
+                                .select(columns = Columns.list("email_notifications", "sms_notifications", "profile_visible")) {
+                                    filter { eq("user_id", userId) }
+                                }
+                                .decodeSingleOrNull<PatientSettings>()
+                            Result.success(row ?: PatientSettings())
+                        } catch (e: Exception) {
+                            Result.failure(e)
+                        }
+                    }
+                },
+                onUpdateSetting = { newSettings ->
+                    scope.launch {
+                        val userId = SupabaseClientProvider.client.auth.currentSessionOrNull()?.user?.id ?: return@launch
+                        try {
+                            SupabaseClientProvider.client.postgrest.from("patients").update(
+                                mapOf(
+                                    "email_notifications" to newSettings.email_notifications,
+                                    "sms_notifications" to newSettings.sms_notifications,
+                                    "profile_visible" to newSettings.profile_visible
+                                )
+                            ) { filter { eq("user_id", userId) } }
+                        } catch (e: Exception) {
+                            Log.e("SettingsUpdate", "Failed to save setting", e)
+                        }
+                    }
+                }
+            )
+        }
         composable("onboarding1") {
             OnboardingOne(
                 onContinue = { navController.navigate("onboarding2") },
@@ -190,6 +264,9 @@ fun AppNavGraph() {
                             SupabaseClientProvider.client.auth.signInWith(Email) {
                                 this.email = email
                                 this.password = password
+                            }
+                            if (SupabaseClientProvider.client.auth.currentSessionOrNull() == null) {
+                                throw Exception("Sign-in did not create a session. Please sign in again.")
                             }
                             isLoading = false
                             navController.navigate("patientDashboard") {
@@ -747,20 +824,18 @@ fun AppNavGraph() {
             var isUploadingPhoto by remember { mutableStateOf(false) }
 
             LaunchedEffect(Unit) {
-                val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
+                val userId = SupabaseClientProvider.client.auth.currentSessionOrNull()?.user?.id
                 if (userId != null) {
                     try {
                         val result = SupabaseClientProvider.client.postgrest
                             .from("patients")
-                            .select { filter { eq("user_id", userId) } }
-                            .decodeSingleOrNull<Map<String, String?>>()
-                        val first = result?.get("name")
-                        val last = result?.get("surname")
-                        if (first != null) patientName = "$first ${last ?: ""}".trim()
-                        patientAvatarUrl = result?.get("profile_image_url")
-                            ?.let { "$it?t=${System.currentTimeMillis()}" }
-                    } catch (_: Exception) {
-                    }
+                            .select(columns = Columns.list("name", "surname", "profile_image_url")) {
+                                filter { eq("user_id", userId) }
+                            }
+                            .decodeSingleOrNull<PatientLookup>()
+                        if (result?.name != null) patientName = "${result.name} ${result.surname ?: ""}".trim()
+                        patientAvatarUrl = result?.profile_image_url?.let { "$it?t=${System.currentTimeMillis()}" }
+                    } catch (_: Exception) { }
                 }
             }
 
@@ -771,10 +846,9 @@ fun AppNavGraph() {
                     scope.launch {
                         isUploadingPhoto = true
                         try {
-                            val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
+                            val userId = SupabaseClientProvider.client.auth.currentSessionOrNull()?.user?.id
                                 ?: throw Exception("Not logged in")
-                            val bytes = appContext.contentResolver.openInputStream(uri)
-                                ?.use { it.readBytes() }
+                            val bytes = appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                                 ?: throw Exception("Could not read the selected image")
                             val path = "$userId/avatar.jpg"
                             SupabaseClientProvider.client.storage
@@ -787,11 +861,15 @@ fun AppNavGraph() {
                                 .update({ set("profile_image_url", publicUrl) }) {
                                     filter { eq("user_id", userId) }
                                 }
-                            // Cache-buster: without this, Coil sees the same URL as before
-                            // and keeps showing the OLD cached image after every re-upload.
+                            // Cache-buster: Coil caches by URL, and the storage path never
+                            // changes between uploads (upsert overwrites the same file), so
+                            // without this the avatar keeps showing the OLD cached image.
+                            // right after a successful upload:
                             patientAvatarUrl = "$publicUrl?t=${System.currentTimeMillis()}"
+                            Toast.makeText(appContext, "Profile photo updated", Toast.LENGTH_SHORT).show()
                         } catch (e: Exception) {
                             Log.e("PhotoUpload", "Upload failed", e)
+                            Toast.makeText(appContext, "Photo upload failed: ${e.message ?: "Please try again"}", Toast.LENGTH_LONG).show()
                         } finally {
                             isUploadingPhoto = false
                         }
@@ -803,6 +881,7 @@ fun AppNavGraph() {
                 patientName = patientName,
                 patientAvatarUrl = patientAvatarUrl,
                 isUploadingPhoto = isUploadingPhoto,
+                onNavigateSettings = { navController.navigate("settings") },
                 onNavigateFindDoctors = { navController.navigate("findDoctors") },
                 onNavigateAppointments = { navController.navigate("patientAppointments") },
                 onNavigateMedicalRecords = { navController.navigate("medicalRecords") },
@@ -820,22 +899,8 @@ fun AppNavGraph() {
                         }
                     }
                 },
-                onRescheduleAppointment = { appt ->
-                    navController.navigate("rescheduleAppointment/${appt.id}")
-                },
-                onCancelAppointment = { appointmentId ->
-                    try {
-                        SupabaseClientProvider.client.postgrest.from("appointments")
-                            .update({ set("status", "cancelled") }) {
-                                filter { eq("id", appointmentId) }
-                            }
-                        Result.success(Unit)
-                    } catch (e: Exception) {
-                        Result.failure(e)
-                    }
-                },
                 fetchAppointments = {
-                    val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
+                    val userId = SupabaseClientProvider.client.auth.currentSessionOrNull()?.user?.id
                     if (userId == null) {
                         Result.failure(Exception("Not logged in."))
                     } else {
@@ -850,8 +915,24 @@ fun AppNavGraph() {
                         }
                     }
                 },
+
+                onRescheduleAppointment = { appointmentId ->
+                    navController.navigate("rescheduleAppointment/$appointmentId")
+                },
+                cancelAppointment = { appointmentId ->
+                    try {
+                        SupabaseClientProvider.client.postgrest.from("appointments")
+                            .update({ set("status", "cancelled") }) {
+                                filter { eq("id", appointmentId) }
+                            }
+                        Result.success(Unit)
+                    } catch (e: Exception) {
+                        Result.failure(e)
+                    }
+                },
+
                 fetchReviews = {
-                    val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
+                    val userId = SupabaseClientProvider.client.auth.currentSessionOrNull()?.user?.id
                     if (userId == null) {
                         Result.failure(Exception("Not logged in."))
                     } else {
@@ -876,12 +957,7 @@ fun AppNavGraph() {
 
                             val display = reviewList
                                 .sortedByDescending { it.created_at }
-                                .map {
-                                    ReviewDisplay(
-                                        review = it,
-                                        doctorName = doctorNames[it.doctor_id] ?: "Unknown Doctor"
-                                    )
-                                }
+                                .map { ReviewDisplay(review = it, doctorName = doctorNames[it.doctor_id] ?: "Unknown Doctor") }
 
                             Result.success(display)
                         } catch (e: Exception) {
@@ -912,6 +988,50 @@ fun AppNavGraph() {
                 }
             )
         }
+
+        composable(
+            "doctorProfile/{doctorId}",
+            arguments = listOf(navArgument("doctorId") { defaultValue = "" })
+        ) { backStackEntry ->
+            val doctorId = backStackEntry.arguments?.getString("doctorId") ?: ""
+
+            DoctorProfileScreen(
+                onBack = { navController.popBackStack() },
+                onBookAppointment = { id -> navController.navigate("bookAppointment/$id") },
+                fetchDoctor = {
+                    try {
+                        val doc = SupabaseClientProvider.client.postgrest
+                            .from("doctors")
+                            .select { filter { eq("id", doctorId) } }
+                            .decodeSingleOrNull<DoctorProfile>()
+                        if (doc == null) Result.failure(Exception("Doctor not found."))
+                        else Result.success(doc)
+                    } catch (e: Exception) {
+                        Result.failure(e)
+                    }
+                },
+                fetchReviews = {
+                    try {
+                        val items = SupabaseClientProvider.client.postgrest
+                            .from("reviews")
+                            .select { filter { eq("doctor_id", doctorId) } }
+                            .decodeList<Review>()
+                            .sortedByDescending { it.created_at }
+                            .map {
+                                DoctorReviewItem(
+                                    rating = it.rating ?: 0,
+                                    comment = it.comment,
+                                    patientName = null,   // keep reviews anonymous, or join patients here
+                                    createdAt = it.created_at
+                                )
+                            }
+                        Result.success(items)
+                    } catch (e: Exception) {
+                        Result.failure(e)
+                    }
+                }
+            )
+        }
         composable("healthTips") {
             HealthTipsScreen(
                 onBack = { navController.popBackStack() },
@@ -922,16 +1042,18 @@ fun AppNavGraph() {
             MedicalRecordsScreen(
                 onBack = { navController.popBackStack() },
                 fetchRecords = {
-                    val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
+                    val userId = SupabaseClientProvider.client.auth.currentSessionOrNull()?.user?.id
                     if (userId == null) {
                         Result.failure(Exception("Please log in to view your records."))
                     } else {
                         try {
                             val patientId = SupabaseClientProvider.client.postgrest
                                 .from("patients")
-                                .select { filter { eq("user_id", userId) } }
-                                .decodeSingleOrNull<Map<String, String?>>()
-                                ?.get("id")
+                                .select(columns = Columns.list("id")) {
+                                    filter { eq("user_id", userId) }
+                                }
+                                .decodeSingleOrNull<PatientLookup>()
+                                ?.id
                                 ?: userId
 
                             val records = SupabaseClientProvider.client.postgrest
@@ -987,8 +1109,10 @@ fun AppNavGraph() {
                     try {
                         val doc = SupabaseClientProvider.client.postgrest
                             .from("doctors")
-                            .select { filter { eq("id", doctorId) } }
-                            .decodeSingleOrNull<Map<String, String?>>()
+                            .select(columns = Columns.list("name", "surname", "discipline", "hourly_rate", "operating_hours")) {
+                                filter { eq("id", doctorId) }
+                            }
+                            .decodeSingleOrNull<DoctorLookup>()
 
                         if (doc == null) {
                             Result.failure(Exception("Doctor not found."))
@@ -996,11 +1120,11 @@ fun AppNavGraph() {
                             Result.success(
                                 DoctorBookingInfo(
                                     id = doctorId,
-                                    name = doc["name"] ?: "",
-                                    surname = doc["surname"] ?: "",
-                                    discipline = doc["discipline"],
-                                    hourlyRate = doc["hourly_rate"]?.toDoubleOrNull(),
-                                    operatingHours = doc["operating_hours"]
+                                    name = doc.name ?: "",
+                                    surname = doc.surname ?: "",
+                                    discipline = doc.discipline,
+                                    hourlyRate = doc.hourly_rate,
+                                    operatingHours = doc.operating_hours
                                 )
                             )
                         }
@@ -1032,7 +1156,7 @@ fun AppNavGraph() {
                         errorMessage = null
                         isLoading = true
                         try {
-                            val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
+                            val userId = SupabaseClientProvider.client.auth.currentSessionOrNull()?.user?.id
                                 ?: throw Exception("Please log in to book an appointment.")
 
                             val patient = SupabaseClientProvider.client.postgrest
@@ -1040,22 +1164,21 @@ fun AppNavGraph() {
                                 .select { filter { eq("user_id", userId) } }
                                 .decodeSingleOrNull<Map<String, String?>>()
 
-                            val patientName =
-                                "${patient?.get("name") ?: ""} ${patient?.get("surname") ?: ""}".trim()
+                            val patientName = "${patient?.get("name") ?: ""} ${patient?.get("surname") ?: ""}".trim()
 
-                            SupabaseClientProvider.client.postgrest.from("appointments").insert(
-                                mapOf(
-                                    "doctor_id" to doctorId,
-                                    "patient_id" to userId,
-                                    "patient_name" to patientName.ifBlank { null },
-                                    "date" to submission.date,
-                                    "time" to submission.time,
-                                    "reason" to submission.reason,
-                                    "status" to "pending",
-                                    "payment_method" to submission.paymentReference,
-                                    "amount_paid" to submission.fee
-                                )
-                            )
+                            val row = kotlinx.serialization.json.buildJsonObject {
+                                put("doctor_id", doctorId)
+                                put("patient_id", userId)
+                                if (patientName.isNotBlank()) put("patient_name", patientName)
+                                put("date", submission.date)
+                                put("time", submission.time)
+                                put("reason", submission.reason)
+                                put("status", "pending")
+                                put("payment_method", submission.paymentReference)
+                                put("amount_paid", submission.fee)
+                            }
+
+                            SupabaseClientProvider.client.postgrest.from("appointments").insert(row)
 
                             isLoading = false
                             navController.navigate("bookingConfirmed") {
@@ -1078,7 +1201,7 @@ fun AppNavGraph() {
                 onBack = { navController.popBackStack() },
                 onFindDoctors = { navController.navigate("findDoctors") },
                 fetchAppointments = {
-                    val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
+                    val userId = SupabaseClientProvider.client.auth.currentSessionOrNull()?.user?.id
                     if (userId == null) {
                         Result.failure(Exception("Not logged in."))
                     } else {
@@ -1095,7 +1218,7 @@ fun AppNavGraph() {
                     }
                 },
                 fetchReviewedAppointmentIds = {
-                    val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
+                    val userId = SupabaseClientProvider.client.auth.currentSessionOrNull()?.user?.id
                     if (userId == null) {
                         Result.failure(Exception("Not logged in."))
                     } else {
@@ -1117,7 +1240,7 @@ fun AppNavGraph() {
                     scope.launch {
                         isSubmittingReview = true
                         try {
-                            val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
+                            val userId = SupabaseClientProvider.client.auth.currentSessionOrNull()?.user?.id
                                 ?: throw Exception("Not logged in")
 
                             val appt = SupabaseClientProvider.client.postgrest
@@ -1153,29 +1276,16 @@ fun AppNavGraph() {
             val appointmentId = backStackEntry.arguments?.getString("appointmentId") ?: ""
             val scope = rememberCoroutineScope()
             var appointment by remember { mutableStateOf<Appointment?>(null) }
-            var doctorId by remember { mutableStateOf<String?>(null) }
             var isLoadingAppt by remember { mutableStateOf(true) }
             var isSubmitting by remember { mutableStateOf(false) }
             var errorMessage by remember { mutableStateOf<String?>(null) }
 
             LaunchedEffect(appointmentId) {
                 try {
-                    val row = SupabaseClientProvider.client.postgrest
+                    appointment = SupabaseClientProvider.client.postgrest
                         .from("appointments")
                         .select { filter { eq("id", appointmentId) } }
-                        .decodeSingleOrNull<Map<String, String?>>()
-                    doctorId = row?.get("doctor_id")
-                    appointment = Appointment(
-                        id = appointmentId,
-                        doctor_id = doctorId,
-                        patient_name = row?.get("patient_name"),
-                        reason = row?.get("reason"),
-                        date = row?.get("date"),
-                        time = row?.get("time"),
-                        status = row?.get("status"),
-                        payment_method = row?.get("payment_method"),
-                        amount_paid = row?.get("amount_paid")?.toDoubleOrNull()
-                    )
+                        .decodeSingleOrNull<Appointment>()
                 } catch (e: Exception) {
                     errorMessage = "Could not load appointment: ${e.message}"
                 }
@@ -1188,35 +1298,41 @@ fun AppNavGraph() {
                         androidx.compose.material3.CircularProgressIndicator()
                     }
                 }
-                appointment == null || doctorId == null -> {
+                appointment == null -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(errorMessage ?: "Appointment not found.")
                     }
                 }
                 else -> {
+                    val doctorIdForFetch = appointment!!.doctor_id
+
                     RescheduleAppointmentScreen(
                         appointment = appointment!!,
                         isLoading = isSubmitting,
                         errorMessage = errorMessage,
                         onBack = { navController.popBackStack() },
                         fetchBookedTimes = { date ->
-                            try {
-                                val booked = SupabaseClientProvider.client.postgrest
-                                    .from("appointments")
-                                    .select {
-                                        filter {
-                                            eq("doctor_id", doctorId!!)
-                                            eq("date", date)
-                                            neq("status", "cancelled")
-                                            neq("id", appointmentId) // don't show this booking's own slot as "taken"
+                            if (doctorIdForFetch == null) {
+                                Result.success(emptySet())
+                            } else {
+                                try {
+                                    val booked = SupabaseClientProvider.client.postgrest
+                                        .from("appointments")
+                                        .select {
+                                            filter {
+                                                eq("doctor_id", doctorIdForFetch)
+                                                eq("date", date)
+                                                neq("status", "cancelled")
+                                                neq("id", appointmentId) // don't show this booking's own slot as "taken"
+                                            }
                                         }
-                                    }
-                                    .decodeList<Map<String, String?>>()
-                                    .mapNotNull { it["time"]?.take(5) }
-                                    .toSet()
-                                Result.success(booked)
-                            } catch (e: Exception) {
-                                Result.failure(e)
+                                        .decodeList<Map<String, String?>>()
+                                        .mapNotNull { it["time"]?.take(5) }
+                                        .toSet()
+                                    Result.success(booked)
+                                } catch (e: Exception) {
+                                    Result.failure(e)
+                                }
                             }
                         },
                         onConfirmReschedule = { newDate, newTime ->
@@ -1267,3 +1383,4 @@ fun AppNavGraph() {
 
 
 }
+

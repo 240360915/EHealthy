@@ -115,14 +115,7 @@ fun PatientAppointmentsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Text(
-                        "My Appointments",
-                        color = ink,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp
-                    )
-                },
+                title = { Text("My Appointments", color = ink, fontWeight = FontWeight.Bold, fontSize = 18.sp) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = ink)
@@ -160,60 +153,28 @@ fun PatientAppointmentsScreen(
 
             when {
                 isLoading -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(40.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
+                    Box(modifier = Modifier.fillMaxSize().padding(40.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = teal)
                     }
                 }
-
                 loadError != null -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(24.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
+                    Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                         Text(loadError ?: "", color = Color(0xFFEF4444), fontSize = 13.sp)
                     }
                 }
-
                 filtered.isEmpty() -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(24.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
+                    Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                Icons.Outlined.CalendarMonth,
-                                contentDescription = null,
-                                tint = Color(0xFF94A3B8),
-                                modifier = Modifier.size(40.dp)
-                            )
+                            Icon(Icons.Outlined.CalendarMonth, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(40.dp))
                             Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                "No appointments in this category.",
-                                color = muted,
-                                fontSize = 14.sp
-                            )
+                            Text("No appointments in this category.", color = muted, fontSize = 14.sp)
                             Spacer(modifier = Modifier.height(6.dp))
                             TextButton(onClick = onFindDoctors) {
-                                Text(
-                                    "Find a doctor to book one",
-                                    color = teal,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
+                                Text("Find a doctor to book one", color = teal, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                             }
                         }
                     }
                 }
-
                 else -> {
                     LazyColumn(
                         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
@@ -288,11 +249,7 @@ private fun ReviewDialog(
         },
         confirmButton = {
             TextButton(onClick = { onSubmit(rating, comment) }, enabled = !isSubmitting) {
-                Text(
-                    if (isSubmitting) "Submitting…" else "Submit Review",
-                    color = teal,
-                    fontWeight = FontWeight.Bold
-                )
+                Text(if (isSubmitting) "Submitting…" else "Submit Review", color = teal, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
@@ -337,27 +294,10 @@ private fun AppointmentDetailCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    "📅 ${appt.date ?: "-"}   🕐 ${appt.time ?: "-"}",
-                    color = ink,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Box(
-                    modifier = Modifier
-                        .background(statusBg, RoundedCornerShape(20.dp))
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        statusLabel,
-                        color = statusColor,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("📅 ${appt.date ?: "-"}   🕐 ${appt.time ?: "-"}", color = ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Box(modifier = Modifier.background(statusBg, RoundedCornerShape(20.dp)).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                    Text(statusLabel, color = statusColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
             Spacer(modifier = Modifier.height(6.dp))
@@ -373,12 +313,7 @@ private fun AppointmentDetailCard(
             if (showLeaveReview) {
                 Spacer(modifier = Modifier.height(10.dp))
                 TextButton(onClick = onLeaveReview) {
-                    Text(
-                        "Leave a Review",
-                        color = teal,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Text("Leave a Review", color = teal, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }

@@ -3,14 +3,13 @@ package ehealthy.connect.ui.patientDashboard
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -24,12 +23,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.CalendarMonth
-import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.ExitToApp
 import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.RateReview
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -45,7 +43,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,18 +55,20 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import java.time.LocalDate
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.MaterialTheme
 
 @Serializable
 data class Appointment(
     val id: String,
-    val doctor_id: String? = null,
     val patient_name: String? = null,
     val reason: String? = null,
     val date: String? = null,
     val time: String? = null,
     val status: String? = null,
     val payment_method: String? = null,
-    val amount_paid: Double? = null
+    val amount_paid: Double? = null,
+    val doctor_id: String?=null
 )
 
 @Serializable
@@ -88,12 +87,7 @@ data class ReviewDisplay(
     val doctorName: String
 )
 
-data class QuickAction(
-    val label: String,
-    val description: String,
-    val icon: ImageVector,
-    val onClick: () -> Unit
-)
+data class QuickAction(val label: String, val description: String, val icon: ImageVector, val onClick: () -> Unit)
 
 @RequiresApi(Build.VERSION_CODES.O)
 fun isUpcomingAppointment(appt: Appointment): Boolean {
@@ -105,25 +99,26 @@ fun isUpcomingAppointment(appt: Appointment): Boolean {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PatientDashboard(
-        patientName: String,
-        patientAvatarUrl: String?,
-        isUploadingPhoto: Boolean,
-        onNavigateFindDoctors: () -> Unit,
-        onNavigateAppointments: () -> Unit,
-        onNavigateMedicalRecords: () -> Unit,
-         onNavigateHealthTips: () -> Unit,
-        onUploadPhoto: () -> Unit,
-        onLogout: () -> Unit,
-        onRescheduleAppointment: (Appointment) -> Unit,
-        onCancelAppointment: suspend (appointmentId: String) -> Result<Unit>,
-        fetchAppointments: suspend () -> Result<List<Appointment>>,
-        fetchReviews: suspend () -> Result<List<ReviewDisplay>>
-    ) {
-    val background = Color(0xFFF0F4F8)
-    val navy = Color(0xFF0F1F3D)
-    val green = Color(0xFF10B981)
-    val accent = Color(0xFF3B82F6)
-    val muted = Color(0xFF64748B)
+    patientName: String,
+    patientAvatarUrl: String?,
+    isUploadingPhoto: Boolean,
+    onNavigateFindDoctors: () -> Unit,
+    onNavigateAppointments: () -> Unit,
+    onNavigateMedicalRecords: () -> Unit,
+    onNavigateHealthTips: () -> Unit,
+    onNavigateSettings: () -> Unit,
+    onUploadPhoto: () -> Unit,
+    onLogout: () -> Unit,
+    fetchAppointments: suspend () -> Result<List<Appointment>>,
+    fetchReviews: suspend () -> Result<List<ReviewDisplay>>,
+    onRescheduleAppointment: (String) -> Unit,
+    cancelAppointment: suspend (String) -> Result<Unit>
+) {
+    val background = MaterialTheme.colorScheme.background
+    val navy = MaterialTheme.colorScheme.onBackground
+    val green = MaterialTheme.colorScheme.primary
+    val accent = MaterialTheme.colorScheme.primary
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
 
     var selectedTab by remember { mutableStateOf(PatientTab.HOME) }
 
@@ -133,6 +128,11 @@ fun PatientDashboard(
 
     var reviews by remember { mutableStateOf<List<ReviewDisplay>>(emptyList()) }
     var isLoadingReviews by remember { mutableStateOf(true) }
+    var selectedAppointment by remember { mutableStateOf<Appointment?>(null) }
+    var showDetailsForAppointment by remember { mutableStateOf<Appointment?>(null) }
+    var isCancelling by remember { mutableStateOf(false) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+
 
     LaunchedEffect(Unit) {
         val result = fetchAppointments()
@@ -148,12 +148,6 @@ fun PatientDashboard(
         result.onSuccess { reviews = it }
     }
 
-    // Called after a successful cancel so the card reflects the new status
-    // immediately, without needing a full re-fetch from Supabase.
-    val onAppointmentUpdated: (Appointment) -> Unit = { updated ->
-        appointments = appointments.map { if (it.id == updated.id) updated else it }
-    }
-
     val onTabSelected: (PatientTab) -> Unit = { tab ->
         when (tab) {
             PatientTab.FIND_DOCTORS -> onNavigateFindDoctors()
@@ -167,12 +161,7 @@ fun PatientDashboard(
             TopAppBar(
                 title = {
                     Column {
-                        Text(
-                            "e-Health Connect",
-                            color = navy,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
-                        )
+                        Text("e-Health Connect", color = navy, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Text("health-care made easier for you", color = green, fontSize = 11.sp)
                     }
                 },
@@ -185,7 +174,7 @@ fun PatientDashboard(
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
         },
         bottomBar = {
@@ -209,9 +198,7 @@ fun PatientDashboard(
                 onNavigateAppointments = onNavigateAppointments,
                 onNavigateMedicalRecords = onNavigateMedicalRecords,
                 onNavigateHealthTips = onNavigateHealthTips,
-                onRescheduleAppointment = onRescheduleAppointment,
-                onCancelAppointment = onCancelAppointment,
-                onAppointmentUpdated = onAppointmentUpdated
+                onAppointmentClick = { selectedAppointment = it }
             )
 
             PatientTab.PROFILE -> ProfileTabContent(
@@ -223,12 +210,43 @@ fun PatientDashboard(
                 navy = navy,
                 muted = muted,
                 onUploadPhoto = onUploadPhoto,
+                onNavigateSettings = onNavigateSettings,
                 onNavigateMedicalRecords = onNavigateMedicalRecords,
                 onLogout = onLogout
             )
 
-            else -> {}
+            else -> { }
         }
+    }
+    selectedAppointment?.let { appt ->
+        AppointmentActionSheet(
+            appointment = appt,
+            onDismiss = { selectedAppointment = null },
+            onViewDetails = {
+                showDetailsForAppointment = appt
+                selectedAppointment = null
+            },
+            onReschedule = {
+                selectedAppointment = null
+                onRescheduleAppointment(appt.id)
+            },
+            onCancel = {
+                scope.launch {
+                    isCancelling = true
+                    cancelAppointment(appt.id).onSuccess {
+                        appointments = appointments.map {
+                            if (it.id == appt.id) it.copy(status = "cancelled") else it
+                        }
+                    }
+                    isCancelling = false
+                    selectedAppointment = null
+                }
+            }
+        )
+    }
+
+    showDetailsForAppointment?.let { appt ->
+        AppointmentDetailsDialog(appt = appt, onDismiss = { showDetailsForAppointment = null })
     }
 }
 
@@ -250,16 +268,9 @@ private fun HomeTabContent(
     onNavigateAppointments: () -> Unit,
     onNavigateMedicalRecords: () -> Unit,
     onNavigateHealthTips: () -> Unit,
-    onRescheduleAppointment: (Appointment) -> Unit,
-    onCancelAppointment: suspend (appointmentId: String) -> Result<Unit>,
-    onAppointmentUpdated: (Appointment) -> Unit
+    onAppointmentClick: (Appointment) -> Unit
 ) {
     val upcoming = remember(appointments) { appointments.filter { isUpcomingAppointment(it) } }
-    val scope = rememberCoroutineScope()
-
-    var sheetAppointment by remember { mutableStateOf<Appointment?>(null) }
-    var detailsAppointment by remember { mutableStateOf<Appointment?>(null) }
-    var cancelError by remember { mutableStateOf<String?>(null) }
 
     LazyColumn(
         modifier = modifier
@@ -269,12 +280,7 @@ private fun HomeTabContent(
         contentPadding = PaddingValues(vertical = 20.dp)
     ) {
         item {
-            Text(
-                "Welcome back, $patientName 👋",
-                color = navy,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Text("Welcome back, $patientName 👋", color = navy, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(4.dp))
             Text("Everything you need, one tap away.", color = muted, fontSize = 13.sp)
             Spacer(modifier = Modifier.height(20.dp))
@@ -282,18 +288,8 @@ private fun HomeTabContent(
 
         item {
             val actions = listOf(
-                QuickAction(
-                    "Medical Records",
-                    "View your health history",
-                    Icons.Outlined.Description,
-                    onNavigateMedicalRecords
-                ),
-                QuickAction(
-                    "Health Tips",
-                    "Wellness advice & guidance",
-                    Icons.Outlined.Lightbulb,
-                    onNavigateHealthTips
-                )
+                QuickAction("Medical Records", "View your health history", Icons.Outlined.Description, onNavigateMedicalRecords),
+                QuickAction("Health Tips", "Wellness advice & guidance", Icons.Outlined.Lightbulb, onNavigateHealthTips)
             )
             Row(modifier = Modifier.fillMaxWidth()) {
                 actions.forEachIndexed { index, action ->
@@ -314,33 +310,23 @@ private fun HomeTabContent(
 
         if (isLoadingAppointments) {
             item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = accent)
                 }
             }
         } else if (loadError != null) {
-            item { Text(loadError, color = Color(0xFFEF4444), fontSize = 13.sp) }
+            item { Text(loadError, color = MaterialTheme.colorScheme.error, fontSize = 13.sp) }
         } else if (upcoming.isEmpty()) {
             item { EmptyAppointmentsCard(onNavigateFindDoctors) }
         } else {
             items(upcoming.take(3)) { appt ->
-                AppointmentCard(appt, onClick = { sheetAppointment = appt })
+                AppointmentCard(appt, onClick = { onAppointmentClick(appt) })
                 Spacer(modifier = Modifier.height(12.dp))
             }
             if (upcoming.size > 3) {
                 item {
                     TextButton(onClick = onNavigateAppointments) {
-                        Text(
-                            "View all appointments →",
-                            color = accent,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        Text("View all appointments →", color = accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -357,12 +343,7 @@ private fun HomeTabContent(
 
         if (isLoadingReviews) {
             item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = accent)
                 }
             }
@@ -375,96 +356,12 @@ private fun HomeTabContent(
             }
             item {
                 TextButton(onClick = onNavigateAppointments) {
-                    Text(
-                        "Rate another visit →",
-                        color = accent,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Text("Rate another visit →", color = accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
 
         item { Spacer(modifier = Modifier.height(24.dp)) }
-    }
-
-    // ------------------------------------------------
-    // TAP-AN-APPOINTMENT ACTIONS
-    // ------------------------------------------------
-
-    sheetAppointment?.let { appt ->
-        AppointmentActionSheet(
-            appointment = appt,
-            onDismiss = { sheetAppointment = null },
-            onViewDetails = {
-                detailsAppointment = appt
-                sheetAppointment = null
-            },
-            onReschedule = {
-                sheetAppointment = null
-                onRescheduleAppointment(appt)
-            },
-            onCancel = {
-                sheetAppointment = null
-                scope.launch {
-                    onCancelAppointment(appt.id)
-                        .onSuccess { onAppointmentUpdated(appt.copy(status = "cancelled")) }
-                        .onFailure { cancelError = it.message ?: "Could not cancel appointment." }
-                }
-            }
-        )
-    }
-
-    detailsAppointment?.let { appt ->
-        AppointmentDetailsDialog(appointment = appt, onDismiss = { detailsAppointment = null })
-    }
-
-    cancelError?.let { message ->
-        AlertDialog(
-            onDismissRequest = { cancelError = null },
-            title = { Text("Couldn't cancel") },
-            text = { Text(message) },
-            confirmButton = {
-                TextButton(onClick = { cancelError = null }) { Text("OK") }
-            }
-        )
-    }
-}
-
-@Composable
-private fun AppointmentDetailsDialog(appointment: Appointment, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Appointment Details", fontWeight = FontWeight.Bold) },
-        text = {
-            Column {
-                DetailRow("Date", appointment.date ?: "-")
-                DetailRow("Time", appointment.time ?: "-")
-                DetailRow("Reason", appointment.reason ?: "General consultation")
-                DetailRow(
-                    "Status",
-                    appointment.status?.replaceFirstChar { it.uppercase() } ?: "Unknown"
-                )
-                appointment.payment_method?.let { DetailRow("Payment", it) }
-                appointment.amount_paid?.let { DetailRow("Amount", "R %.2f".format(it)) }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
-        }
-    )
-}
-
-@Composable
-private fun DetailRow(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(label, color = Color(0xFF64748B), fontSize = 13.sp)
-        Text(value, color = Color(0xFF0F1F3D), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -478,41 +375,32 @@ private fun ProfileTabContent(
     navy: Color,
     muted: Color,
     onUploadPhoto: () -> Unit,
+    onNavigateSettings: () -> Unit,
     onNavigateMedicalRecords: () -> Unit,
     onLogout: () -> Unit
 ) {
+    var showPhotoViewer by remember { mutableStateOf(false) }
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(background)
             .padding(24.dp)
     ) {
-        Box(contentAlignment = Alignment.BottomEnd) {
-            PatientAvatar(avatarUrl = patientAvatarUrl, name = patientName, size = 96.dp)
-            Box(
-                modifier = Modifier
-                    .size(30.dp)
-                    .clip(CircleShape)
-                    .background(Color.White)
-                    .border(1.dp, Color(0xFFE2E8F0), CircleShape)
-                    .clickable(enabled = !isUploadingPhoto, onClick = onUploadPhoto),
-                contentAlignment = Alignment.Center
-            ) {
-                if (isUploadingPhoto) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(14.dp),
-                        strokeWidth = 2.dp,
-                        color = navy
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Outlined.CameraAlt,
-                        contentDescription = "Change photo",
-                        tint = navy,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            }
+        EditablePatientAvatar(
+            avatarUrl = patientAvatarUrl,
+            name = patientName,
+            size = 96.dp,
+            isUploading = isUploadingPhoto,
+            onViewPhoto = { showPhotoViewer = true },
+            onChangePhoto = onUploadPhoto
+        )
+
+        if (showPhotoViewer && !patientAvatarUrl.isNullOrBlank()) {
+            PhotoViewerDialog(
+                photoUrl = patientAvatarUrl,
+                onDismiss = { showPhotoViewer = false }
+            )
         }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -525,75 +413,37 @@ private fun ProfileTabContent(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        "Add a profile picture",
-                        color = navy,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Text("Add a profile picture", color = navy, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        "Upload a photo, or we'll keep showing your initial.",
-                        color = muted,
-                        fontSize = 12.sp
-                    )
+                    Text("Upload a photo, or we'll keep showing your initial.", color = muted, fontSize = 12.sp)
                     Spacer(modifier = Modifier.height(10.dp))
-                    TextButton(
-                        onClick = onUploadPhoto,
-                        contentPadding = PaddingValues(0.dp),
-                        enabled = !isUploadingPhoto
-                    ) {
+                    TextButton(onClick = onUploadPhoto, contentPadding = PaddingValues(0.dp), enabled = !isUploadingPhoto) {
                         Text(
                             if (isUploadingPhoto) "Uploading…" else "Upload photo →",
-                            color = Color(0xFF3B82F6),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold
+                            color = MaterialTheme.colorScheme.primary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
-            }
-        } else {
-            // A photo already exists — still let them change it again, as many times as they like.
-            Spacer(modifier = Modifier.height(6.dp))
-            TextButton(
-                onClick = onUploadPhoto,
-                contentPadding = PaddingValues(0.dp),
-                enabled = !isUploadingPhoto
-            ) {
-                Text(
-                    if (isUploadingPhoto) "Uploading…" else "Change photo",
-                    color = Color(0xFF3B82F6),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
             }
         }
 
         Spacer(modifier = Modifier.height(28.dp))
 
-        ProfileMenuItem(
-            Icons.Outlined.Description,
-            "Medical Records",
-            navy,
-            onClick = onNavigateMedicalRecords
-        )
+        ProfileMenuItem(Icons.Outlined.Description, "Medical Records", navy, onClick = onNavigateMedicalRecords)
         Spacer(modifier = Modifier.height(8.dp))
-        ProfileMenuItem(Icons.Outlined.ExitToApp, "Logout", Color(0xFFEF4444), onClick = onLogout)
+        ProfileMenuItem(Icons.Outlined.Settings, "Settings", navy, onClick = onNavigateSettings)
+        Spacer(modifier = Modifier.height(8.dp))
+        ProfileMenuItem(Icons.Outlined.ExitToApp, "Logout", MaterialTheme.colorScheme.error, onClick = onLogout)
     }
 }
-
 @Composable
 private fun ProfileMenuItem(icon: ImageVector, label: String, tint: Color, onClick: () -> Unit) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
@@ -615,14 +465,10 @@ private fun QuickActionCard(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = action.onClick),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .padding(18.dp)
-                .fillMaxWidth()
-        ) {
+        Column(modifier = Modifier.padding(18.dp).fillMaxWidth()) {
             Box(
                 modifier = Modifier
                     .size(40.dp)
@@ -630,12 +476,7 @@ private fun QuickActionCard(
                     .background(accent.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    action.icon,
-                    contentDescription = null,
-                    tint = accent,
-                    modifier = Modifier.size(20.dp)
-                )
+                Icon(action.icon, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
             }
             Spacer(modifier = Modifier.height(12.dp))
             Text(action.label, color = navy, fontSize = 14.sp, fontWeight = FontWeight.Bold)
@@ -647,32 +488,17 @@ private fun QuickActionCard(
 
 @Composable
 private fun EmptyAppointmentsCard(onFindDoctor: () -> Unit) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        modifier = Modifier.fillMaxWidth()
-    ) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(28.dp),
+            modifier = Modifier.fillMaxWidth().padding(28.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Icon(
-                Icons.Outlined.CalendarMonth,
-                contentDescription = null,
-                tint = Color(0xFF94A3B8),
-                modifier = Modifier.size(32.dp)
-            )
+            Icon(Icons.Outlined.CalendarMonth, contentDescription = null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(32.dp))
             Spacer(modifier = Modifier.height(8.dp))
-            Text("No upcoming appointments.", color = Color(0xFF64748B), fontSize = 14.sp)
+            Text("No upcoming appointments.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
             Spacer(modifier = Modifier.height(6.dp))
             TextButton(onClick = onFindDoctor) {
-                Text(
-                    "Find a doctor to book one",
-                    color = Color(0xFF3B82F6),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
+                Text("Find a doctor to book one", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -680,32 +506,17 @@ private fun EmptyAppointmentsCard(onFindDoctor: () -> Unit) {
 
 @Composable
 private fun EmptyReviewsCard(onGoRate: () -> Unit) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        modifier = Modifier.fillMaxWidth()
-    ) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(28.dp),
+            modifier = Modifier.fillMaxWidth().padding(28.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Icon(
-                Icons.Outlined.RateReview,
-                contentDescription = null,
-                tint = Color(0xFF94A3B8),
-                modifier = Modifier.size(32.dp)
-            )
+            Icon(Icons.Outlined.RateReview, contentDescription = null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(32.dp))
             Spacer(modifier = Modifier.height(8.dp))
-            Text("You haven't left any reviews yet.", color = Color(0xFF64748B), fontSize = 14.sp)
+            Text("You haven't left any reviews yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
             Spacer(modifier = Modifier.height(6.dp))
             TextButton(onClick = onGoRate) {
-                Text(
-                    "Rate a completed visit",
-                    color = Color(0xFF3B82F6),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
+                Text("Rate a completed visit", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -713,18 +524,10 @@ private fun EmptyReviewsCard(onGoRate: () -> Unit) {
 
 @Composable
 private fun ReviewCard(rd: ReviewDisplay) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        modifier = Modifier.fillMaxWidth()
-    ) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    rd.doctorName,
-                    color = Color(0xFF0F1F3D),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Text(rd.doctorName, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.weight(1f))
                 Row {
                     repeat(5) { i ->
@@ -739,7 +542,7 @@ private fun ReviewCard(rd: ReviewDisplay) {
             }
             rd.review.comment?.takeIf { it.isNotBlank() }?.let {
                 Spacer(modifier = Modifier.height(6.dp))
-                Text(it, color = Color(0xFF64748B), fontSize = 13.sp, lineHeight = 18.sp)
+                Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 18.sp)
             }
         }
     }
@@ -750,9 +553,9 @@ private fun AppointmentCard(appt: Appointment, onClick: () -> Unit) {
     val statusColor = when (appt.status) {
         "confirmed" -> Color(0xFF10B981)
         "pending" -> Color(0xFFF59E0B)
-        "rescheduled" -> Color(0xFF3B82F6)
-        "cancelled" -> Color(0xFFEF4444)
-        else -> Color(0xFF94A3B8)
+        "rescheduled" -> MaterialTheme.colorScheme.primary
+        "cancelled" -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.outline
     }
     val statusBg = when (appt.status) {
         "confirmed" -> Color(0xFFF0FDF4)
@@ -763,60 +566,56 @@ private fun AppointmentCard(appt: Appointment, onClick: () -> Unit) {
     }
     val statusLabel = when (appt.status) {
         "confirmed" -> "Accepted & Paid"
-        "cancelled" -> "Rejected & Refunded"
+        "cancelled" -> "Cancelled"
         else -> appt.status?.replaceFirstChar { it.uppercase() } ?: "Unknown"
     }
 
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
     ) {
         Row(modifier = Modifier.fillMaxWidth()) {
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .fillMaxWidth()
-                    .background(statusColor)
-            )
-        }
-        Column(modifier = Modifier.padding(18.dp)) {
-            Text(
-                "📅 ${appt.date ?: "-"}   🕐 ${appt.time ?: "-"}",
-                color = Color(0xFF1E293B),
-                fontSize = 14.sp
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                "📝 ${appt.reason ?: "General consultation"}",
-                color = Color(0xFF64748B),
-                fontSize = 13.sp
-            )
-            appt.payment_method?.let {
+            Box(modifier = Modifier.width(4.dp).fillMaxHeight().background(statusColor))
+            Column(modifier = Modifier.padding(18.dp)) {
+                Text("📅 ${appt.date ?: "-"}   🕐 ${appt.time ?: "-"}", color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
                 Spacer(modifier = Modifier.height(4.dp))
-                Text("💳 Paid via $it", color = Color(0xFF64748B), fontSize = 13.sp)
+                Text("📝 ${appt.reason ?: "General consultation"}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                appt.payment_method?.let {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("💳 Paid via $it", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                }
+                appt.amount_paid?.let {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("💰 R %.2f".format(it), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Box(
+                    modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(statusBg).padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text(statusLabel, color = statusColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
             }
-            appt.amount_paid?.let {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("💰 R %.2f".format(it), color = Color(0xFF64748B), fontSize = 13.sp)
-            }
-            Spacer(modifier = Modifier.height(10.dp))
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(statusBg)
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
-            ) {
-                Text(
-                    statusLabel,
-                    color = statusColor,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            Text("Tap for options", color = Color(0xFF94A3B8), fontSize = 11.sp)
         }
     }
+}
+
+@Composable
+private fun AppointmentDetailsDialog(appt: Appointment, onDismiss: () -> Unit) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Appointment Details") },
+        text = {
+            Column {
+                Text("Date: ${appt.date ?: "-"}")
+                Text("Time: ${appt.time ?: "-"}")
+                Text("Reason: ${appt.reason ?: "General consultation"}")
+                Text("Status: ${appt.status?.replaceFirstChar { it.uppercase() } ?: "Unknown"}")
+                appt.payment_method?.let { Text("Payment method: $it") }
+                appt.amount_paid?.let { Text("Amount paid: R %.2f".format(it)) }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    )
 }

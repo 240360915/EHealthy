@@ -1,6 +1,6 @@
 package ehealthy.connect.ui.patientDashboard
 
-import android.app.DatePickerDialog
+import android.annotation.SuppressLint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Schedule
@@ -66,6 +67,7 @@ private val rRed = Color(0xFFDC2626)
 private val rescheduleTimeSlots =
     listOf("08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00")
 
+@SuppressLint("DefaultLocale")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RescheduleAppointmentScreen(
@@ -79,8 +81,8 @@ fun RescheduleAppointmentScreen(
     var selectedDate by rememberSaveable { mutableStateOf(appointment.date ?: "") }
     var selectedTime by rememberSaveable { mutableStateOf(appointment.time) }
     var bookedTimes by rememberSaveable { mutableStateOf(setOf<String>()) }
+    var dateError by rememberSaveable { mutableStateOf<String?>(null) }
     var isLoadingSlots by rememberSaveable { mutableStateOf(false) }
-
     val context = LocalContext.current
     val calendar = Calendar.getInstance()
 
@@ -150,34 +152,55 @@ fun RescheduleAppointmentScreen(
             }
 
             RescheduleSectionCard(icon = Icons.Outlined.CalendarMonth, title = "New Date") {
-                OutlinedTextField(
-                    value = selectedDate,
-                    onValueChange = {},
-                    readOnly = true,
-                    placeholder = { Text("Select a new date") },
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = rTeal),
-                    shape = RoundedCornerShape(12.dp),
-                    trailingIcon = {
-                        Icon(Icons.Outlined.CalendarMonth, contentDescription = null, tint = rMuted)
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            DatePickerDialog(
-                                context,
-                                { _, year, month, day ->
-                                    selectedDate = "%04d-%02d-%02d".format(year, month + 1, day)
-                                    selectedTime = null
-                                },
-                                calendar.get(Calendar.YEAR),
-                                calendar.get(Calendar.MONTH),
-                                calendar.get(Calendar.DAY_OF_MONTH)
-                            ).apply {
-                                datePicker.minDate = System.currentTimeMillis() - 1000
-                            }.show()
-                        }
-                )
+                dateError?.let {
+                    Text(it, color = rRed, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
+                }
+
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = selectedDate,
+                        onValueChange = {},
+                        readOnly = true,
+                        enabled = false,
+                        placeholder = { Text("Select a new date") },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            disabledTextColor = rInk,
+                            disabledBorderColor = Color(0xFFCBD5E1),
+                            disabledContainerColor = Color.Transparent,
+                            disabledPlaceholderColor = rMuted,
+                            disabledTrailingIconColor = rTeal
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        trailingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.DateRange,
+                                contentDescription = "Select date"
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable {
+                                android.app.DatePickerDialog(
+                                    context,
+                                    { _, year, month, day ->
+                                        selectedDate = "%04d-%02d-%02d".format(year, month + 1, day)
+                                        selectedTime = null
+                                    },
+                                    calendar.get(Calendar.YEAR),
+                                    calendar.get(Calendar.MONTH),
+                                    calendar.get(Calendar.DAY_OF_MONTH)
+                                ).apply {
+                                    datePicker.minDate = System.currentTimeMillis() - 1000
+                                }.show()
+                            }
+                    )
+                }
             }
+
 
             if (selectedDate.isNotBlank()) {
                 RescheduleSectionCard(icon = Icons.Outlined.Schedule, title = "New Time") {
@@ -188,7 +211,10 @@ fun RescheduleAppointmentScreen(
                                 .padding(20.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            CircularProgressIndicator(color = rTeal, modifier = Modifier.size(24.dp))
+                            CircularProgressIndicator(
+                                color = rTeal,
+                                modifier = Modifier.size(24.dp)
+                            )
                         }
                     } else {
                         LazyVerticalGrid(

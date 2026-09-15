@@ -50,6 +50,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -84,7 +85,22 @@ data class BookingSubmission(
     val fee: Double,
     val paymentReference: String
 )
-
+// South African public holidays. Verify exact dates each year —
+// Easter-based holidays (Good Friday / Family Day) shift annually.
+private val publicHolidays = setOf(
+    "2026-01-01", // New Year's Day
+    "2026-03-21", // Human Rights Day
+    "2026-04-03", // Good Friday
+    "2026-04-06", // Family Day
+    "2026-04-27", // Freedom Day
+    "2026-05-01", // Workers' Day
+    "2026-06-16", // Youth Day
+    "2026-08-09", // National Women's Day
+    "2026-09-24", // Heritage Day
+    "2026-12-16", // Day of Reconciliation
+    "2026-12-25", // Christmas Day
+    "2026-12-26"  // Day of Goodwill
+)
 private val navy = Color(0xFF0B1828)
 private val ink = Color(0xFF0F1F3D)
 private val muted = Color(0xFF64748B)
@@ -106,7 +122,7 @@ fun BookAppointmentScreen(
     onBack: () -> Unit,
     onConfirmBooking: (BookingSubmission) -> Unit
 ) {
-    var doctor by rememberSaveable { mutableStateOf<DoctorBookingInfo?>(null) }
+    var doctor by remember { mutableStateOf<DoctorBookingInfo?>(null) }
     var isLoadingDoctor by rememberSaveable { mutableStateOf(true) }
     var doctorLoadError by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -124,7 +140,7 @@ fun BookAppointmentScreen(
     var selectedBank by rememberSaveable { mutableStateOf<String?>(null) }
     var bankMenuExpanded by rememberSaveable { mutableStateOf(false) }
     var localError by rememberSaveable { mutableStateOf<String?>(null) }
-
+    var dateError by rememberSaveable { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val calendar = Calendar.getInstance()
     val banks = listOf(
@@ -183,7 +199,79 @@ fun BookAppointmentScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
             )
         },
+        bottomBar = {
+            if (selectedTime != null && doctor != null) {
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.White)
+                        .padding(horizontal = 20.dp, vertical = 12.dp)
+                ) {
+                    (localError ?: errorMessage)?.let {
+                        Text(it, color = red, fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp))
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(tealSoft)
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Total amount", color = teal, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "R %.2f".format(fee.toDoubleOrNull() ?: 0.0),
+                            color = teal,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Button(
+                        onClick = {
+                            localError = null
+                            val cleanCardNumber = cardNumber.replace(" ", "")
+                            val feeAmount = fee.toDoubleOrNull()
+                            when {
+                                reason.isBlank() -> localError = "Please enter a reason for your visit."
+                                feeAmount == null || feeAmount <= 0 -> localError = "Please enter a valid consultation fee."
+                                cardName.isBlank() -> localError = "Please enter the cardholder name."
+                                cleanCardNumber.length < 16 -> localError = "Please enter a valid card number."
+                                !cardExpiry.matches(Regex("(0[1-9]|1[0-2])/\\d{2}")) -> localError = "Please enter a valid expiry (MM/YY)."
+                                isCardExpired(cardExpiry) -> localError = "This card has expired."
+                                cardCvv.length < 3 -> localError = "Please enter the CVV."
+                                selectedBank == null -> localError = "Please select your bank."
+                                else -> {
+                                    val reference = "$selectedBank ••••${cleanCardNumber.takeLast(4)}"
+                                    onConfirmBooking(
+                                        BookingSubmission(
+                                            date = selectedDate,
+                                            time = selectedTime!!,
+                                            reason = reason,
+                                            fee = feeAmount,
+                                            paymentReference = reference
+                                        )
+                                    )
+                                }
+                            }
+                        },
+                        enabled = !isLoading,
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = navy),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        if (isLoading) {
+                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            Text("Confirm & Pay Booking", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        }
+                    }
+                }
+            }
+        },
         containerColor = bg
+
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -219,42 +307,71 @@ fun BookAppointmentScreen(
                     DoctorBanner(doc)
 
                     // ---- DATE ----
-                    SectionCard(icon = Icons.Outlined.CalendarMonth, title = "Choose a Date") {
-                        OutlinedTextField(
-                            value = if (selectedDate.isBlank()) "" else selectedDate,
-                            onValueChange = {},
-                            readOnly = true,
-                            placeholder = { Text("Select appointment date") },
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = teal),
-                            shape = RoundedCornerShape(12.dp),
-                            trailingIcon = {
-                                Icon(
-                                    Icons.Outlined.CalendarMonth,
-                                    contentDescription = null,
-                                    tint = muted
-                                )
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    DatePickerDialog(
-                                        context,
-                                        { _, year, month, day ->
-                                            onDateSelected(
-                                                "%04d-%02d-%02d".format(
-                                                    year,
-                                                    month + 1,
-                                                    day
-                                                )
-                                            )
-                                        },
-                                        calendar.get(Calendar.YEAR),
-                                        calendar.get(Calendar.MONTH),
-                                        calendar.get(Calendar.DAY_OF_MONTH)
-                                    ).apply {
-                                        datePicker.minDate = System.currentTimeMillis() - 1000
-                                    }.show()
-                                }
+                    SectionCard(icon = Icons.Outlined.CalendarMonth, title = "Choose a Date", ) {
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedTextField(
+                                value = if (selectedDate.isBlank()) "" else selectedDate,
+                                onValueChange = {},
+                                enabled = false,
+                                placeholder = { Text("Select appointment date") },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    disabledTextColor = ink,
+                                    disabledBorderColor = Color(0xFFCBD5E1),
+                                    disabledContainerColor = Color.Transparent,
+                                    disabledPlaceholderColor = muted,
+                                    disabledTrailingIconColor = muted
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                trailingIcon = {
+                                    Icon(
+                                        Icons.Outlined.CalendarMonth,
+                                        contentDescription = null,
+                                        tint = muted
+                                    )
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        DatePickerDialog(
+                                            context,
+                                            { _, year, month, day ->
+                                                val dateStr = "%04d-%02d-%02d".format(year, month + 1, day)
+                                                val picked = Calendar.getInstance().apply { set(year, month, day) }
+                                                val dayOfWeek = picked.get(Calendar.DAY_OF_WEEK)
+                                                when {
+                                                    dayOfWeek == Calendar.SATURDAY || dayOfWeek == Calendar.SUNDAY ->
+                                                        dateError = "Doctors aren't available on weekends — please pick a weekday."
+                                                    publicHolidays.contains(dateStr) ->
+                                                        dateError = "That date is a public holiday — please pick another day."
+                                                    else -> {
+                                                        dateError = null
+                                                        selectedDate = dateStr
+                                                        selectedTime = null
+                                                    }
+                                                }
+                                            },
+                                            calendar.get(Calendar.YEAR),
+                                            calendar.get(Calendar.MONTH),
+                                            calendar.get(Calendar.DAY_OF_MONTH)
+                                        ).apply {
+                                            datePicker.minDate = System.currentTimeMillis() - 1000
+                                        }.show()
+                                    }
+                            )
+                        }
+                    }
+
+                    dateError?.let {
+                        Text(
+                            it,
+                            color = red,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
+
                         )
                     }
 
@@ -343,6 +460,7 @@ fun BookAppointmentScreen(
                                 onValueChange = { fee = it },
                                 label = { Text("Consultation fee (R)") },
                                 singleLine = true,
+                                readOnly = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = teal),
                                 shape = RoundedCornerShape(12.dp),
@@ -458,110 +576,7 @@ fun BookAppointmentScreen(
                         }
 
                         // ---- SUMMARY + CONFIRM ----
-                        SectionCard(icon = Icons.Outlined.CheckCircle, title = "Confirm Booking") {
-                            SummaryRow("Doctor", "Dr. ${doc.name} ${doc.surname}")
-                            SummaryRow("Date", selectedDate)
-                            SummaryRow("Time", selectedTime ?: "—")
-                            SummaryRow(
-                                "Payment",
-                                if (cardNumber.length >= 4) "${selectedBank ?: "Card"} ••••${
-                                    cardNumber.takeLast(4)
-                                }" else "—"
-                            )
 
-                            val feeValue = fee.toDoubleOrNull() ?: 0.0
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(tealSoft)
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    "Total amount",
-                                    color = teal,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    "R %.2f".format(feeValue),
-                                    color = teal,
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-
-                            (localError ?: errorMessage)?.let {
-                                Spacer(modifier = Modifier.height(10.dp))
-                                Text(it, color = red, fontSize = 13.sp)
-                            }
-
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Button(
-                                onClick = {
-                                    localError = null
-                                    val cleanCardNumber = cardNumber.replace(" ", "")
-                                    val feeAmount = fee.toDoubleOrNull()
-                                    when {
-                                        reason.isBlank() -> localError =
-                                            "Please enter a reason for your visit."
-
-                                        feeAmount == null || feeAmount <= 0 -> localError =
-                                            "Please enter a valid consultation fee."
-
-                                        cardName.isBlank() -> localError =
-                                            "Please enter the cardholder name."
-
-                                        cleanCardNumber.length < 16 -> localError =
-                                            "Please enter a valid card number."
-
-                                        !cardExpiry.matches(Regex("(0[1-9]|1[0-2])/\\d{2}")) -> localError =
-                                            "Please enter a valid expiry (MM/YY)."
-
-                                        cardCvv.length < 3 -> localError = "Please enter the CVV."
-                                        selectedBank == null -> localError =
-                                            "Please select your bank."
-
-                                        else -> {
-                                            val reference =
-                                                "$selectedBank ••••${cleanCardNumber.takeLast(4)}"
-                                            onConfirmBooking(
-                                                BookingSubmission(
-                                                    date = selectedDate,
-                                                    time = selectedTime!!,
-                                                    reason = reason,
-                                                    fee = feeAmount,
-                                                    paymentReference = reference
-                                                )
-                                            )
-                                        }
-                                    }
-                                },
-                                enabled = !isLoading,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(56.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = navy),
-                                shape = RoundedCornerShape(14.dp)
-                            ) {
-                                if (isLoading) {
-                                    CircularProgressIndicator(
-                                        color = Color.White,
-                                        modifier = Modifier.size(20.dp),
-                                        strokeWidth = 2.dp
-                                    )
-                                } else {
-                                    Text(
-                                        "Confirm & Pay Booking",
-                                        color = Color.White,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 15.sp
-                                    )
-                                }
-                            }
-                        }
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))
@@ -752,4 +767,14 @@ private fun formatCardNumber(raw: String): String {
 private fun formatExpiry(raw: String): String {
     val digits = raw.filter(Char::isDigit).take(4)
     return if (digits.length >= 2) "${digits.take(2)}/${digits.drop(2)}" else digits
+}
+
+private fun isCardExpired(expiry: String): Boolean {
+    val match = Regex("(0[1-9]|1[0-2])/(\\d{2})").matchEntire(expiry) ?: return true
+    val month = match.groupValues[1].toInt()
+    val year = 2000 + match.groupValues[2].toInt()
+    val cal = Calendar.getInstance()
+    val currentYear = cal.get(Calendar.YEAR)
+    val currentMonth = cal.get(Calendar.MONTH) + 1
+    return year < currentYear || (year == currentYear && month < currentMonth)
 }

@@ -43,7 +43,6 @@ import ehealthy.connect.ui.doctor.DoctorLogin
 import ehealthy.connect.ui.doctor.DoctorRegister
 import ehealthy.connect.ui.doctor.DoctorRegistrationFiles
 import ehealthy.connect.ui.doctor.DoctorResetPassword
-import ehealthy.connect.ui.doctor.DoctorSignupState
 import ehealthy.connect.ui.doctor.registerDoctor
 import ehealthy.connect.ui.doctor.sendDoctorPasswordResetEmail
 import ehealthy.connect.ui.doctor.signInDoctorWithEmail
@@ -76,6 +75,7 @@ import ehealthy.connect.ui.patientDashboard.Review
 import ehealthy.connect.ui.patientDashboard.ReviewDisplay
 import ehealthy.connect.ui.splash.SplashScreen
 import ehealthy.connect.ui.theme.EHealthyTheme
+import ehealthy.connect.ui.doctor.DoctorProfile
 import ehealthy.connect.util.SupabaseClientProvider
 import ehealthy.connect.util.signInWithGoogle
 import io.github.jan.supabase.auth.OtpType
@@ -84,6 +84,14 @@ import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.storage.storage
 import kotlinx.coroutines.launch
+import io.github.jan.supabase.postgrest.query.Columns
+import ehealthy.connect.ui.doctor.DoctorProfileRow
+import ehealthy.connect.ui.doctor.toDoctorProfile
+import ehealthy.connect.ui.doctor.uploadDoctorProfilePhoto
+import ehealthy.connect.ui.doctor.DoctorPrescriptions
+import ehealthy.connect.ui.doctor.PrescriptionPatient
+import ehealthy.connect.ui.doctor.fetchConfirmedPrescriptionPatients
+import ehealthy.connect.ui.doctor.savePrescription
 
 class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.O)
@@ -149,12 +157,10 @@ fun AppNavGraph() {
         }
 
         composable("patientLogin") {
-            val context = LocalContext.current
             val scope = rememberCoroutineScope()
 
             var mode by remember { mutableStateOf(LoginMode.LOGIN) }
             var isLoading by remember { mutableStateOf(false) }
-            var isGoogleLoading by remember { mutableStateOf(false) }
             var email by remember { mutableStateOf("") }
             var password by remember { mutableStateOf("") }
             var otp by remember { mutableStateOf("") }
@@ -166,7 +172,6 @@ fun AppNavGraph() {
             PatientLogin(
                 mode = mode,
                 isLoading = isLoading,
-                isGoogleLoading = isGoogleLoading,
                 email = email,
                 password = password,
                 otp = otp,
@@ -287,48 +292,6 @@ fun AppNavGraph() {
 
                 onGoToRegister = {
                     navController.navigate("patientRegister?email=$email")
-                },
-
-                onContinueWithGoogle = {
-                    scope.launch {
-                        isGoogleLoading = true
-                        errorMessage = null
-                        val result = signInWithGoogle(context)
-                        isGoogleLoading = false
-                        result.onSuccess { info ->
-                            val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
-                            val existingPatient = if (userId == null) null else try {
-                                SupabaseClientProvider.client.postgrest
-                                    .from("patients")
-                                    .select { filter { eq("user_id", userId) } }
-                                    .decodeSingleOrNull<Map<String, String?>>()
-                            } catch (e: Exception) {
-                                null
-                            }
-
-                            if (existingPatient != null) {
-                                // Already registered — go straight to the dashboard.
-                                navController.navigate("patientDashboard") {
-                                    popUpTo("patientLogin") { inclusive = true }
-                                }
-                            } else {
-                                // New Google user — send them to finish registration.
-                                Toast.makeText(
-                                    context,
-                                    "No account found for this Google email — let's get you registered.",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                                PatientSignupState.email = info.email
-                                PatientSignupState.firstName = info.firstName
-                                PatientSignupState.lastName = info.lastName
-                                PatientSignupState.userId = userId ?: ""
-                                PatientSignupState.isGoogleSignup = true
-                                navController.navigate("patientRegister?email=${info.email}")
-                            }
-                        }.onFailure { error ->
-                            errorMessage = "Google sign-in failed: ${error.message}"
-                        }
-                    }
                 }
             )
         }
@@ -338,7 +301,6 @@ fun AppNavGraph() {
             arguments = listOf(navArgument("email") { defaultValue = "" })
         ) { backStackEntry ->
             val prefilledEmail = backStackEntry.arguments?.getString("email") ?: ""
-            val isGoogleSignup = PatientSignupState.isGoogleSignup
             val scope = rememberCoroutineScope()
             var isLoading by remember { mutableStateOf(false) }
             var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -347,9 +309,6 @@ fun AppNavGraph() {
                 initialEmail = prefilledEmail,
                 isLoading = isLoading,
                 errorMessage = errorMessage,
-                isGoogleSignup = isGoogleSignup,
-                initialName = if (isGoogleSignup) PatientSignupState.firstName else "",
-                initialSurname = if (isGoogleSignup) PatientSignupState.lastName else "",
                 onBackToLogin = { navController.popBackStack() },
                 onViewPrivacyPolicy = { navController.navigate("privacyPolicy") },
                 onRegister = { data ->
@@ -357,20 +316,12 @@ fun AppNavGraph() {
                         errorMessage = null
                         isLoading = true
                         try {
-                            val userId: String
-                            if (isGoogleSignup) {
-                                // Already authenticated via Google — reuse that session
-                                // instead of creating a second, disconnected account.
-                                userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
-                                    ?: throw Exception("Your Google session expired — please sign in again.")
-                            } else {
-                                SupabaseClientProvider.client.auth.signUpWith(Email) {
-                                    email = prefilledEmail
-                                    password = data.password
-                                }
-                                userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
-                                    ?: throw Exception("Could not create account")
+                            SupabaseClientProvider.client.auth.signUpWith(Email) {
+                                email = prefilledEmail
+                                password = data.password
                             }
+                            val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
+                                ?: throw Exception("Could not create account")
 
                             SupabaseClientProvider.client.postgrest.from("patients").insert(
                                 mapOf(
@@ -404,17 +355,8 @@ fun AppNavGraph() {
                             )
 
                             isLoading = false
-
-                            if (isGoogleSignup) {
-                                PatientSignupState.reset()
-                                // Already logged in — skip the login screen entirely.
-                                navController.navigate("patientDashboard") {
-                                    popUpTo("patientLogin") { inclusive = true }
-                                }
-                            } else {
-                                navController.navigate("patientLogin") {
-                                    popUpTo("patientRegister?email={email}") { inclusive = true }
-                                }
+                            navController.navigate("patientLogin") {
+                                popUpTo("patientRegister?email={email}") { inclusive = true }
                             }
                         } catch (e: Exception) {
                             isLoading = false
@@ -468,34 +410,8 @@ fun AppNavGraph() {
                         errorMessage = null
                         val result = signInWithGoogle(context)
                         isGoogleLoading = false
-                        result.onSuccess { info ->
-                            val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
-                            val existingDoctor = if (userId == null) null else try {
-                                SupabaseClientProvider.client.postgrest
-                                    .from("doctors")
-                                    .select { filter { eq("user_id", userId) } }
-                                    .decodeSingleOrNull<Map<String, String?>>()
-                            } catch (e: Exception) {
-                                null
-                            }
-
-                            if (existingDoctor != null) {
-                                // Already registered — go straight to the dashboard.
-                                navController.navigate("doctorDashboard")
-                            } else {
-                                // New Google user — send them to finish registration.
-                                Toast.makeText(
-                                    context,
-                                    "No account found for this Google email — let's get you registered.",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                                DoctorSignupState.email = info.email
-                                DoctorSignupState.firstName = info.firstName
-                                DoctorSignupState.lastName = info.lastName
-                                DoctorSignupState.userId = userId ?: ""
-                                DoctorSignupState.isGoogleSignup = true
-                                navController.navigate("doctorRegister")
-                            }
+                        result.onSuccess {
+                            navController.navigate("doctorDashboard")
                         }.onFailure { error ->
                             errorMessage = "Google sign-in failed: ${error.message}"
                         }
@@ -513,15 +429,10 @@ fun AppNavGraph() {
             val scope = rememberCoroutineScope()
             var isLoading by remember { mutableStateOf(false) }
             var errorMessage by remember { mutableStateOf<String?>(null) }
-            val isGoogleSignup = DoctorSignupState.isGoogleSignup
 
             DoctorRegister(
                 isLoading = isLoading,
                 errorMessage = errorMessage,
-                isGoogleSignup = isGoogleSignup,
-                initialName = if (isGoogleSignup) DoctorSignupState.firstName else "",
-                initialSurname = if (isGoogleSignup) DoctorSignupState.lastName else "",
-                initialEmail = if (isGoogleSignup) DoctorSignupState.email else "",
                 onRegister = { info, uris ->
                     scope.launch {
                         isLoading = true
@@ -570,12 +481,9 @@ fun AppNavGraph() {
                                 )
                             }
                         )
-                        val result = registerDoctor(info, files, skipSignUp = isGoogleSignup)
+                        val result = registerDoctor(info, files)
                         isLoading = false
                         result.onSuccess {
-                            if (isGoogleSignup) DoctorSignupState.reset()
-                            // Either way, the account now exists and is authenticated
-                            // (via Google session, or the email/password just created).
                             navController.navigate("doctorDashboard") {
                                 popUpTo("doctorLogin") { inclusive = true }
                             }
@@ -682,13 +590,152 @@ fun AppNavGraph() {
 
         composable("doctorDashboard") {
             val scope = rememberCoroutineScope()
+            val appContext = LocalContext.current
+            var doctorProfile by remember { mutableStateOf<DoctorProfile?>(null) }
+            var isLoadingProfile by remember { mutableStateOf(true) }
+            var isUploadingPhoto by remember { mutableStateOf(false) }
+
+            LaunchedEffect(Unit) {
+                val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
+                if (userId != null) {
+                    try {
+                        val row = SupabaseClientProvider.client.postgrest
+                            .from("doctors")
+                            .select(
+                                columns = Columns.list(
+                                    "id", "name", "surname", "practice_name", "discipline",
+                                    "profile_image_url", "verification_status"
+                                )
+                            ) {
+                                filter { eq("user_id", userId) }
+                            }
+                            .decodeSingleOrNull<DoctorProfileRow>()
+                        doctorProfile = row?.toDoctorProfile()
+                    } catch (e: Exception) {
+                        Log.e("DoctorDashboard", "Failed to fetch doctor profile", e)
+                    }
+                }
+                isLoadingProfile = false
+            }
+
+            val photoPickerLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.PickVisualMedia()
+            ) { uri: Uri? ->
+                if (uri != null) {
+                    scope.launch {
+                        isUploadingPhoto = true
+                        try {
+                            val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
+                                ?: throw Exception("Not logged in")
+                            val file = uriToDoctorFileUpload(appContext, uri)
+                                ?: throw Exception("Could not read the selected image")
+                            val publicUrl = uploadDoctorProfilePhoto(userId, file)
+                            SupabaseClientProvider.client.postgrest.from("doctors")
+                                .update({ set("profile_image_url", publicUrl) }) {
+                                    filter { eq("user_id", userId) }
+                                }
+                            // Cache-buster — same trick the patient side uses, otherwise
+                            // Coil keeps showing the old cached image after a re-upload.
+                            doctorProfile = doctorProfile?.copy(
+                                profileImageUrl = "$publicUrl?t=${System.currentTimeMillis()}"
+                            )
+                        } catch (e: Exception) {
+                            Log.e("PhotoUpload", "Upload failed", e)
+                        } finally {
+                            isUploadingPhoto = false
+                        }
+                    }
+                }
+            }
+
             DoctorDashboard(
-                onLogOut = {
+                doctorProfile = doctorProfile,
+                isLoadingProfile = isLoadingProfile,
+                isUploadingPhoto = isUploadingPhoto,
+                onUploadPhoto = {
+                    photoPickerLauncher.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                    )
+                },
+                onLogout = {
                     scope.launch {
                         SupabaseClientProvider.client.auth.signOut()
                         navController.navigate("choose") {
-                            popUpTo("doctorDashboard") { inclusive = true }
+                            popUpTo(0) { inclusive = true }
                         }
+                    }
+                },
+                fetchAppointments = { doctorId ->
+                    try {
+                        val data = SupabaseClientProvider.client.postgrest
+                            .from("appointments")
+                            .select { filter { eq("doctor_id", doctorId) } }
+                            .decodeList<Appointment>()
+                        Result.success(data)
+                    } catch (e: Exception) {
+                        Result.failure(e)
+                    }
+                },
+                onUpdateAppointmentStatus = { appointmentId, newStatus ->
+                    try {
+                        SupabaseClientProvider.client.postgrest.from("appointments")
+                            .update({ set("status", newStatus) }) {
+                                filter { eq("id", appointmentId) }
+                            }
+                        Result.success(Unit)
+                    } catch (e: Exception) {
+                        Result.failure(e)
+                    }
+                },
+                onNavigatePrescriptions = { navController.navigate("doctorPrescriptions") }
+            )
+        }
+
+        composable("doctorPrescriptions") {
+            val context = LocalContext.current
+            val scope = rememberCoroutineScope()
+            var patients by remember { mutableStateOf<List<PrescriptionPatient>>(emptyList()) }
+            var isLoadingPatients by remember { mutableStateOf(true) }
+            var isSaving by remember { mutableStateOf(false) }
+            var saveError by remember { mutableStateOf<String?>(null) }
+            var doctorId by remember { mutableStateOf<String?>(null) }
+
+            LaunchedEffect(Unit) {
+                val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
+                if (userId != null) {
+                    val row = SupabaseClientProvider.client.postgrest
+                        .from("doctors")
+                        .select(columns = Columns.list("id")) { filter { eq("user_id", userId) } }
+                        .decodeSingleOrNull<Map<String, String?>>()
+                    val id = row?.get("id")
+                    doctorId = id
+                    if (id != null) {
+                        fetchConfirmedPrescriptionPatients(id)
+                            .onSuccess { patients = it }
+                            .onFailure { saveError = it.message }
+                    }
+                }
+                isLoadingPatients = false
+            }
+
+            DoctorPrescriptions(
+                patients = patients,
+                isLoadingPatients = isLoadingPatients,
+                isSaving = isSaving,
+                saveError = saveError,
+                onBack = { navController.popBackStack() },
+                onSave = { patientId, medications ->
+                    val docId = doctorId ?: return@DoctorPrescriptions
+                    scope.launch {
+                        isSaving = true
+                        saveError = null
+                        savePrescription(patientId, docId, medications)
+                            .onSuccess {
+                                Toast.makeText(context, "Prescription saved successfully", Toast.LENGTH_LONG).show()
+                                navController.popBackStack()
+                            }
+                            .onFailure { saveError = it.message ?: "Could not save prescription." }
+                        isSaving = false
                     }
                 }
             )

@@ -47,6 +47,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 
 @Composable
 fun DoctorLogin(
@@ -94,6 +96,7 @@ fun DoctorLogin(
             modifier = Modifier
                 .fillMaxSize()
                 .background(background)
+                .verticalScroll(rememberScrollState())
                 .imePadding()
                 .padding(horizontal = 28.dp)
                 .padding(paddingValues),

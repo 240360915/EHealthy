@@ -98,7 +98,7 @@ private val provinceOptions = listOf(
     "Eastern Cape", "Free State", "Gauteng", "KwaZulu-Natal", "Limpopo",
     "Mpumalanga", "Northern Cape", "North West", "Western Cape"
 )
-private val documentMimeTypes = arrayOf("application/pdf", "image/jpeg", "image/png")
+private val documentMimeTypes = arrayOf("application/pdf")
 
 private fun queryDisplayName(context: Context, uri: Uri): String? = try {
     context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
@@ -113,10 +113,6 @@ private fun queryDisplayName(context: Context, uri: Uri): String? = try {
 fun DoctorRegister(
     isLoading: Boolean = false,
     errorMessage: String? = null,
-    isGoogleSignup: Boolean = false,
-    initialName: String = "",
-    initialSurname: String = "",
-    initialEmail: String = "",
     onRegister: (DoctorRegistrationInfo, DoctorRegistrationUris) -> Unit,
     onLogin: () -> Unit
 ) {
@@ -154,11 +150,11 @@ fun DoctorRegister(
     var medicalAidSchemes by remember { mutableStateOf("") }
 
     var title by remember { mutableStateOf(titleOptions[0]) }
-    var name by remember { mutableStateOf(initialName) }
-    var surname by remember { mutableStateOf(initialSurname) }
+    var name by remember { mutableStateOf("") }
+    var surname by remember { mutableStateOf("") }
     var idNumber by remember { mutableStateOf("") }
     var cellNumber by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf(initialEmail) }
+    var email by remember { mutableStateOf("") }
     var languagesSpoken by remember { mutableStateOf("") }
     var gender by remember { mutableStateOf("") }
 
@@ -232,6 +228,7 @@ fun DoctorRegister(
                     idNumber.length != 13 -> stepError = "ID number must be exactly 13 digits."
                     cellNumber.length != 10 -> stepError = "Cell phone number must be exactly 10 digits."
                     email.isBlank() -> stepError = "Please enter your email address."
+                    !email.matches(Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) -> stepError = "Please enter a valid email address."
                     languagesSpoken.isBlank() -> stepError = "Please select a language."
                     gender.isBlank() -> stepError = "Please select a gender option."
                     else -> step = DoctorRegisterStep.ADDRESS
@@ -261,8 +258,8 @@ fun DoctorRegister(
 
             DoctorRegisterStep.SECURITY -> {
                 when {
-                    !isGoogleSignup && !isPasswordValid(password) -> stepError = "Your password doesn't meet all requirements yet."
-                    !isGoogleSignup && password != confirmPassword -> stepError = "Passwords do not match."
+                    !isPasswordValid(password) -> stepError = "Your password doesn't meet all requirements yet."
+                    password != confirmPassword -> stepError = "Passwords do not match."
                     else -> onRegister(
                         DoctorRegistrationInfo(
                             practiceNumber = practiceNumber,
@@ -445,7 +442,7 @@ fun DoctorRegister(
 
                 DoctorRegisterStep.DOCUMENTS -> {
                     Text(
-                        "Upload clear copies (PDF, JPG, or PNG). Your account stays pending until an administrator verifies these.",
+                        "Upload PDF copies only. Your account stays pending until an administrator verifies these.",
                         color = greyText, fontSize = 12.5.sp, lineHeight = 18.sp
                     )
                     Spacer(modifier = Modifier.height(18.dp))
@@ -507,54 +504,48 @@ fun DoctorRegister(
                         proofOfAddressLauncher.launch(documentMimeTypes)
                     }
                 }
+
                 DoctorRegisterStep.SECURITY -> {
-                    if (isGoogleSignup) {
-                        Text(
-                            "You're signing up with Google, so no password is needed here — you'll always continue with Google to log in.",
-                            color = greyText, fontSize = 13.sp, lineHeight = 18.sp
-                        )
-                    } else {
-                        OutlinedTextField(
-                            value = password, onValueChange = { password = it }, label = { Text("Password") }, singleLine = true,
-                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                            trailingIcon = {
-                                IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                                    Icon(
-                                        imageVector = if (passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                                        contentDescription = if (passwordVisible) "Hide password" else "Show password"
-                                    )
-                                }
-                            },
-                            colors = fieldColors(),
-                            modifier = Modifier.fillMaxWidth().onFocusEvent { passwordFieldFocused = it.isFocused }
-                        )
-                        if (passwordFieldFocused || password.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            PasswordStrengthMeter(password = password)
-                            Spacer(modifier = Modifier.height(10.dp))
-                            PasswordRequirementsChecklist(password = password)
-                        }
-                        Spacer(modifier = Modifier.height(14.dp))
-                        OutlinedTextField(
-                            value = confirmPassword, onValueChange = { confirmPassword = it }, label = { Text("Confirm password") }, singleLine = true,
-                            isError = !passwordsMatch,
-                            visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                            trailingIcon = {
-                                IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
-                                    Icon(
-                                        imageVector = if (confirmPasswordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                                        contentDescription = if (confirmPasswordVisible) "Hide password" else "Show password"
-                                    )
-                                }
-                            },
-                            colors = fieldColors(), modifier = Modifier.fillMaxWidth()
-                        )
-                        if (!passwordsMatch) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text("Passwords don't match.", color = Color(0xFFD64545), fontSize = 13.sp)
-                        }
+                    OutlinedTextField(
+                        value = password, onValueChange = { password = it }, label = { Text("Password") }, singleLine = true,
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        trailingIcon = {
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(
+                                    imageVector = if (passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                    contentDescription = if (passwordVisible) "Hide password" else "Show password"
+                                )
+                            }
+                        },
+                        colors = fieldColors(),
+                        modifier = Modifier.fillMaxWidth().onFocusEvent { passwordFieldFocused = it.isFocused }
+                    )
+                    if (passwordFieldFocused || password.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        PasswordStrengthMeter(password = password)
+                        Spacer(modifier = Modifier.height(10.dp))
+                        PasswordRequirementsChecklist(password = password)
+                    }
+                    Spacer(modifier = Modifier.height(14.dp))
+                    OutlinedTextField(
+                        value = confirmPassword, onValueChange = { confirmPassword = it }, label = { Text("Confirm password") }, singleLine = true,
+                        isError = !passwordsMatch,
+                        visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        trailingIcon = {
+                            IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
+                                Icon(
+                                    imageVector = if (confirmPasswordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                    contentDescription = if (confirmPasswordVisible) "Hide password" else "Show password"
+                                )
+                            }
+                        },
+                        colors = fieldColors(), modifier = Modifier.fillMaxWidth()
+                    )
+                    if (!passwordsMatch) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Passwords don't match.", color = Color(0xFFD64545), fontSize = 13.sp)
                     }
                 }
             }

@@ -61,21 +61,13 @@ suspend fun signInDoctorWithEmail(email: String, password: String): Result<Unit>
  */
 suspend fun registerDoctor(
     info: DoctorRegistrationInfo,
-    files: DoctorRegistrationFiles = DoctorRegistrationFiles(),
-    skipSignUp: Boolean = false
+    files: DoctorRegistrationFiles = DoctorRegistrationFiles()
 ): Result<Unit> {
     return try {
-        if (!skipSignUp) {
-            // Normal email/password signup — creates a brand-new auth user.
-            SupabaseClientProvider.client.auth.signUpWith(Email) {
-                email = info.email
-                password = info.password
-            }
+        SupabaseClientProvider.client.auth.signUpWith(Email) {
+            email = info.email
+            password = info.password
         }
-        // When skipSignUp is true, the person already has an active session
-        // (e.g. from Google sign-in) — calling signUpWith(Email) again here
-        // would create a second, disconnected auth user, so we reuse the
-        // existing session instead.
 
         val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
             ?: return Result.failure(
@@ -160,11 +152,66 @@ suspend fun verifyDoctorResetCodeAndSetPassword(
         Result.failure(Exception(friendlyAuthError(e)))
     }
 }
+/** ASSUMPTION: "prescriptions" table columns are patient_id, doctor_id,
+ *  medications (jsonb text array). Not yet confirmed against your actual
+ *  Supabase schema — adjust if column names differ. */
+suspend fun savePrescription(
+    patientId: String,
+    doctorId: String,
+    medications: List<String>
+): Result<Unit> {
+    return try {
+        SupabaseClientProvider.client.postgrest.from("prescriptions").insert(
+            mapOf(
+                "patient_id" to patientId,
+                "doctor_id" to doctorId,
+                "medications" to medications
+            )
+        )
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Result.failure(Exception(friendlyAuthError(e)))
+    }
+}
+
+/** Distinct patients this doctor has a CONFIRMED appointment with — same
+ *  scoping your teammate's version used. Queries appointments directly
+ *  rather than an embedded join, since our Appointment model doesn't
+ *  expose patient_id and I haven't confirmed a FK relationship exists. */
+suspend fun fetchConfirmedPrescriptionPatients(doctorId: String): Result<List<PrescriptionPatient>> {
+    return try {
+        @kotlinx.serialization.Serializable
+        data class Row(val patient_id: String? = null, val patient_name: String? = null)
+
+        val rows = SupabaseClientProvider.client.postgrest
+            .from("appointments")
+            .select {
+                filter {
+                    eq("doctor_id", doctorId)
+                    eq("status", "confirmed")
+                }
+            }
+            .decodeList<Row>()
+
+        val patients = rows
+            .filter { !it.patient_id.isNullOrBlank() && !it.patient_name.isNullOrBlank() }
+            .distinctBy { it.patient_id }
+            .map { PrescriptionPatient(id = it.patient_id!!, name = it.patient_name!!) }
+
+        Result.success(patients)
+    } catch (e: Exception) {
+        Result.failure(Exception(friendlyAuthError(e)))
+    }
+}
 
 private fun friendlyAuthError(e: Throwable): String {
     val raw = e.message ?: return "Something went wrong. Please try again."
     val firstLine = raw.substringBefore("\nURL:").trim()
     return when {
+        firstLine.contains("unable to validate email address", ignoreCase = true) ->
+            "Please enter a valid email address."
+        firstLine.contains("invalid_email", ignoreCase = true) ->
+            "Please enter a valid email address."
         firstLine.contains("invalid_credentials", ignoreCase = true) ->
             "Incorrect email or password."
         firstLine.contains("email_not_confirmed", ignoreCase = true) ->

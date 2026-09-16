@@ -46,6 +46,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,8 +54,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import java.time.LocalDate
-
 private val navy = Color(0xFF0B1828)
 private val ink = Color(0xFF0F1F3D)
 private val muted = Color(0xFF64748B)
@@ -88,7 +89,9 @@ fun PatientAppointmentsScreen(
     fetchAppointments: suspend () -> Result<List<Appointment>>,
     fetchReviewedAppointmentIds: suspend () -> Result<Set<String>>,
     onSubmitReview: (appointmentId: String, doctorId: String?, rating: Int, comment: String) -> Unit,
-    isSubmittingReview: Boolean
+    isSubmittingReview: Boolean,
+    onRescheduleAppointment: (String) -> Unit,
+    cancelAppointment: suspend (String) -> Result<Unit>
 ) {
     var appointments by remember { mutableStateOf<List<Appointment>>(emptyList()) }
     var reviewedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -96,6 +99,10 @@ fun PatientAppointmentsScreen(
     var loadError by remember { mutableStateOf<String?>(null) }
     var selectedCategory by remember { mutableStateOf(AppointmentCategory.ALL) }
     var reviewTargetAppointmentId by remember { mutableStateOf<String?>(null) }
+    var detailsAppointment by remember { mutableStateOf<Appointment?>(null) }
+    var selectedAppointment by remember { mutableStateOf<Appointment?>(null) }
+    var isCancelling by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         val apptResult = fetchAppointments()
@@ -185,7 +192,8 @@ fun PatientAppointmentsScreen(
                             AppointmentDetailCard(
                                 appt = appt,
                                 showLeaveReview = category == AppointmentCategory.COMPLETED && appt.id !in reviewedIds,
-                                onLeaveReview = { reviewTargetAppointmentId = appt.id }
+                                onLeaveReview = { reviewTargetAppointmentId = appt.id },
+                                onClick = { selectedAppointment = appt }
                             )
                         }
                         item { Spacer(modifier = Modifier.height(24.dp)) }
@@ -196,7 +204,6 @@ fun PatientAppointmentsScreen(
     }
 
     reviewTargetAppointmentId?.let { apptId ->
-        val appt = appointments.find { it.id == apptId }
         ReviewDialog(
             isSubmitting = isSubmittingReview,
             onDismiss = { reviewTargetAppointmentId = null },
@@ -206,6 +213,59 @@ fun PatientAppointmentsScreen(
             }
         )
     }
+
+    detailsAppointment?.let { appt ->
+        AppointmentListDetailsDialog(appt = appt, onDismiss = { detailsAppointment = null })
+    }
+
+    selectedAppointment?.let { appt ->
+        AppointmentActionSheet(
+            appointment = appt,
+            onDismiss = { selectedAppointment = null },
+            onViewDetails = {
+                detailsAppointment = appt
+                selectedAppointment = null
+            },
+            onReschedule = {
+                selectedAppointment = null
+                onRescheduleAppointment(appt.id)
+            },
+            onCancel = {
+                scope.launch {
+                    isCancelling = true
+                    cancelAppointment(appt.id).onSuccess {
+                        appointments = appointments.map {
+                            if (it.id == appt.id) it.copy(status = "cancelled") else it
+                        }
+                    }
+                    isCancelling = false
+                    selectedAppointment = null
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun AppointmentListDetailsDialog(appt: Appointment, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Appointment Details") },
+        text = {
+            Column {
+                Text("Date: ${appt.date ?: "-"}")
+                Text("Time: ${appt.time ?: "-"}")
+                Text("Reason: ${appt.reason ?: "General consultation"}")
+                Text("Status: ${appt.status?.replaceFirstChar { it.uppercase() } ?: "Unknown"}")
+                Text("Visit type: ${if (appt.appointment_type == "online") "Online" else "In Person"}")
+                appt.payment_method?.let { Text("Payment method: $it") }
+                appt.amount_paid?.let { Text("Amount paid: R %.2f".format(it)) }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    )
 }
 
 @Composable
@@ -266,7 +326,8 @@ private fun Modifier.clickableStar(onClick: () -> Unit): Modifier =
 private fun AppointmentDetailCard(
     appt: Appointment,
     showLeaveReview: Boolean,
-    onLeaveReview: () -> Unit
+    onLeaveReview: () -> Unit,
+    onClick: () -> Unit
 ) {
     val statusColor = when (appt.status) {
         "confirmed" -> Color(0xFF10B981)
@@ -291,7 +352,7 @@ private fun AppointmentDetailCard(
     Card(
         colors = CardDefaults.cardColors(containerColor = Color.White),
         shape = RoundedCornerShape(14.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

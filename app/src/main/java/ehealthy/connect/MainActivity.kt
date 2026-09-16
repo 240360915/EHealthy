@@ -29,8 +29,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -61,6 +63,7 @@ import ehealthy.connect.ui.patient.PatientPhoneEntry
 import ehealthy.connect.ui.patient.PatientRegister
 import ehealthy.connect.ui.patient.PatientSignupState
 import ehealthy.connect.ui.patientDashboard.Appointment
+import ehealthy.connect.ui.patientDashboard.AppointmentType
 import ehealthy.connect.ui.patientDashboard.BookAppointmentScreen
 import ehealthy.connect.ui.patientDashboard.DoctorBookingInfo
 import ehealthy.connect.ui.patientDashboard.DoctorListing
@@ -824,6 +827,13 @@ fun AppNavGraph() {
             var isUploadingPhoto by remember { mutableStateOf(false) }
 
             LaunchedEffect(Unit) {
+                scope.launch {
+                    SupabaseClientProvider.client.auth.sessionStatus.collect { status ->
+                        Log.d("AuthStatus", "Session status: $status")
+                    }
+                }
+            }
+            LaunchedEffect(Unit) {
                 val userId = SupabaseClientProvider.client.auth.currentSessionOrNull()?.user?.id
                 if (userId != null) {
                     try {
@@ -846,8 +856,13 @@ fun AppNavGraph() {
                     scope.launch {
                         isUploadingPhoto = true
                         try {
+                            // Wait for Supabase to finish restoring the session from disk
+                            // before checking it — avoids the race after process recreation.
+                            SupabaseClientProvider.client.auth.awaitInitialization()
+
                             val userId = SupabaseClientProvider.client.auth.currentSessionOrNull()?.user?.id
                                 ?: throw Exception("Not logged in")
+
                             val bytes = appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                                 ?: throw Exception("Could not read the selected image")
                             val path = "$userId/avatar.jpg"
@@ -861,10 +876,6 @@ fun AppNavGraph() {
                                 .update({ set("profile_image_url", publicUrl) }) {
                                     filter { eq("user_id", userId) }
                                 }
-                            // Cache-buster: Coil caches by URL, and the storage path never
-                            // changes between uploads (upsert overwrites the same file), so
-                            // without this the avatar keeps showing the OLD cached image.
-                            // right after a successful upload:
                             patientAvatarUrl = "$publicUrl?t=${System.currentTimeMillis()}"
                             Toast.makeText(appContext, "Profile photo updated", Toast.LENGTH_SHORT).show()
                         } catch (e: Exception) {
@@ -878,6 +889,10 @@ fun AppNavGraph() {
             }
 
             PatientDashboard(
+                onStartCall = { appointmentId ->
+                    // Placeholder until the video call screen exists
+                    navController.navigate("callPlaceholder/$appointmentId")
+                },
                 patientName = patientName,
                 patientAvatarUrl = patientAvatarUrl,
                 isUploadingPhoto = isUploadingPhoto,
@@ -966,6 +981,23 @@ fun AppNavGraph() {
                     }
                 }
             )
+        }
+        composable(
+            "callPlaceholder/{appointmentId}",
+            arguments = listOf(navArgument("appointmentId") { defaultValue = "" })
+        ) { backStackEntry ->
+            val appointmentId = backStackEntry.arguments?.getString("appointmentId") ?: ""
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Call screen coming soon", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Appointment: $appointmentId", fontSize = 12.sp, color = Color.Gray)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(onClick = { navController.popBackStack() }) {
+                        Text("Back")
+                    }
+                }
+            }
         }
         composable("findDoctors") {
             FindDoctorsScreen(
@@ -1176,6 +1208,7 @@ fun AppNavGraph() {
                                 put("status", "pending")
                                 put("payment_method", submission.paymentReference)
                                 put("amount_paid", submission.fee)
+                                put("appointment_type", if (submission.appointmentType == AppointmentType.ONLINE) "online" else "in_person")
                             }
 
                             SupabaseClientProvider.client.postgrest.from("appointments").insert(row)
@@ -1265,6 +1298,20 @@ fun AppNavGraph() {
                         } finally {
                             isSubmittingReview = false
                         }
+                    }
+                },
+                onRescheduleAppointment = { appointmentId ->
+                    navController.navigate("rescheduleAppointment/$appointmentId")
+                },
+                cancelAppointment = { appointmentId ->
+                    try {
+                        SupabaseClientProvider.client.postgrest.from("appointments")
+                            .update({ set("status", "cancelled") }) {
+                                filter { eq("id", appointmentId) }
+                            }
+                        Result.success(Unit)
+                    } catch (e: Exception) {
+                        Result.failure(e)
                     }
                 }
             )

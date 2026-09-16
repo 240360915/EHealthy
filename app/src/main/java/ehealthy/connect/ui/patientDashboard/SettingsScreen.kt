@@ -48,7 +48,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class PatientSettings(
     val email_notifications: Boolean = true,
-    val sms_notifications: Boolean = false,
+    val sms_notifications: Boolean = true,
     val profile_visible: Boolean = true
 )
 

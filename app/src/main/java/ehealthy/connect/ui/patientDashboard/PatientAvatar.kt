@@ -1,5 +1,6 @@
 package ehealthy.connect.ui.patientDashboard
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -61,6 +62,8 @@ fun PatientAvatar(
                 model = avatarUrl,
                 contentDescription = "Profile picture",
                 contentScale = ContentScale.Crop,
+                onError = { Log.e("AvatarLoad", "Failed to load avatar: $avatarUrl", it.result.throwable) },
+                onSuccess = { Log.d("AvatarLoad", "Loaded avatar successfully") },
                 modifier = Modifier
                     .size(size)
                     .clip(CircleShape)

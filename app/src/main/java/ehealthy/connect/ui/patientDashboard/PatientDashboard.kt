@@ -26,8 +26,12 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.ExitToApp
 import androidx.compose.material.icons.outlined.Lightbulb
+import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.RateReview
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Videocam
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -52,9 +56,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import java.time.Duration
 import java.time.LocalDate
+import java.time.LocalDateTime
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.MaterialTheme
 
@@ -68,7 +77,8 @@ data class Appointment(
     val status: String? = null,
     val payment_method: String? = null,
     val amount_paid: Double? = null,
-    val doctor_id: String?=null
+    val doctor_id: String? = null,
+    val appointment_type: String? = null
 )
 
 @Serializable
@@ -96,6 +106,56 @@ fun isUpcomingAppointment(appt: Appointment): Boolean {
     return date >= LocalDate.now().toString()
 }
 
+/**
+ * Parses this appointment's date + time into a LocalDateTime, or null if
+ * either field is missing/unparseable.
+ */
+@RequiresApi(Build.VERSION_CODES.O)
+private fun appointmentDateTime(appt: Appointment): LocalDateTime? {
+    val date = appt.date ?: return null
+    val time = appt.time?.take(5) ?: return null
+    return try {
+        LocalDateTime.parse("${date}T$time:00")
+    } catch (e: Exception) {
+        null
+    }
+}
+
+/**
+ * The call window for an online appointment: opens 5 minutes before the
+ * scheduled time, stays open until 60 minutes after (matching the
+ * auto-complete rule), independent of whether anyone has joined yet.
+ */
+@RequiresApi(Build.VERSION_CODES.O)
+private fun callWindowState(appt: Appointment): CallWindowState {
+    val dateTime = appointmentDateTime(appt) ?: return CallWindowState.NOT_APPLICABLE
+    val now = LocalDateTime.now()
+    val minutesUntilStart = Duration.between(now, dateTime).toMinutes()
+    return when {
+        minutesUntilStart > 5 -> CallWindowState.TOO_EARLY
+        minutesUntilStart >= -60 -> CallWindowState.OPEN
+        else -> CallWindowState.CLOSED
+    }
+}
+
+private enum class CallWindowState { NOT_APPLICABLE, TOO_EARLY, OPEN, CLOSED }
+
+/**
+ * Finds the first non-cancelled appointment that's due to start within the
+ * next 5 minutes (and hasn't started yet), for the "be ready" home-screen
+ * reminder — applies to both online and in-person visits.
+ */
+@RequiresApi(Build.VERSION_CODES.O)
+private fun findReminderAppointment(appointments: List<Appointment>, now: LocalDateTime): Appointment? {
+    return appointments.firstOrNull { appt ->
+        if (appt.status == "cancelled") return@firstOrNull false
+        val dateTime = appointmentDateTime(appt) ?: return@firstOrNull false
+        val minutesUntilStart = Duration.between(now, dateTime).toMinutes()
+        minutesUntilStart in 0..5
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PatientDashboard(
@@ -112,7 +172,8 @@ fun PatientDashboard(
     fetchAppointments: suspend () -> Result<List<Appointment>>,
     fetchReviews: suspend () -> Result<List<ReviewDisplay>>,
     onRescheduleAppointment: (String) -> Unit,
-    cancelAppointment: suspend (String) -> Result<Unit>
+    cancelAppointment: suspend (String) -> Result<Unit>,
+    onStartCall: (String) -> Unit = {}
 ) {
     val background = MaterialTheme.colorScheme.background
     val navy = MaterialTheme.colorScheme.onBackground
@@ -133,6 +194,22 @@ fun PatientDashboard(
     var isCancelling by remember { mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
+    // Ticks every 30s so the reminder popup and call-button states stay live
+    // without needing the person to navigate away and back.
+    var now by remember { mutableStateOf(LocalDateTime.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000)
+            now = LocalDateTime.now()
+        }
+    }
+
+    // Appointment ids the person has already acknowledged this session —
+    // stops the popup reappearing every recomposition once dismissed.
+    var dismissedReminderIds by remember { mutableStateOf(setOf<String>()) }
+    val reminderAppointment = remember(appointments, now, dismissedReminderIds) {
+        findReminderAppointment(appointments, now)?.takeIf { it.id !in dismissedReminderIds }
+    }
 
     LaunchedEffect(Unit) {
         val result = fetchAppointments()
@@ -198,7 +275,8 @@ fun PatientDashboard(
                 onNavigateAppointments = onNavigateAppointments,
                 onNavigateMedicalRecords = onNavigateMedicalRecords,
                 onNavigateHealthTips = onNavigateHealthTips,
-                onAppointmentClick = { selectedAppointment = it }
+                onAppointmentClick = { selectedAppointment = it },
+                onStartCall = onStartCall
             )
 
             PatientTab.PROFILE -> ProfileTabContent(
@@ -248,6 +326,102 @@ fun PatientDashboard(
     showDetailsForAppointment?.let { appt ->
         AppointmentDetailsDialog(appt = appt, onDismiss = { showDetailsForAppointment = null })
     }
+
+    // Emergency "be ready" reminder — shows regardless of which tab the
+    // person is on, for any appointment (online or in-person) starting
+    // within 5 minutes. Shown in-app even if push notifications are off,
+    // so it never depends on a permission the person hasn't granted.
+    reminderAppointment?.let { appt ->
+        AppointmentReminderPopup(
+            appointment = appt,
+            onDismiss = { dismissedReminderIds = dismissedReminderIds + appt.id },
+            onViewAppointment = {
+                dismissedReminderIds = dismissedReminderIds + appt.id
+                selectedAppointment = appt
+            }
+        )
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+@Composable
+private fun AppointmentReminderPopup(
+    appointment: Appointment,
+    onDismiss: () -> Unit,
+    onViewAppointment: () -> Unit
+) {
+    val dateTime = remember(appointment) { appointmentDateTime(appointment) }
+    val minutesLeft = remember(appointment, dateTime) {
+        dateTime?.let { Duration.between(LocalDateTime.now(), it).toMinutes().coerceAtLeast(0) } ?: 0
+    }
+    val visitLabel = if (appointment.appointment_type == "online") "video call" else "in-person visit"
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnClickOutside = false)
+    ) {
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFFFFBEB)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Outlined.NotificationsActive,
+                        contentDescription = null,
+                        tint = Color(0xFFF59E0B),
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    if (minutesLeft <= 0) "Your appointment is starting" else "Appointment in $minutesLeft min",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    "You have a $visitLabel scheduled at ${appointment.time?.take(5) ?: "-"}. Please be ready.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 13.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                appointment.reason?.takeIf { it.isNotBlank() }?.let {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "Reason: $it",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+                Spacer(modifier = Modifier.height(20.dp))
+                Button(
+                    onClick = onViewAppointment,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F1F3D)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("View Appointment", color = Color.White, fontWeight = FontWeight.SemiBold)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+                    Text("I'm ready, dismiss", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                }
+            }
+        }
+    }
 }
 
 @RequiresApi(Build.VERSION_CODES.O)
@@ -268,7 +442,8 @@ private fun HomeTabContent(
     onNavigateAppointments: () -> Unit,
     onNavigateMedicalRecords: () -> Unit,
     onNavigateHealthTips: () -> Unit,
-    onAppointmentClick: (Appointment) -> Unit
+    onAppointmentClick: (Appointment) -> Unit,
+    onStartCall: (String) -> Unit
 ) {
     val upcoming = remember(appointments) { appointments.filter { isUpcomingAppointment(it) } }
 
@@ -320,7 +495,7 @@ private fun HomeTabContent(
             item { EmptyAppointmentsCard(onNavigateFindDoctors) }
         } else {
             items(upcoming.take(3)) { appt ->
-                AppointmentCard(appt, onClick = { onAppointmentClick(appt) })
+                AppointmentCard(appt, onClick = { onAppointmentClick(appt) }, onStartCall = { onStartCall(appt.id) })
                 Spacer(modifier = Modifier.height(12.dp))
             }
             if (upcoming.size > 3) {
@@ -548,8 +723,9 @@ private fun ReviewCard(rd: ReviewDisplay) {
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
-private fun AppointmentCard(appt: Appointment, onClick: () -> Unit) {
+private fun AppointmentCard(appt: Appointment, onClick: () -> Unit, onStartCall: () -> Unit) {
     val statusColor = when (appt.status) {
         "confirmed" -> Color(0xFF10B981)
         "pending" -> Color(0xFFF59E0B)
@@ -570,13 +746,18 @@ private fun AppointmentCard(appt: Appointment, onClick: () -> Unit) {
         else -> appt.status?.replaceFirstChar { it.uppercase() } ?: "Unknown"
     }
 
+    val isOnline = appt.appointment_type == "online"
+    val isCancelled = appt.status == "cancelled"
+    val isConfirmed = appt.status == "confirmed"
+    val windowState = if (isOnline && !isCancelled) callWindowState(appt) else CallWindowState.NOT_APPLICABLE
+
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
     ) {
         Row(modifier = Modifier.fillMaxWidth()) {
             Box(modifier = Modifier.width(4.dp).fillMaxHeight().background(statusColor))
-            Column(modifier = Modifier.padding(18.dp)) {
+            Column(modifier = Modifier.padding(18.dp).fillMaxWidth()) {
                 Text("📅 ${appt.date ?: "-"}   🕐 ${appt.time ?: "-"}", color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
                 Spacer(modifier = Modifier.height(4.dp))
                 Text("📝 ${appt.reason ?: "General consultation"}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
@@ -594,6 +775,41 @@ private fun AppointmentCard(appt: Appointment, onClick: () -> Unit) {
                 ) {
                     Text(statusLabel, color = statusColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
+
+                if (isOnline && !isCancelled) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    val isActive = isConfirmed && windowState == CallWindowState.OPEN
+                    Button(
+                        onClick = { if (isActive) onStartCall() },
+                        enabled = isActive,
+                        modifier = Modifier.fillMaxWidth().height(44.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF0F1F3D),
+                            disabledContainerColor = Color(0xFFE2E8F0)
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(
+                            Icons.Outlined.Videocam,
+                            contentDescription = null,
+                            tint = if (isActive) Color.White else Color(0xFF94A3B8),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            when {
+                                !isConfirmed -> "Waiting for doctor to accept"
+                                windowState == CallWindowState.TOO_EARLY -> "Start Call (available 5 min before)"
+                                windowState == CallWindowState.OPEN -> "Start Call Now"
+                                windowState == CallWindowState.CLOSED -> "Call window closed"
+                                else -> "Start Call Now"
+                            },
+                            color = if (isActive) Color.White else Color(0xFF94A3B8),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
             }
         }
     }
@@ -610,6 +826,7 @@ private fun AppointmentDetailsDialog(appt: Appointment, onDismiss: () -> Unit) {
                 Text("Time: ${appt.time ?: "-"}")
                 Text("Reason: ${appt.reason ?: "General consultation"}")
                 Text("Status: ${appt.status?.replaceFirstChar { it.uppercase() } ?: "Unknown"}")
+                Text("Visit type: ${if (appt.appointment_type == "online") "Online" else "In Person"}")
                 appt.payment_method?.let { Text("Payment method: $it") }
                 appt.amount_paid?.let { Text("Amount paid: R %.2f".format(it)) }
             }

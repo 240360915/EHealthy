@@ -78,12 +78,15 @@ data class DoctorBookingInfo(
     val operatingHours: String? = null
 )
 
+enum class AppointmentType { ONLINE, IN_PERSON }
+
 data class BookingSubmission(
     val date: String,
     val time: String,
     val reason: String,
     val fee: Double,
-    val paymentReference: String
+    val paymentReference: String,
+    val appointmentType: AppointmentType
 )
 // South African public holidays. Verify exact dates each year —
 // Easter-based holidays (Good Friday / Family Day) shift annually.
@@ -130,7 +133,7 @@ fun BookAppointmentScreen(
     var bookedTimes by rememberSaveable { mutableStateOf(setOf<String>()) }
     var isLoadingSlots by rememberSaveable { mutableStateOf(false) }
     var selectedTime by rememberSaveable { mutableStateOf<String?>(null) }
-
+    var appointmentType by rememberSaveable { mutableStateOf<AppointmentType?>(null) }
     var reason by rememberSaveable { mutableStateOf("") }
     var fee by rememberSaveable { mutableStateOf("") }
     var cardName by rememberSaveable { mutableStateOf("") }
@@ -200,7 +203,7 @@ fun BookAppointmentScreen(
             )
         },
         bottomBar = {
-            if (selectedTime != null && doctor != null) {
+            if (selectedTime != null && appointmentType != null && doctor != null) {
 
                 Column(
                     modifier = Modifier
@@ -234,6 +237,7 @@ fun BookAppointmentScreen(
                             val cleanCardNumber = cardNumber.replace(" ", "")
                             val feeAmount = fee.toDoubleOrNull()
                             when {
+                                appointmentType == null -> localError = "Please choose in-person or online."
                                 reason.isBlank() -> localError = "Please enter a reason for your visit."
                                 feeAmount == null || feeAmount <= 0 -> localError = "Please enter a valid consultation fee."
                                 cardName.isBlank() -> localError = "Please enter the cardholder name."
@@ -250,7 +254,8 @@ fun BookAppointmentScreen(
                                             time = selectedTime!!,
                                             reason = reason,
                                             fee = feeAmount,
-                                            paymentReference = reference
+                                            paymentReference = reference,
+                                            appointmentType = appointmentType!!
                                         )
                                     )
                                 }
@@ -438,8 +443,33 @@ fun BookAppointmentScreen(
                         }
                     }
 
-                    // ---- PAYMENT ----
+                    // ---- VISIT TYPE ----
                     if (selectedTime != null) {
+                        SectionCard(icon = Icons.Outlined.Schedule, title = "Visit Type") {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                VisitTypeOption(
+                                    label = "In Person",
+                                    description = "Visit the doctor's practice",
+                                    selected = appointmentType == AppointmentType.IN_PERSON,
+                                    onClick = { appointmentType = AppointmentType.IN_PERSON },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                VisitTypeOption(
+                                    label = "Online",
+                                    description = "Video call in the app",
+                                    selected = appointmentType == AppointmentType.ONLINE,
+                                    onClick = { appointmentType = AppointmentType.ONLINE },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+
+                    // ---- PAYMENT ----
+                    if (selectedTime != null && appointmentType != null) {
                         SectionCard(icon = Icons.Outlined.CreditCard, title = "Payment Details") {
                             CardPreview(cardName, cardNumber, cardExpiry)
                             Spacer(modifier = Modifier.height(16.dp))
@@ -650,6 +680,29 @@ private fun SectionCard(
             }
             Spacer(modifier = Modifier.height(14.dp))
             content()
+        }
+    }
+}
+
+@Composable
+private fun VisitTypeOption(
+    label: String,
+    description: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (selected) tealSoft else Color(0xFFF4F7FA))
+            .clickable(onClick = onClick)
+            .padding(14.dp)
+    ) {
+        Column {
+            Text(label, color = if (selected) teal else ink, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(description, color = muted, fontSize = 11.sp)
         }
     }
 }

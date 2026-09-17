@@ -71,6 +71,7 @@ data class DoctorListing(
 fun FindDoctorsScreen(
     onBack: () -> Unit,
     onSelectDoctor: (DoctorListing) -> Unit,
+    onViewProfile: (DoctorListing) -> Unit,
     fetchDoctors: suspend () -> Result<List<DoctorListing>>
 ) {
     val background = Color(0xFFF0F4F8)
@@ -233,7 +234,14 @@ fun FindDoctorsScreen(
                 else -> {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         items(filteredDoctors, key = { it.id }) { doc ->
-                            DoctorCard(doc, navy, teal, muted, onClick = { onSelectDoctor(doc) })
+                            DoctorCard(
+                                doc = doc,
+                                navy = navy,
+                                teal = teal,
+                                muted = muted,
+                                onViewProfile = { onViewProfile(doc) },
+                                onBookNow = { onSelectDoctor(doc) }
+                            )
                         }
                         item { Spacer(modifier = Modifier.height(12.dp)) }
                     }
@@ -249,14 +257,23 @@ private fun DoctorCard(
     navy: Color,
     teal: Color,
     muted: Color,
-    onClick: () -> Unit
+    onViewProfile: () -> Unit,
+    onBookNow: () -> Unit
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color.White),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // Tapping the avatar or the name/discipline opens the doctor's
+            // profile — booking has its own explicit button below, so the
+            // two actions never fight over the same tap target.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onViewProfile)
+            ) {
                 Box(
                     modifier = Modifier
                         .size(52.dp)
@@ -332,7 +349,7 @@ private fun DoctorCard(
             Spacer(modifier = Modifier.height(12.dp))
 
             TextButton(
-                onClick = onClick,
+                onClick = onBookNow,
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))

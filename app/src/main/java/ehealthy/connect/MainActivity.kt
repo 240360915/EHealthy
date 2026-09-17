@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -31,8 +32,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -42,12 +45,20 @@ import ehealthy.connect.ui.common.isPasswordStrong
 import ehealthy.connect.ui.doctor.DoctorDashboard
 import ehealthy.connect.ui.doctor.DoctorForgotPassword
 import ehealthy.connect.ui.doctor.DoctorLogin
+import ehealthy.connect.ui.doctor.DoctorPrescriptions
+import ehealthy.connect.ui.doctor.DoctorProfile
+import ehealthy.connect.ui.doctor.DoctorProfileRow
 import ehealthy.connect.ui.doctor.DoctorRegister
 import ehealthy.connect.ui.doctor.DoctorRegistrationFiles
 import ehealthy.connect.ui.doctor.DoctorResetPassword
+import ehealthy.connect.ui.doctor.PrescriptionPatient
+import ehealthy.connect.ui.doctor.fetchConfirmedPrescriptionPatients
 import ehealthy.connect.ui.doctor.registerDoctor
+import ehealthy.connect.ui.doctor.savePrescription
 import ehealthy.connect.ui.doctor.sendDoctorPasswordResetEmail
 import ehealthy.connect.ui.doctor.signInDoctorWithEmail
+import ehealthy.connect.ui.doctor.toDoctorProfile
+import ehealthy.connect.ui.doctor.uploadDoctorProfilePhoto
 import ehealthy.connect.ui.doctor.uriToDoctorFileUpload
 import ehealthy.connect.ui.doctor.verifyDoctorResetCodeAndSetPassword
 import ehealthy.connect.ui.onboarding.ChooseRoleScreen
@@ -66,7 +77,6 @@ import ehealthy.connect.ui.patientDashboard.AppointmentType
 import ehealthy.connect.ui.patientDashboard.BookAppointmentScreen
 import ehealthy.connect.ui.patientDashboard.DoctorBookingInfo
 import ehealthy.connect.ui.patientDashboard.DoctorListing
-import ehealthy.connect.ui.patientDashboard.DoctorProfile as PatientDoctorProfile
 import ehealthy.connect.ui.patientDashboard.DoctorProfileScreen
 import ehealthy.connect.ui.patientDashboard.DoctorReviewItem
 import ehealthy.connect.ui.patientDashboard.FindDoctorsScreen
@@ -74,6 +84,7 @@ import ehealthy.connect.ui.patientDashboard.HealthTipsScreen
 import ehealthy.connect.ui.patientDashboard.MedicalRecord
 import ehealthy.connect.ui.patientDashboard.MedicalRecordDisplay
 import ehealthy.connect.ui.patientDashboard.MedicalRecordsScreen
+import ehealthy.connect.ui.patientDashboard.MessagingScreen
 import ehealthy.connect.ui.patientDashboard.PatientAppointmentsScreen
 import ehealthy.connect.ui.patientDashboard.PatientDashboard
 import ehealthy.connect.ui.patientDashboard.PatientSettings
@@ -83,7 +94,6 @@ import ehealthy.connect.ui.patientDashboard.ReviewDisplay
 import ehealthy.connect.ui.patientDashboard.SettingsScreen
 import ehealthy.connect.ui.splash.SplashScreen
 import ehealthy.connect.ui.theme.EHealthyTheme
-import ehealthy.connect.ui.doctor.DoctorProfile as DoctorProfile
 import ehealthy.connect.util.SupabaseClientProvider
 import ehealthy.connect.util.ThemeManager
 import ehealthy.connect.util.signInWithGoogle
@@ -94,15 +104,12 @@ import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.storage.storage
 import kotlinx.coroutines.launch
-import ehealthy.connect.ui.doctor.DoctorProfileRow
-import ehealthy.connect.ui.doctor.toDoctorProfile
-import ehealthy.connect.ui.doctor.uploadDoctorProfilePhoto
-import ehealthy.connect.ui.doctor.DoctorPrescriptions
-import ehealthy.connect.ui.doctor.PrescriptionPatient
-import ehealthy.connect.ui.doctor.fetchConfirmedPrescriptionPatients
-import ehealthy.connect.ui.doctor.savePrescription
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-@kotlinx.serialization.Serializable
+import ehealthy.connect.ui.patientDashboard.DoctorProfile as PatientDoctorProfile
+
+@Serializable
 private data class PatientLookup(
     val id: String? = null,
     val name: String? = null,
@@ -124,7 +131,7 @@ class MainActivity : ComponentActivity() {
 }
 
 
-@kotlinx.serialization.Serializable
+@Serializable
 private data class DoctorLookup(
     val name: String? = null,
     val surname: String? = null,
@@ -1034,7 +1041,7 @@ fun AppNavGraph() {
             val appointmentId = backStackEntry.arguments?.getString("appointmentId") ?: ""
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Call screen coming soon", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    Text("Call screen coming soon", fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("Appointment: $appointmentId", fontSize = 12.sp, color = Color.Gray)
                     Spacer(modifier = Modifier.height(16.dp))
@@ -1049,6 +1056,9 @@ fun AppNavGraph() {
                 onBack = { navController.popBackStack() },
                 onSelectDoctor = { doc ->
                     navController.navigate("bookAppointment/${doc.id}")
+                },
+                onViewProfile = { doc ->
+                    navController.navigate("doctorProfile/${doc.id}")
                 },
                 fetchDoctors = {
                     try {
@@ -1068,45 +1078,139 @@ fun AppNavGraph() {
 
         composable(
             "doctorProfile/{doctorId}",
-            arguments = listOf(navArgument("doctorId") { defaultValue = "" })
+            arguments = listOf(
+                navArgument("doctorId") {
+                    defaultValue = ""
+                }
+            )
         ) { backStackEntry ->
-            val doctorId = backStackEntry.arguments?.getString("doctorId") ?: ""
+
+            val doctorId =
+                backStackEntry
+                    .arguments
+                    ?.getString("doctorId")
+                    ?: ""
 
             DoctorProfileScreen(
-                onBack = { navController.popBackStack() },
-                onBookAppointment = { id -> navController.navigate("bookAppointment/$id") },
+
+                onBack = {
+                    navController.popBackStack()
+                },
+
+                onBookAppointment = { id ->
+
+                    navController.navigate(
+                        "bookAppointment/$id"
+                    )
+                },
+
                 fetchDoctor = {
+
                     try {
-                        val doc = SupabaseClientProvider.client.postgrest
-                            .from("doctors")
-                            .select { filter { eq("id", doctorId) } }
-                            .decodeSingleOrNull<PatientDoctorProfile>()
-                        if (doc == null) Result.failure(Exception("Doctor not found."))
-                        else Result.success(doc)
+
+                        val doc =
+                            SupabaseClientProvider.client
+                                .postgrest
+                                .from("doctors")
+                                .select {
+
+                                    filter {
+                                        eq(
+                                            "id",
+                                            doctorId
+                                        )
+                                    }
+                                }
+                                .decodeSingleOrNull<PatientDoctorProfile>()
+
+                        if (doc == null) {
+
+                            Result.failure(
+                                Exception(
+                                    "Doctor not found."
+                                )
+                            )
+
+                        } else {
+
+                            Result.success(doc)
+                        }
+
                     } catch (e: Exception) {
+
                         Result.failure(e)
                     }
                 },
+
                 fetchReviews = {
+
                     try {
-                        val items = SupabaseClientProvider.client.postgrest
-                            .from("reviews")
-                            .select { filter { eq("doctor_id", doctorId) } }
-                            .decodeList<Review>()
-                            .sortedByDescending { it.created_at }
-                            .map {
-                                DoctorReviewItem(
-                                    rating = it.rating ?: 0,
-                                    comment = it.comment,
-                                    patientName = null,   // keep reviews anonymous, or join patients here
-                                    createdAt = it.created_at
-                                )
-                            }
+
+                        val items =
+                            SupabaseClientProvider.client
+                                .postgrest
+                                .from("reviews")
+                                .select {
+
+                                    filter {
+                                        eq(
+                                            "doctor_id",
+                                            doctorId
+                                        )
+                                    }
+                                }
+                                .decodeList<Review>()
+                                .sortedByDescending {
+                                    it.created_at
+                                }
+                                .map {
+
+                                    DoctorReviewItem(
+
+                                        rating =
+                                            it.rating ?: 0,
+
+                                        comment =
+                                            it.comment,
+
+                                        patientName =
+                                            null,
+
+                                        createdAt =
+                                            it.created_at
+                                    )
+                                }
+
                         Result.success(items)
+
                     } catch (e: Exception) {
+
                         Result.failure(e)
                     }
+                },
+
+                // Message icon destination
+                onMessageDoctor = { doctorId ->
+                    navController.navigate("messages/$doctorId")
                 }
+            )
+        }
+
+
+        composable(
+            route = "messages/{doctorId}",
+            arguments = listOf(
+                navArgument("doctorId") {
+                    type = NavType.StringType
+                }
+            )
+        ) { backStackEntry ->
+
+            val doctorId = backStackEntry.arguments?.getString("doctorId") ?: ""
+
+            MessagingScreen(
+                doctorId = doctorId,
+                onBack = { navController.popBackStack() }
             )
         }
         composable("healthTips") {
@@ -1243,7 +1347,7 @@ fun AppNavGraph() {
 
                             val patientName = "${patient?.get("name") ?: ""} ${patient?.get("surname") ?: ""}".trim()
 
-                            val row = kotlinx.serialization.json.buildJsonObject {
+                            val row = buildJsonObject {
                                 put("doctor_id", doctorId)
                                 put("patient_id", userId)
                                 if (patientName.isNotBlank()) put("patient_name", patientName)
@@ -1387,7 +1491,7 @@ fun AppNavGraph() {
             when {
                 isLoadingAppt -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        androidx.compose.material3.CircularProgressIndicator()
+                        CircularProgressIndicator()
                     }
                 }
                 appointment == null -> {
@@ -1458,7 +1562,7 @@ fun AppNavGraph() {
         composable("bookingConfirmed") {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Appointment booked!", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    Text("Appointment booked!", fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(onClick = {
                         navController.navigate("patientDashboard") {

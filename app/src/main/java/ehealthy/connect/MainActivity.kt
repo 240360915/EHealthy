@@ -107,9 +107,19 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+<<<<<<< HEAD
 import ehealthy.connect.ui.patientDashboard.DoctorProfile as PatientDoctorProfile
 
 @Serializable
+=======
+import ehealthy.connect.ui.doctor.DoctorAccountSettings
+import ehealthy.connect.ui.doctor.DoctorSettingsScreen
+import ehealthy.connect.ui.doctor.DoctorTimeSlots
+import ehealthy.connect.ui.doctor.TimeSlotRow
+import ehealthy.connect.ui.doctor.fetchDoctorTimeSlots
+import ehealthy.connect.ui.doctor.saveDoctorTimeSlots
+@kotlinx.serialization.Serializable
+>>>>>>> 092a9c6c5f5b7a8bf17503bb95e56a33126a7bbc
 private data class PatientLookup(
     val id: String? = null,
     val name: String? = null,
@@ -772,7 +782,9 @@ fun AppNavGraph() {
                         Result.failure(e)
                     }
                 },
-                onNavigatePrescriptions = { navController.navigate("doctorPrescriptions") }
+                onNavigatePrescriptions = { navController.navigate("doctorPrescriptions") },
+                onNavigateSettings = { navController.navigate("doctorSettings") },
+                onNavigateTimeSlots = { navController.navigate("doctorTimeSlots") }
             )
         }
 
@@ -821,6 +833,78 @@ fun AppNavGraph() {
                             }
                             .onFailure { saveError = it.message ?: "Could not save prescription." }
                         isSaving = false
+                    }
+                }
+            )
+        }
+
+        composable("doctorTimeSlots") {
+            var doctorId by remember { mutableStateOf<String?>(null) }
+
+            LaunchedEffect(Unit) {
+                val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
+                if (userId != null) {
+                    val row = SupabaseClientProvider.client.postgrest
+                        .from("doctors")
+                        .select(columns = Columns.list("id")) { filter { eq("user_id", userId) } }
+                        .decodeSingleOrNull<Map<String, String?>>()
+                    doctorId = row?.get("id")
+                }
+            }
+
+            DoctorTimeSlots(
+                doctorId = doctorId,
+                onBack = { navController.popBackStack() },
+                fetchSlots = { id, date -> fetchDoctorTimeSlots(id, date) },
+                saveSlots = { id, date, rows, closedTimes -> saveDoctorTimeSlots(id, date, rows, closedTimes) }
+            )
+        }
+
+        composable("doctorSettings") {
+            val scope = rememberCoroutineScope()
+            DoctorSettingsScreen(
+                isDarkMode = ThemeManager.isDarkMode,
+                onToggleDarkMode = { ThemeManager.updateDarkMode(it) },
+                onBack = { navController.popBackStack() },
+                onViewPrivacyPolicy = { navController.navigate("privacyPolicy") },
+                onLogout = {
+                    scope.launch {
+                        SupabaseClientProvider.client.auth.signOut()
+                        navController.navigate("choose") { popUpTo(0) { inclusive = true } }
+                    }
+                },
+                fetchSettings = {
+                    val userId = SupabaseClientProvider.client.auth.currentSessionOrNull()?.user?.id
+                    if (userId == null) {
+                        Result.failure(Exception("Not logged in."))
+                    } else {
+                        try {
+                            val row = SupabaseClientProvider.client.postgrest
+                                .from("doctors")
+                                .select(columns = Columns.list("email_notifications", "sms_notifications", "profile_visible")) {
+                                    filter { eq("user_id", userId) }
+                                }
+                                .decodeSingleOrNull<DoctorAccountSettings>()
+                            Result.success(row ?: DoctorAccountSettings())
+                        } catch (e: Exception) {
+                            Result.failure(e)
+                        }
+                    }
+                },
+                onUpdateSetting = { newSettings ->
+                    scope.launch {
+                        val userId = SupabaseClientProvider.client.auth.currentSessionOrNull()?.user?.id ?: return@launch
+                        try {
+                            SupabaseClientProvider.client.postgrest.from("doctors").update(
+                                mapOf(
+                                    "email_notifications" to newSettings.email_notifications,
+                                    "sms_notifications" to newSettings.sms_notifications,
+                                    "profile_visible" to newSettings.profile_visible
+                                )
+                            ) { filter { eq("user_id", userId) } }
+                        } catch (e: Exception) {
+                            Log.e("DoctorSettingsUpdate", "Failed to save setting", e)
+                        }
                     }
                 }
             )

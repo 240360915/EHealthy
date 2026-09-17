@@ -107,19 +107,14 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-<<<<<<< HEAD
 import ehealthy.connect.ui.patientDashboard.DoctorProfile as PatientDoctorProfile
-
-@Serializable
-=======
 import ehealthy.connect.ui.doctor.DoctorAccountSettings
 import ehealthy.connect.ui.doctor.DoctorSettingsScreen
 import ehealthy.connect.ui.doctor.DoctorTimeSlots
-import ehealthy.connect.ui.doctor.TimeSlotRow
 import ehealthy.connect.ui.doctor.fetchDoctorTimeSlots
 import ehealthy.connect.ui.doctor.saveDoctorTimeSlots
-@kotlinx.serialization.Serializable
->>>>>>> 092a9c6c5f5b7a8bf17503bb95e56a33126a7bbc
+import ehealthy.connect.ui.doctor.friendlyAuthError
+@Serializable
 private data class PatientLookup(
     val id: String? = null,
     val name: String? = null,
@@ -139,7 +134,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-
 
 @Serializable
 private data class DoctorLookup(
@@ -768,7 +762,7 @@ fun AppNavGraph() {
                             .decodeList<Appointment>()
                         Result.success(data)
                     } catch (e: Exception) {
-                        Result.failure(e)
+                        Result.failure(Exception(friendlyAuthError(e)))
                     }
                 },
                 onUpdateAppointmentStatus = { appointmentId, newStatus ->
@@ -779,7 +773,7 @@ fun AppNavGraph() {
                             }
                         Result.success(Unit)
                     } catch (e: Exception) {
-                        Result.failure(e)
+                        Result.failure(Exception(friendlyAuthError(e)))
                     }
                 },
                 onNavigatePrescriptions = { navController.navigate("doctorPrescriptions") },
@@ -839,24 +833,15 @@ fun AppNavGraph() {
         }
 
         composable("doctorTimeSlots") {
-            var doctorId by remember { mutableStateOf<String?>(null) }
-
-            LaunchedEffect(Unit) {
-                val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
-                if (userId != null) {
-                    val row = SupabaseClientProvider.client.postgrest
-                        .from("doctors")
-                        .select(columns = Columns.list("id")) { filter { eq("user_id", userId) } }
-                        .decodeSingleOrNull<Map<String, String?>>()
-                    doctorId = row?.get("id")
-                }
-            }
+            val doctorId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
 
             DoctorTimeSlots(
                 doctorId = doctorId,
                 onBack = { navController.popBackStack() },
                 fetchSlots = { id, date -> fetchDoctorTimeSlots(id, date) },
-                saveSlots = { id, date, rows, closedTimes -> saveDoctorTimeSlots(id, date, rows, closedTimes) }
+                saveSlots = { id, date, openOrBookedRows, closedTimes ->
+                    saveDoctorTimeSlots(id, date, openOrBookedRows, closedTimes)
+                }
             )
         }
 

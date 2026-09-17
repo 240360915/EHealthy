@@ -62,6 +62,13 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 
 /** What the UI actually uses — built from [DoctorProfileRow] via [toDoctorProfile]. */
 data class DoctorProfile(
@@ -172,8 +179,22 @@ fun DoctorDashboard(
             DoctorBottomNavBar(selectedTab = selectedTab, onTabSelected = { selectedTab = it })
         }
     ) { paddingValues ->
-        when (selectedTab) {
-            DoctorTab.HOME -> HomeTabContent(
+        AnimatedContent(
+            targetState = selectedTab,
+            transitionSpec = {
+                val forward = targetState.ordinal > initialState.ordinal
+                val enter = slideInHorizontally(animationSpec = tween(260)) { fullWidth ->
+                    if (forward) fullWidth / 4 else -fullWidth / 4
+                } + fadeIn(animationSpec = tween(260))
+                val exit = slideOutHorizontally(animationSpec = tween(200)) { fullWidth ->
+                    if (forward) -fullWidth / 4 else fullWidth / 4
+                } + fadeOut(animationSpec = tween(180))
+                enter togetherWith exit
+            },
+            label = "doctorTab"
+        ) { tab ->
+            when (tab) {
+                DoctorTab.HOME -> HomeTabContent(
                 modifier = Modifier.padding(paddingValues),
                 doctorProfile = doctorProfile,
                 isLoadingProfile = isLoadingProfile,
@@ -219,6 +240,7 @@ fun DoctorDashboard(
 
 
             )
+            }
         }
     }
 }
@@ -392,7 +414,6 @@ private fun PatientsTabContent(
         modifier = modifier
             .fillMaxSize()
             .background(background)
-            .verticalScroll(rememberScrollState())
             .padding(24.dp)
     ) {
         Text("Patients", color = navy, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(20.dp))

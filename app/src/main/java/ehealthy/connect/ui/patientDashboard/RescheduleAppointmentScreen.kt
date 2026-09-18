@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -76,13 +77,20 @@ fun RescheduleAppointmentScreen(
     errorMessage: String?,
     fetchBookedTimes: suspend (date: String) -> Result<Set<String>>,
     onBack: () -> Unit,
-    onConfirmReschedule: (newDate: String, newTime: String) -> Unit
+    onConfirmReschedule: (
+        newDate: String,
+        newTime: String,
+        reason: String
+    ) -> Unit
 ) {
     var selectedDate by rememberSaveable { mutableStateOf(appointment.date ?: "") }
     var selectedTime by rememberSaveable { mutableStateOf(appointment.time) }
     var bookedTimes by rememberSaveable { mutableStateOf(setOf<String>()) }
     var dateError by rememberSaveable { mutableStateOf<String?>(null) }
+    var rescheduleReason by rememberSaveable { mutableStateOf("") }
+    var reasonError by rememberSaveable { mutableStateOf<String?>(null) }
     var isLoadingSlots by rememberSaveable { mutableStateOf(false) }
+
     val context = LocalContext.current
     val calendar = Calendar.getInstance()
 
@@ -259,6 +267,36 @@ fun RescheduleAppointmentScreen(
                 }
             }
 
+            RescheduleSectionCard(
+                icon = Icons.Outlined.Info,
+                title = "Reason for Rescheduling"
+            ) {
+                OutlinedTextField(
+                    value = rescheduleReason,
+                    onValueChange = {
+                        rescheduleReason = it
+                        reasonError = null
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = {
+                        Text("Tell us why you need to reschedule...")
+                    },
+                    minLines = 4,
+                    maxLines = 6,
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                reasonError?.let {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = it,
+                        color = rRed,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+
+
             errorMessage?.let {
                 Text(
                     it,
@@ -271,11 +309,33 @@ fun RescheduleAppointmentScreen(
             Button(
                 onClick = {
                     val time = selectedTime
-                    if (selectedDate.isNotBlank() && time != null) {
-                        onConfirmReschedule(selectedDate, time)
+
+                    when {
+                        selectedDate.isBlank() -> {
+                            dateError = "Please select a new date."
+                        }
+
+                        time == null -> {
+                            // Time isn't selected yet.
+                        }
+
+                        rescheduleReason.trim().isBlank() -> {
+                            reasonError = "Please provide a reason for rescheduling."
+                        }
+
+                        else -> {
+                            onConfirmReschedule(
+                                selectedDate,
+                                time,
+                                rescheduleReason.trim()
+                            )
+                        }
                     }
                 },
-                enabled = !isLoading && selectedDate.isNotBlank() && selectedTime != null,
+                enabled = !isLoading &&
+                        selectedDate.isNotBlank() &&
+                        selectedTime != null &&
+                        rescheduleReason.trim().isNotBlank(),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp, vertical = 16.dp)

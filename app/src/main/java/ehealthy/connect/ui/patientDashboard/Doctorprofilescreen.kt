@@ -23,7 +23,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.outlined.Badge
-import androidx.compose.material.icons.outlined.Directions
+import androidx.compose.material.icons.outlined.Chat
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Payments
@@ -73,6 +73,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class DoctorProfile(
     val id: String,
+    val user_id: String? = null,
     val name: String? = null,
     val surname: String? = null,
     val discipline: String? = null,
@@ -112,6 +113,7 @@ private val red = Color(0xFFDC2626)
 fun DoctorProfileScreen(
     onBack: () -> Unit,
     onBookAppointment: (doctorId: String) -> Unit,
+    onMessageDoctor: (doctorId: String) -> Unit,
     fetchDoctor: suspend () -> Result<DoctorProfile>,
     fetchReviews: suspend () -> Result<List<DoctorReviewItem>>
 ) {
@@ -127,7 +129,12 @@ fun DoctorProfileScreen(
         val reviewResult = fetchReviews()
         isLoading = false
         docResult
-            .onSuccess { doctor = it }
+            .onSuccess {
+                // TEMPORARY DEBUG LOG — remove once the location issue is confirmed/fixed.
+                // Filter Logcat by "DoctorProfileDebug" after opening a doctor's profile.
+                android.util.Log.d("DoctorProfileDebug", "location='${it.location}', all=$it")
+                doctor = it
+            }
             .onFailure { loadError = it.message ?: "Could not load this doctor's profile." }
         reviewResult.onSuccess { reviews = it }
     }
@@ -151,12 +158,38 @@ fun DoctorProfileScreen(
                         fontSize = 18.sp
                     )
                 },
+
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = ink)
+                        Icon(
+                            Icons.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = ink
+                        )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
+
+                actions = {
+                    doctor?.let { doc ->
+                        if (!doc.user_id.isNullOrBlank()) {
+                            IconButton(
+                                onClick = {
+                                    onMessageDoctor(doc.id)
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Chat,
+                                    contentDescription = "Message doctor",
+                                    tint = teal
+                                )
+                            }
+                        }
+                    }
+                },
+
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.White
+                )
             )
         },
         bottomBar = {
@@ -269,11 +302,7 @@ fun DoctorProfileScreen(
 
                     item {
                         InfoCard(title = "Practice Details") {
-                            InfoRow(
-                                Icons.Outlined.LocationOn,
-                                "Location",
-                                doc.location ?: "Not provided"
-                            )
+                            InfoRow(Icons.Outlined.LocationOn, "Location", doc.location ?: "Not provided")
                             InfoRow(
                                 Icons.Outlined.Schedule,
                                 "Operating hours",
@@ -287,21 +316,6 @@ fun DoctorProfileScreen(
                             )
                             if (!doc.languages.isNullOrBlank()) {
                                 InfoRow(Icons.Outlined.Translate, "Languages", doc.languages)
-                            }
-
-                            if (!doc.location.isNullOrBlank()) {
-                                Spacer(modifier = Modifier.height(10.dp))
-                                ActionPill(
-                                    icon = Icons.Outlined.Directions,
-                                    label = "Get directions"
-                                ) {
-                                    safeStart(
-                                        Intent(
-                                            Intent.ACTION_VIEW,
-                                            Uri.parse("geo:0,0?q=${Uri.encode(doc.location)}")
-                                        )
-                                    )
-                                }
                             }
                         }
                     }
@@ -567,6 +581,16 @@ private fun InfoRow(icon: ImageVector, label: String, value: String) {
         }
     }
 }
+
+/**
+ * Same layout as InfoRow, but checks whether any app on the device can
+ * actually handle a geo: intent for this location before deciding what
+ * to show:
+ *   - no location at all           -> "Not provided"
+ *   - location present, map app installed    -> tappable underlined link
+ *   - location present, no map app installed -> plain text (not a dead link)
+ */
+
 
 @Composable
 private fun ActionPill(icon: ImageVector, label: String, onClick: () -> Unit) {

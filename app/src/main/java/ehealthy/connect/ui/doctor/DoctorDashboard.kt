@@ -17,19 +17,24 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ExitToApp
+import androidx.compose.material.icons.outlined.Medication
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -46,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -55,8 +61,14 @@ import ehealthy.connect.ui.patientDashboard.PatientAvatar
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 
 /** What the UI actually uses — built from [DoctorProfileRow] via [toDoctorProfile]. */
 data class DoctorProfile(
@@ -102,13 +114,16 @@ fun DoctorDashboard(
     onLogout: () -> Unit,
     fetchAppointments: suspend (doctorId: String) -> Result<List<Appointment>>,
     onUpdateAppointmentStatus: suspend (appointmentId: String, newStatus: String) -> Result<Unit>,
-    onNavigatePrescriptions: () -> Unit
+    onNavigatePrescriptions: () -> Unit,
+    onNavigateSettings: () -> Unit,
+    onNavigateTimeSlots: () -> Unit,
+
 ) {
-    val background = Color(0xFFF0F4F8)
-    val navy = Color(0xFF0F1F3D)
-    val green = Color(0xFF10B981)
-    val accent = Color(0xFF3B82F6)
-    val muted = Color(0xFF64748B)
+    val background = MaterialTheme.colorScheme.background
+    val navy = MaterialTheme.colorScheme.onBackground
+    val green = MaterialTheme.colorScheme.primary
+    val accent = MaterialTheme.colorScheme.primary
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
 
     val scope = rememberCoroutineScope()
     var selectedTab by remember { mutableStateOf(DoctorTab.HOME) }
@@ -157,15 +172,29 @@ fun DoctorDashboard(
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
         },
         bottomBar = {
             DoctorBottomNavBar(selectedTab = selectedTab, onTabSelected = { selectedTab = it })
         }
     ) { paddingValues ->
-        when (selectedTab) {
-            DoctorTab.HOME -> HomeTabContent(
+        AnimatedContent(
+            targetState = selectedTab,
+            transitionSpec = {
+                val forward = targetState.ordinal > initialState.ordinal
+                val enter = slideInHorizontally(animationSpec = tween(260)) { fullWidth ->
+                    if (forward) fullWidth / 4 else -fullWidth / 4
+                } + fadeIn(animationSpec = tween(260))
+                val exit = slideOutHorizontally(animationSpec = tween(200)) { fullWidth ->
+                    if (forward) -fullWidth / 4 else fullWidth / 4
+                } + fadeOut(animationSpec = tween(180))
+                enter togetherWith exit
+            },
+            label = "doctorTab"
+        ) { tab ->
+            when (tab) {
+                DoctorTab.HOME -> HomeTabContent(
                 modifier = Modifier.padding(paddingValues),
                 doctorProfile = doctorProfile,
                 isLoadingProfile = isLoadingProfile,
@@ -205,8 +234,13 @@ fun DoctorDashboard(
                 muted = muted,
                 onUploadPhoto = onUploadPhoto,
                 onLogout = onLogout,
-                onNavigatePrescriptions = onNavigatePrescriptions
+                onNavigatePrescriptions = onNavigatePrescriptions,
+                onNavigateSettings = onNavigateSettings,
+                onNavigateTimeSlots = onNavigateTimeSlots
+
+
             )
+            }
         }
     }
 }
@@ -282,14 +316,14 @@ private fun HomeTabContent(
                 }
             }
         } else if (loadError != null) {
-            item { Text(loadError, color = Color(0xFFEF4444), fontSize = 13.sp) }
+            item { Text(loadError, color = MaterialTheme.colorScheme.error, fontSize = 13.sp) }
         } else if (upcoming.isEmpty()) {
             item {
-                Card(colors = CardDefaults.cardColors(containerColor = Color.White), modifier = Modifier.fillMaxWidth()) {
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.fillMaxWidth().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Outlined.CalendarMonth, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(32.dp))
+                        Icon(Icons.Outlined.CalendarMonth, contentDescription = null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(32.dp))
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text("No upcoming appointments.", color = Color(0xFF64748B), fontSize = 14.sp)
+                        Text("No upcoming appointments.", color = muted, fontSize = 14.sp)
                     }
                 }
             }
@@ -313,7 +347,7 @@ private fun HomeTabContent(
 
 @Composable
 private fun StatCard(label: String, value: String, accent: Color, muted: Color, modifier: Modifier = Modifier) {
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White), modifier = modifier, elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), modifier = modifier, elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
         Column(modifier = Modifier.padding(18.dp)) {
             Text(value, color = accent, fontSize = 26.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(2.dp))
@@ -328,23 +362,18 @@ private fun MiniAppointmentCard(appt: Appointment) {
         "confirmed" -> Color(0xFF10B981)
         "pending" -> Color(0xFFF59E0B)
         "cancelled" -> Color(0xFFEF4444)
-        else -> Color(0xFF94A3B8)
+        else -> MaterialTheme.colorScheme.outline
     }
-    val statusBg = when (appt.status) {
-        "confirmed" -> Color(0xFFF0FDF4)
-        "pending" -> Color(0xFFFFFBEB)
-        "cancelled" -> Color(0xFFFEF2F2)
-        else -> Color(0xFFF8FAFF)
-    }
+    val statusBg = statusColor.copy(alpha = 0.15f)
 
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White), modifier = Modifier.fillMaxWidth()) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), modifier = Modifier.fillMaxWidth()) {
         Box(modifier = Modifier.fillMaxWidth().height(4.dp).background(statusColor))
         Column(modifier = Modifier.padding(18.dp)) {
-            Text(appt.patient_name ?: "Unknown patient", color = Color(0xFF0F1F3D), fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(appt.patient_name ?: "Unknown patient", color = MaterialTheme.colorScheme.onSurface, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(4.dp))
-            Text("📅 ${appt.date ?: "-"}   🕐 ${appt.time ?: "-"}", color = Color(0xFF1E293B), fontSize = 14.sp)
+            Text("📅 ${appt.date ?: "-"}   🕐 ${appt.time ?: "-"}", color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
             Spacer(modifier = Modifier.height(4.dp))
-            Text("📝 ${appt.reason ?: "General consultation"}", color = Color(0xFF64748B), fontSize = 13.sp)
+            Text("📝 ${appt.reason ?: "General consultation"}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
             Spacer(modifier = Modifier.height(10.dp))
             Box(modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(statusBg).padding(horizontal = 10.dp, vertical = 4.dp)) {
                 Text(appt.status?.replaceFirstChar { it.uppercase() } ?: "Unknown", color = statusColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
@@ -385,7 +414,6 @@ private fun PatientsTabContent(
         modifier = modifier
             .fillMaxSize()
             .background(background)
-            .verticalScroll(rememberScrollState())
             .padding(24.dp)
     ) {
         Text("Patients", color = navy, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(20.dp))
@@ -393,7 +421,7 @@ private fun PatientsTabContent(
         when {
             isLoading -> {
                 Box(modifier = Modifier.fillMaxSize().padding(40.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Color(0xFF3B82F6))
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
             }
             patients.isEmpty() -> {
@@ -407,16 +435,16 @@ private fun PatientsTabContent(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(patients, key = { it.name }) { patient ->
-                        Card(colors = CardDefaults.cardColors(containerColor = Color.White), modifier = Modifier.fillMaxWidth()) {
+                        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), modifier = Modifier.fillMaxWidth()) {
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Box(
-                                    modifier = Modifier.size(40.dp).clip(CircleShape).background(Color(0xFFEFF1FF)),
+                                    modifier = Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(Icons.Outlined.Person, contentDescription = null, tint = Color(0xFF3B82F6), modifier = Modifier.size(20.dp))
+                                    Icon(Icons.Outlined.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                                 }
                                 Spacer(modifier = Modifier.width(14.dp))
                                 Column(modifier = Modifier.weight(1f)) {
@@ -447,17 +475,25 @@ private fun ProfileTabContent(
     muted: Color,
     onUploadPhoto: () -> Unit,
     onLogout: () -> Unit,
-    onNavigatePrescriptions: () -> Unit
+    onNavigatePrescriptions: () -> Unit,
+    onNavigateSettings: () -> Unit,
+    onNavigateTimeSlots: () -> Unit
 ) {
-    Column(modifier = modifier.fillMaxSize().background(background).padding(24.dp)) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(background)
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp)
+    ) {
         Box(contentAlignment = Alignment.BottomEnd) {
             PatientAvatar(avatarUrl = doctorProfile?.profileImageUrl, name = doctorProfile?.name ?: "", size = 96.dp)
             Box(
                 modifier = Modifier
                     .size(30.dp)
                     .clip(CircleShape)
-                    .background(Color.White)
-                    .border(1.dp, Color(0xFFE2E8F0), CircleShape)
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
                     .clickable(enabled = !isUploadingPhoto, onClick = onUploadPhoto),
                 contentAlignment = Alignment.Center
             ) {
@@ -482,51 +518,43 @@ private fun ProfileTabContent(
 
         doctorProfile?.verificationStatus?.let { status ->
             Spacer(modifier = Modifier.height(10.dp))
-            val (bg, fg, label) = when (status) {
-                "approved" -> Triple(Color(0xFFF0FDF4), Color(0xFF10B981), "Verified")
-                "pending" -> Triple(Color(0xFFFFFBEB), Color(0xFFF59E0B), "Pending verification")
-                else -> Triple(Color(0xFFFEF2F2), Color(0xFFEF4444), "Not verified")
+            val (fg, label) = when (status) {
+                "approved" -> Color(0xFF10B981) to "Verified"
+                "pending" -> Color(0xFFF59E0B) to "Pending verification"
+                else -> Color(0xFFEF4444) to "Not verified"
             }
+            val bg = fg.copy(alpha = 0.15f)
             Box(modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(bg).padding(horizontal = 10.dp, vertical = 4.dp)) {
                 Text(label, color = fg, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
-        TextButton(onClick = onUploadPhoto, contentPadding = PaddingValues(0.dp), enabled = !isUploadingPhoto) {
-            Text(if (isUploadingPhoto) "Uploading…" else "Change photo", color = Color(0xFF3B82F6), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text("MORE", color = muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Card(
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onNavigatePrescriptions)
-        ) {
-            Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("💊", fontSize = 18.sp)
-                Spacer(modifier = Modifier.width(14.dp))
-                Text("Prescriptions", color = navy, fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-                Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = muted, modifier = Modifier.size(18.dp))
-            }
-        }
-        // TODO: My Time Slots / Financial Records / Location / Subscriptions
-        // rows go here as each gets built — same Card pattern as above.
-
-        Spacer(modifier = Modifier.height(12.dp))
-
         Spacer(modifier = Modifier.height(28.dp))
 
-        Card(colors = CardDefaults.cardColors(containerColor = Color.White), modifier = Modifier.fillMaxWidth().clickable(onClick = onLogout)) {
-            Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.ExitToApp, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(20.dp))
-                Spacer(modifier = Modifier.width(14.dp))
-                Text("Logout", color = Color(0xFFEF4444), fontSize = 15.sp, fontWeight = FontWeight.Medium)
-            }
-        }
+        ProfileMenuItem(Icons.Outlined.Medication, "Prescriptions", navy, onClick = onNavigatePrescriptions)
+        Spacer(modifier = Modifier.height(8.dp))
+        ProfileMenuItem(Icons.Outlined.Schedule, "My Time Slots", navy, onClick = onNavigateTimeSlots)
+        Spacer(modifier = Modifier.height(8.dp))
+        ProfileMenuItem(Icons.Outlined.Settings, "Settings", navy, onClick = onNavigateSettings)
+        ProfileMenuItem(Icons.Outlined.ExitToApp, "Logout", MaterialTheme.colorScheme.error, onClick = onLogout)
+
         Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun ProfileMenuItem(icon: ImageVector, label: String, tint: Color, onClick: () -> Unit) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.width(14.dp))
+            Text(label, color = tint, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+        }
     }
 }

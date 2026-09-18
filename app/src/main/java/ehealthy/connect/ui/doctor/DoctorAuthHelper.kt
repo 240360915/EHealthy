@@ -5,6 +5,7 @@ import io.github.jan.supabase.auth.OtpType
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.postgrest.postgrest
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -152,22 +153,30 @@ suspend fun verifyDoctorResetCodeAndSetPassword(
         Result.failure(Exception(friendlyAuthError(e)))
     }
 }
-/** ASSUMPTION: "prescriptions" table columns are patient_id, doctor_id,
- *  medications (jsonb text array). Not yet confirmed against your actual
- *  Supabase schema — adjust if column names differ. */
+/**
+ * "prescriptions" is row-per-medication (id, doctor_id, patient_id,
+ * medication: text, created_at) — confirmed against the real schema.
+ * A doctor selecting 3 medications for one patient writes 3 rows, all
+ * inserted together in a single batch call.
+ */
 suspend fun savePrescription(
     patientId: String,
     doctorId: String,
     medications: List<String>
 ): Result<Unit> {
     return try {
-        SupabaseClientProvider.client.postgrest.from("prescriptions").insert(
-            mapOf(
-                "patient_id" to patientId,
-                "doctor_id" to doctorId,
-                "medications" to medications
-            )
+        @Serializable
+        data class PrescriptionInsert(
+            val patient_id: String,
+            val doctor_id: String,
+            val medication: String
         )
+
+        val rows = medications.map { med ->
+            PrescriptionInsert(patient_id = patientId, doctor_id = doctorId, medication = med)
+        }
+
+        SupabaseClientProvider.client.postgrest.from("prescriptions").insert(rows)
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(Exception(friendlyAuthError(e)))
@@ -203,8 +212,56 @@ suspend fun fetchConfirmedPrescriptionPatients(doctorId: String): Result<List<Pr
         Result.failure(Exception(friendlyAuthError(e)))
     }
 }
+suspend fun fetchDoctorTimeSlots(doctorId: String, date: String): Result<List<TimeSlotRow>> {
+    return try {
+        val rows = SupabaseClientProvider.client.postgrest
+            .from("time_slots")
+            .select { filter { eq("doctor_id", doctorId); eq("date", date) } }
+            .decodeList<TimeSlotRow>()
+        Result.success(rows)
+    } catch (e: Exception) {
+        Result.failure(Exception(friendlyAuthError(e)))
+    }
+}
 
-private fun friendlyAuthError(e: Throwable): String {
+/**
+ * Only "open" and "booked" slots get written as rows — a row's mere
+ * existence is what makes a time bookable, since "time_slots" has no
+ * status column, just is_booked. "Closed" slots are deleted instead of
+ * saved, so patients never see them as available.
+ *
+ * ASSUMPTION: a unique constraint on (doctor_id, date, time) exists in
+ * Supabase for the upsert's onConflict to work. If it doesn't, this will
+ * fail with "no unique or exclusion constraint matching ON CONFLICT" —
+ * worth checking Table Editor → time_slots → constraints if you hit that.
+ */
+suspend fun saveDoctorTimeSlots(
+    doctorId: String,
+    date: String,
+    openOrBookedRows: List<TimeSlotRow>,
+    closedTimes: List<String>
+): Result<Unit> {
+    return try {
+        if (openOrBookedRows.isNotEmpty()) {
+            SupabaseClientProvider.client.postgrest.from("time_slots")
+                .upsert(openOrBookedRows) { onConflict = "doctor_id,date,time" }
+        }
+        if (closedTimes.isNotEmpty()) {
+            SupabaseClientProvider.client.postgrest.from("time_slots").delete {
+                filter {
+                    eq("doctor_id", doctorId)
+                    eq("date", date)
+                    isIn("time", closedTimes)
+                }
+            }
+        }
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Result.failure(Exception(friendlyAuthError(e)))
+    }
+}
+
+fun friendlyAuthError(e: Throwable): String {
     val raw = e.message ?: return "Something went wrong. Please try again."
     val firstLine = raw.substringBefore("\nURL:").trim()
     return when {

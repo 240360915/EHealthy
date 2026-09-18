@@ -153,9 +153,12 @@ suspend fun verifyDoctorResetCodeAndSetPassword(
         Result.failure(Exception(friendlyAuthError(e)))
     }
 }
-/** ASSUMPTION: "prescriptions" table columns are patient_id, doctor_id,
- *  medications (jsonb text array). Not yet confirmed against your actual
- *  Supabase schema — adjust if column names differ. */
+/**
+ * "prescriptions" is row-per-medication (id, doctor_id, patient_id,
+ * medication: text, created_at) — confirmed against the real schema.
+ * A doctor selecting 3 medications for one patient writes 3 rows, all
+ * inserted together in a single batch call.
+ */
 suspend fun savePrescription(
     patientId: String,
     doctorId: String,
@@ -166,16 +169,14 @@ suspend fun savePrescription(
         data class PrescriptionInsert(
             val patient_id: String,
             val doctor_id: String,
-            val medications: List<String>
+            val medication: String
         )
 
-        SupabaseClientProvider.client.postgrest.from("prescriptions").insert(
-            PrescriptionInsert(
-                patient_id = patientId,
-                doctor_id = doctorId,
-                medications = medications
-            )
-        )
+        val rows = medications.map { med ->
+            PrescriptionInsert(patient_id = patientId, doctor_id = doctorId, medication = med)
+        }
+
+        SupabaseClientProvider.client.postgrest.from("prescriptions").insert(rows)
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(Exception(friendlyAuthError(e)))
@@ -260,7 +261,7 @@ suspend fun saveDoctorTimeSlots(
     }
 }
 
-private fun friendlyAuthError(e: Throwable): String {
+fun friendlyAuthError(e: Throwable): String {
     val raw = e.message ?: return "Something went wrong. Please try again."
     val firstLine = raw.substringBefore("\nURL:").trim()
     return when {

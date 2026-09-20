@@ -90,6 +90,7 @@ fun PatientAppointmentsScreen(
     onBack: () -> Unit,
     onFindDoctors: () -> Unit,
     onViewDoctorProfile: (String) -> Unit,
+    initialCategory: AppointmentCategory = AppointmentCategory.ALL,
 
     fetchDoctor: suspend (String) -> Result<DoctorProfile>,
 
@@ -114,12 +115,13 @@ fun PatientAppointmentsScreen(
     var reviewedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var isLoading by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf<String?>(null) }
-    var selectedCategory by remember { mutableStateOf(AppointmentCategory.ALL) }
+    var selectedCategory by remember { mutableStateOf(initialCategory) }
     var reviewTargetAppointmentId by remember { mutableStateOf<String?>(null) }
     var detailsAppointment by remember { mutableStateOf<Appointment?>(null) }
     var selectedAppointment by remember { mutableStateOf<Appointment?>(null) }
     var isCancelling by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
 
     LaunchedEffect(Unit) {
         val apptResult = fetchAppointments()

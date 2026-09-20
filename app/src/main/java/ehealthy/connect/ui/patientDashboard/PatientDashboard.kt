@@ -198,7 +198,7 @@ fun PatientDashboard(
     isUploadingPhoto: Boolean,
 
     onNavigateFindDoctors: () -> Unit,
-    onNavigateAppointments: () -> Unit,
+    onNavigateAppointments: (AppointmentCategory) -> Unit,
     onNavigateMedicalRecords: () -> Unit,
     onNavigateHealthTips: () -> Unit,
     onNavigateSettings: () -> Unit,
@@ -392,7 +392,7 @@ fun PatientDashboard(
                 onNavigateFindDoctors()
 
             PatientTab.APPOINTMENTS ->
-                onNavigateAppointments()
+                onNavigateAppointments(AppointmentCategory.ALL)
 
             else ->
                 selectedTab = tab
@@ -763,7 +763,7 @@ private fun HomeTabContent(
     reviews: List<ReviewDisplay>,
     isLoadingReviews: Boolean,
     onNavigateFindDoctors: () -> Unit,
-    onNavigateAppointments: () -> Unit,
+    onNavigateAppointments: (AppointmentCategory) -> Unit,
     prescriptions: List<PrescriptionDisplay>,
     onNavigatePrescriptions: () -> Unit,
     onNavigateMedicalRecords: () -> Unit,
@@ -901,10 +901,9 @@ private fun HomeTabContent(
             }
 
             if (upcoming.size > 3) {
-
                 item {
                     TextButton(
-                        onClick = onNavigateAppointments
+                        onClick = { onNavigateAppointments(AppointmentCategory.UPCOMING) }
                     ) {
                         Text(
                             "View all appointments →",
@@ -994,25 +993,19 @@ private fun HomeTabContent(
             }
 
         } else if (reviews.isEmpty()) {
-
             item {
                 EmptyReviewsCard(
-                    onGoRate = onNavigateAppointments
+                    onGoRate = { onNavigateAppointments(AppointmentCategory.COMPLETED) }
                 )
             }
-
         } else {
-
             items(reviews.take(3)) { rd ->
-
                 ReviewCard(rd)
-
                 Spacer(modifier = Modifier.height(12.dp))
             }
-
             item {
                 TextButton(
-                    onClick = onNavigateAppointments
+                    onClick = { onNavigateAppointments(AppointmentCategory.COMPLETED) }
                 ) {
                     Text(
                         "Rate another visit →",

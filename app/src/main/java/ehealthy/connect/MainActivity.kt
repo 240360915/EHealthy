@@ -120,6 +120,7 @@ import ehealthy.connect.ui.doctor.DoctorTimeSlots
 import ehealthy.connect.ui.doctor.fetchDoctorTimeSlots
 import ehealthy.connect.ui.doctor.saveDoctorTimeSlots
 import ehealthy.connect.ui.doctor.friendlyAuthError
+import ehealthy.connect.ui.patientDashboard.AppointmentCategory
 import ehealthy.connect.ui.patientDashboard.PatientPrescriptionsScreen
 import ehealthy.connect.ui.patientDashboard.PrescriptionDisplay
 
@@ -2120,15 +2121,20 @@ fun AppNavGraph() {
                     )
                 },
 
-                onNavigateAppointments = {
-                    navController.navigate(
-                        "patientAppointments"
-                    )
+                onNavigateAppointments = { category ->
+                    val param = when (category) {
+                        AppointmentCategory.COMPLETED -> "completed"
+                        AppointmentCategory.UPCOMING -> "upcoming"
+                        AppointmentCategory.CANCELLED -> "cancelled"
+                        AppointmentCategory.ALL -> "all"
+                    }
+                    navController.navigate("patientAppointments?category=$param")
                 },
 
                 onNavigatePrescriptions = {
                     navController.navigate(
                         "patientPrescriptions") },
+
                 onNavigateMedicalRecords = {
                     navController.navigate(
                         "medicalRecords"
@@ -3166,7 +3172,21 @@ fun AppNavGraph() {
         // ------------------------------------------------
 
 
-        composable("patientAppointments") {
+        composable(
+            "patientAppointments?category={category}",
+            arguments = listOf(
+                navArgument("category") { defaultValue = "all" }
+            )
+        ) { backStackEntry ->
+
+            val initialCategory = when (
+                backStackEntry.arguments?.getString("category")
+            ) {
+                "completed" -> AppointmentCategory.COMPLETED
+                "upcoming" -> AppointmentCategory.UPCOMING
+                "cancelled" -> AppointmentCategory.CANCELLED
+                else -> AppointmentCategory.ALL
+            }
 
             val scope = rememberCoroutineScope()
 
@@ -3180,14 +3200,14 @@ fun AppNavGraph() {
 
             PatientAppointmentsScreen(
 
+                initialCategory = initialCategory,
+
                 onBack = {
                     navController.popBackStack()
                 },
 
                 onFindDoctors = {
-                    navController.navigate(
-                        "findDoctors"
-                    )
+                    navController.navigate("findDoctors")
                 },
 
                 onViewDoctorProfile = { doctorId ->
@@ -3790,5 +3810,6 @@ fun AppNavGraph() {
                 }
             }
         }
+
     }
 }

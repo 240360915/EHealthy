@@ -1,5 +1,6 @@
 package ehealthy.connect
-
+import ehealthy.connect.ui.patientDashboard.EditProfileScreen
+import ehealthy.connect.ui.patientDashboard.PatientProfile
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -114,8 +115,14 @@ import ehealthy.connect.ui.doctor.DoctorTimeSlots
 import ehealthy.connect.ui.doctor.fetchDoctorTimeSlots
 import ehealthy.connect.ui.doctor.saveDoctorTimeSlots
 import ehealthy.connect.ui.doctor.friendlyAuthError
+import ehealthy.connect.ui.patientDashboard.BookingConfirmation
+import ehealthy.connect.ui.patientDashboard.BookingConfirmedScreen
 import kotlinx.coroutines.tasks.await
 
+
+private object BookingConfirmationHolder {
+    var confirmation: BookingConfirmation? = null
+}
 @Serializable
 private data class PatientLookup(
     val id: String? = null,
@@ -160,12 +167,118 @@ fun AppNavGraph() {
                 }
             )
         }
+        composable("editProfile") {
+            val scope = rememberCoroutineScope()
 
+            EditProfileScreen(
+                onBack = { navController.popBackStack() },
+                fetchProfile = {
+                    val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
+                    if (userId == null) {
+                        Result.failure(Exception("Not logged in."))
+                    } else {
+                        try {
+                            val row = SupabaseClientProvider.client.postgrest
+                                .from("patients")
+                                .select(
+                                    columns = Columns.list(
+                                        "name", "surname", "phone", "gender",
+                                        "address1", "address2", "address3", "postal_code", "province",
+                                        "emergency_contact_name", "emergency_contact_phone", "emergency_contact_relationship",
+                                        "allergies", "blood_group", "chronic", "medication", "surgeries", "disability",
+                                        "medical_aid_scheme", "medical_aid_number", "medical_aid_plan"
+                                    )
+                                ) { filter { eq("user_id", userId) } }
+                                .decodeSingleOrNull<PatientProfile>()
+                            Result.success(row ?: PatientProfile())
+                        } catch (e: Exception) {
+                            Result.failure(e)
+                        }
+                    }
+                },
+                onSaveProfile = { profile ->
+                    val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
+                    if (userId == null) {
+                        Result.failure(Exception("Not logged in."))
+                    } else {
+                        try {
+                            SupabaseClientProvider.client.postgrest.from("patients").update(
+                                mapOf(
+                                    "name" to profile.name,
+                                    "surname" to profile.surname,
+                                    "phone" to profile.phone,
+                                    "gender" to profile.gender,
+                                    "address1" to profile.address1,
+                                    "address2" to profile.address2,
+                                    "address3" to profile.address3,
+                                    "postal_code" to profile.postal_code,
+                                    "province" to profile.province,
+                                    "emergency_contact_name" to profile.emergency_contact_name,
+                                    "emergency_contact_phone" to profile.emergency_contact_phone,
+                                    "emergency_contact_relationship" to profile.emergency_contact_relationship,
+                                    "allergies" to profile.allergies,
+                                    "blood_group" to profile.blood_group,
+                                    "chronic" to profile.chronic,
+                                    "medication" to profile.medication,
+                                    "surgeries" to profile.surgeries,
+                                    "disability" to profile.disability,
+                                    "medical_aid_scheme" to profile.medical_aid_scheme,
+                                    "medical_aid_number" to profile.medical_aid_number,
+                                    "medical_aid_plan" to profile.medical_aid_plan
+                                )
+                            ) { filter { eq("user_id", userId) } }
+                            Result.success(Unit)
+                        } catch (e: Exception) {
+                            Result.failure(e)
+                        }
+                    }
+                },
+                onChangePassword = { currentPassword, newPassword ->
+                    try {
+                        val email = SupabaseClientProvider.client.auth.currentUserOrNull()?.email
+                            ?: throw Exception("Not logged in.")
+
+                        // Re-authenticate with the current password first — this confirms the
+                        // person changing the password actually knows the old one, rather than
+                        // relying only on "device has an active session" (e.g. an unlocked
+                        // phone left unattended shouldn't be enough to change the password).
+                        SupabaseClientProvider.client.auth.signInWith(Email) {
+                            this.email = email
+                            this.password = currentPassword
+                        }
+
+                        SupabaseClientProvider.client.auth.updateUser { password = newPassword }
+                        Result.success(Unit)
+                    } catch (e: Exception) {
+                        Result.failure(Exception("Current password is incorrect, or the update failed: ${e.message}"))
+                    }
+                }
+            )
+        }
         composable("settings") {
             val scope = rememberCoroutineScope()
+
+            val notificationPermissionLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.RequestPermission()
+            ) { /* granted or denied — token fetch below runs either way */ }
+
+            LaunchedEffect(Unit) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                }
+                // Always try to fetch and save the token, regardless of permission outcome.
+                try {
+                    val token = com.google.firebase.messaging.FirebaseMessaging.getInstance().token.await()
+                    Log.d("FCM", "Fetched token: $token")
+                    ehealthy.connect.util.saveFcmToken(token)
+                } catch (e: Exception) {
+                    Log.e("FCM", "Failed to get/save token", e)
+                }
+            }
             SettingsScreen(
                 isDarkMode = ThemeManager.isDarkMode,
                 onToggleDarkMode = { ThemeManager.updateDarkMode(it) },
+                onNavigateEditProfile = { navController.navigate("editProfile") },
                 onBack = { navController.popBackStack() },
                 onViewPrivacyPolicy = { navController.navigate("privacyPolicy") },
                 onLogout = {
@@ -971,21 +1084,6 @@ fun AppNavGraph() {
                     } catch (_: Exception) {}
                 }
             }
-            val notificationPermissionLauncher = rememberLauncherForActivityResult(
-                contract = ActivityResultContracts.RequestPermission()
-            ) { /* granted or not — either way we still try to register the token below */ }
-
-            LaunchedEffect(Unit) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-                }
-                try {
-                    val token = com.google.firebase.messaging.FirebaseMessaging.getInstance().token.await()
-                    ehealthy.connect.util.saveFcmToken(token)
-                } catch (e: Exception) {
-                    Log.e("FCM", "Failed to get/save token", e)
-                }
-            }
 
             val photoPickerLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.PickVisualMedia()
@@ -1434,6 +1532,14 @@ fun AppNavGraph() {
 
                             val patientName = "${patient?.name ?: ""} ${patient?.surname ?: ""}".trim()
 
+                            val doctorRow = SupabaseClientProvider.client.postgrest
+                                .from("doctors")
+                                .select(columns = Columns.list("name", "surname")) {
+                                    filter { eq("id", doctorId) }
+                                }
+                                .decodeSingleOrNull<DoctorLookup>()
+                            val doctorName = "Dr. ${doctorRow?.name ?: ""} ${doctorRow?.surname ?: ""}".trim()
+
                             val row = buildJsonObject {
                                 put("doctor_id", doctorId)
                                 put("patient_id", userId)
@@ -1447,7 +1553,20 @@ fun AppNavGraph() {
                                 put("appointment_type", if (submission.appointmentType == AppointmentType.ONLINE) "online" else "in_person")
                             }
 
-                            SupabaseClientProvider.client.postgrest.from("appointments").insert(row)
+                            val inserted = SupabaseClientProvider.client.postgrest
+                                .from("appointments")
+                                .insert(row) { select() }
+                                .decodeSingle<Appointment>()
+
+                            BookingConfirmationHolder.confirmation = BookingConfirmation(
+                                doctorName = doctorName,
+                                date = submission.date,
+                                time = submission.time,
+                                reason = submission.reason,
+                                amountPaid = submission.fee,
+                                paymentReference = submission.paymentReference,
+                                reference = inserted.id.take(8).uppercase()
+                            )
 
                             isLoading = false
                             navController.navigate("bookingConfirmed") {
@@ -1647,18 +1766,32 @@ fun AppNavGraph() {
 // ⚠️ PLACEHOLDER — replace with your real BookingConfirmedScreen once you share it.
 // This just stops the app from crashing when a booking succeeds.
         composable("bookingConfirmed") {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Appointment booked!", fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(onClick = {
+            val confirmation = BookingConfirmationHolder.confirmation
+
+            if (confirmation == null) {
+                // Shouldn't normally happen (only reachable via the booking flow),
+                // but guards against a direct/deep-link navigation with nothing to show.
+                LaunchedEffect(Unit) {
+                    navController.navigate("patientDashboard") {
+                        popUpTo("patientDashboard") { inclusive = true }
+                    }
+                }
+            } else {
+                BookingConfirmedScreen(
+                    confirmation = confirmation,
+                    onGoToDashboard = {
+                        BookingConfirmationHolder.confirmation = null
                         navController.navigate("patientDashboard") {
                             popUpTo("patientDashboard") { inclusive = true }
                         }
-                    }) {
-                        Text("Back to Dashboard")
+                    },
+                    onViewAppointments = {
+                        BookingConfirmationHolder.confirmation = null
+                        navController.navigate("patientAppointments") {
+                            popUpTo("patientDashboard") { inclusive = false }
+                        }
                     }
-                }
+                )
             }
         }
 

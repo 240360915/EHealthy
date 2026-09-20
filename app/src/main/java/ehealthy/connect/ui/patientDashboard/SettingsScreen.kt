@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Lock
@@ -23,7 +24,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -39,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -52,6 +53,12 @@ data class PatientSettings(
     val profile_visible: Boolean = true
 )
 
+private val settingsNavy = Color(0xFF1B2A4E)
+private val settingsMuted = Color(0xFF64748B)
+private val settingsBg = Color(0xFFF0F4F8)
+private val settingsAccent = Color(0xFF3B82F6)
+private val settingsRed = Color(0xFFEF4444)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -59,6 +66,7 @@ fun SettingsScreen(
     onUpdateSetting: (PatientSettings) -> Unit,
     isDarkMode: Boolean,
     onToggleDarkMode: (Boolean) -> Unit,
+    onNavigateEditProfile: () -> Unit,
     onViewPrivacyPolicy: () -> Unit,
     onLogout: () -> Unit,
     onBack: () -> Unit
@@ -80,26 +88,32 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 18.sp) },
+                title = { Text("Settings", color = settingsNavy, fontWeight = FontWeight.Bold, fontSize = 18.sp) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
+                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = settingsNavy)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
             )
         },
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = settingsBg
     ) { paddingValues ->
         if (isLoading) {
             Box(
                 modifier = Modifier.fillMaxSize().padding(paddingValues),
                 contentAlignment = Alignment.Center
-            ) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
+            ) { CircularProgressIndicator(color = settingsAccent) }
             return@Scaffold
         }
 
         Column(modifier = Modifier.fillMaxSize().padding(paddingValues).padding(20.dp)) {
+            SettingsSection("Account") {
+                SettingsLinkRow(Icons.Outlined.AccountCircle, "Edit Profile", onNavigateEditProfile)
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             SettingsSection("Appearance") {
                 SettingsToggleRow(
                     Icons.Outlined.DarkMode, "Dark mode",
@@ -138,7 +152,7 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             TextButton(onClick = onLogout, modifier = Modifier.fillMaxWidth()) {
-                Text("Log Out", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                Text("Log Out", color = settingsRed, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -146,9 +160,9 @@ fun SettingsScreen(
 
 @Composable
 private fun SettingsSection(title: String, content: @Composable () -> Unit) {
-    Text(title.uppercase(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp)
+    Text(title.uppercase(), color = settingsMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp)
     Spacer(modifier = Modifier.height(8.dp))
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
         Column { content() }
     }
 }
@@ -159,15 +173,15 @@ private fun SettingsToggleRow(icon: ImageVector, label: String, description: Str
         modifier = Modifier.fillMaxWidth().padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(end = 12.dp))
+        Icon(icon, contentDescription = null, tint = settingsNavy, modifier = Modifier.padding(end = 12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(label, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.5.sp)
+            Text(label, color = settingsNavy, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(description, color = settingsMuted, fontSize = 11.5.sp)
         }
         Switch(
             checked = checked,
             onCheckedChange = onToggle,
-            colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.onPrimary, checkedTrackColor = MaterialTheme.colorScheme.primary)
+            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = settingsAccent)
         )
     }
 }
@@ -181,7 +195,7 @@ private fun SettingsLinkRow(icon: ImageVector, label: String, onClick: () -> Uni
             .clickable(onClick = onClick),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(end = 12.dp))
-        Text(label, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        Icon(icon, contentDescription = null, tint = settingsNavy, modifier = Modifier.padding(end = 12.dp))
+        Text(label, color = settingsNavy, fontSize = 14.sp, fontWeight = FontWeight.Medium)
     }
 }

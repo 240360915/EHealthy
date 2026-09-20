@@ -1,5 +1,6 @@
 package ehealthy.connect.ui.patientDashboard
 
+
 import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.text.style.TextAlign
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.ExitToApp
 import androidx.compose.material.icons.outlined.Lightbulb
+import androidx.compose.material.icons.outlined.Medication
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.RateReview
 import androidx.compose.material.icons.outlined.Settings
@@ -98,6 +100,11 @@ data class Review(
 
 data class ReviewDisplay(
     val review: Review,
+    val doctorName: String
+)
+
+data class PrescriptionDisplay(
+    val prescription: Prescription,
     val doctorName: String
 )
 
@@ -195,11 +202,13 @@ fun PatientDashboard(
     onNavigateMedicalRecords: () -> Unit,
     onNavigateHealthTips: () -> Unit,
     onNavigateSettings: () -> Unit,
+    onNavigatePrescriptions: () -> Unit,
 
     onUploadPhoto: () -> Unit,
     onLogout: () -> Unit,
 
     fetchAppointments: suspend () -> Result<List<Appointment>>,
+    fetchPrescriptions: suspend () -> Result<List<PrescriptionDisplay>>,
     fetchReviews: suspend () -> Result<List<ReviewDisplay>>,
 
     /*
@@ -239,6 +248,46 @@ fun PatientDashboard(
 
     var loadError by remember {
         mutableStateOf<String?>(null)
+    }
+
+    var prescriptions by remember {
+        mutableStateOf<List<PrescriptionDisplay>>(emptyList())
+    }
+
+    var isLoadingPrescriptions by remember {
+        mutableStateOf(true)
+    }
+
+    /*
+     * Keeps prescription-loading errors separate from
+     * appointment-loading errors.
+     */
+    var prescriptionError by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    /*
+     * Load prescriptions.
+     *
+     * Previously, a failed fetch was silently ignored and
+     * the UI displayed "No prescriptions yet." This now
+     * records the actual error so we can see what is wrong.
+     */
+    LaunchedEffect(Unit) {
+        val result = fetchPrescriptions()
+
+        isLoadingPrescriptions = false
+
+        result
+            .onSuccess {
+                prescriptions = it
+                prescriptionError = null
+            }
+            .onFailure {
+                prescriptions = emptyList()
+                prescriptionError =
+                    it.message ?: "Failed to load prescriptions."
+            }
     }
 
     var reviews by remember {
@@ -408,6 +457,10 @@ fun PatientDashboard(
                     appointments = appointments,
                     isLoadingAppointments = isLoadingAppointments,
                     loadError = loadError,
+                    isLoadingPrescriptions = isLoadingPrescriptions,
+                    prescriptionError = prescriptionError,
+                    prescriptions = prescriptions,
+                    onNavigatePrescriptions = onNavigatePrescriptions,
                     reviews = reviews,
                     isLoadingReviews = isLoadingReviews,
                     onNavigateFindDoctors = onNavigateFindDoctors,
@@ -705,10 +758,14 @@ private fun HomeTabContent(
     appointments: List<Appointment>,
     isLoadingAppointments: Boolean,
     loadError: String?,
+    isLoadingPrescriptions: Boolean,
+    prescriptionError: String?,
     reviews: List<ReviewDisplay>,
     isLoadingReviews: Boolean,
     onNavigateFindDoctors: () -> Unit,
     onNavigateAppointments: () -> Unit,
+    prescriptions: List<PrescriptionDisplay>,
+    onNavigatePrescriptions: () -> Unit,
     onNavigateMedicalRecords: () -> Unit,
     onNavigateHealthTips: () -> Unit,
     onAppointmentClick: (Appointment) -> Unit,
@@ -856,6 +913,57 @@ private fun HomeTabContent(
                             fontWeight = FontWeight.SemiBold
                         )
                     }
+                }
+            }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(20.dp))
+            Text(
+                "PRESCRIPTIONS",
+                color = navy, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+        }
+
+        if (isLoadingPrescriptions) {
+            item {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = accent)
+                }
+            }
+        } else if (prescriptions.isEmpty()) {
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(28.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            Icons.Outlined.Medication,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.size(32.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("No prescriptions yet.", color = muted, fontSize = 14.sp)
+                    }
+                }
+            }
+        } else {
+            items(prescriptions.take(3), key = { it.prescription.id }) { pd ->
+                PrescriptionCard(pd)
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+            item {
+                TextButton(onClick = onNavigatePrescriptions) {
+                    Text("View all prescriptions →", color = accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -1199,6 +1307,35 @@ private fun EmptyAppointmentsCard(
                     fontWeight = FontWeight.SemiBold
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun PrescriptionCard(pd: PrescriptionDisplay) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                pd.prescription.medication ?: "Medication not specified",
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "👨‍⚕️ ${pd.doctorName}",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                "📅 ${pd.prescription.created_at?.take(10) ?: "Unknown date"}",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp
+            )
         }
     }
 }

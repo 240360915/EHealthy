@@ -17,8 +17,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -109,13 +113,18 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import ehealthy.connect.ui.patientDashboard.DoctorProfile as PatientDoctorProfile
-
+import ehealthy.connect.ui.patientDashboard.Prescription
 import ehealthy.connect.ui.doctor.DoctorAccountSettings
 import ehealthy.connect.ui.doctor.DoctorSettingsScreen
 import ehealthy.connect.ui.doctor.DoctorTimeSlots
 import ehealthy.connect.ui.doctor.fetchDoctorTimeSlots
 import ehealthy.connect.ui.doctor.saveDoctorTimeSlots
 import ehealthy.connect.ui.doctor.friendlyAuthError
+import ehealthy.connect.ui.patientDashboard.PatientPrescriptionsScreen
+import ehealthy.connect.ui.patientDashboard.PrescriptionDisplay
+
+
+
 @Serializable
 private data class PatientLookup(
     val id: String? = null,
@@ -161,6 +170,7 @@ class MainActivity : ComponentActivity() {
 }
 
 
+@OptIn(ExperimentalMaterial3Api::class)
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun AppNavGraph() {
@@ -725,6 +735,8 @@ fun AppNavGraph() {
 
                     scope.launch {
 
+                        val registrationEmail = data.email.ifBlank { prefilledEmail }
+
                         errorMessage = null
                         isLoading = true
 
@@ -763,7 +775,7 @@ fun AppNavGraph() {
                                         // current database column is named.
                                         "languege" to data.language,
 
-                                        "email" to prefilledEmail,
+                                        "email" to registrationEmail,
                                         "gender" to data.gender,
                                         "province" to data.province,
                                         "address1" to data.address1,
@@ -1517,8 +1529,6 @@ fun AppNavGraph() {
                     } catch (e: Exception) {
 
 
-                        Result.failure(e)
-
                         Result.failure(Exception(friendlyAuthError(e)))
 
                     }
@@ -1553,8 +1563,6 @@ fun AppNavGraph() {
 
                     } catch (e: Exception) {
 
-
-                        Result.failure(e)
 
                         Result.failure(Exception(friendlyAuthError(e)))
 
@@ -1931,22 +1939,6 @@ fun AppNavGraph() {
             }
 
 
-            LaunchedEffect(Unit) {
-
-                scope.launch {
-
-                    SupabaseClientProvider.client.auth
-                        .sessionStatus
-                        .collect { status ->
-
-                            Log.d(
-                                "AuthStatus",
-                                "Session status: $status"
-                            )
-                        }
-                }
-            }
-
 
             LaunchedEffect(Unit) {
 
@@ -2134,6 +2126,9 @@ fun AppNavGraph() {
                     )
                 },
 
+                onNavigatePrescriptions = {
+                    navController.navigate(
+                        "patientPrescriptions") },
                 onNavigateMedicalRecords = {
                     navController.navigate(
                         "medicalRecords"
@@ -2224,6 +2219,52 @@ fun AppNavGraph() {
                 },
 
 
+                fetchPrescriptions = {
+                    val userId = SupabaseClientProvider.client.auth.currentSessionOrNull()?.user?.id
+                    if (userId == null) {
+                        Result.failure(Exception("Not logged in."))
+                    } else {
+                        try {
+                            val patientId = SupabaseClientProvider.client.postgrest
+                                .from("patients")
+                                .select(columns = Columns.list("id")) {
+                                    filter { eq("user_id", userId) }
+                                }
+                                .decodeSingleOrNull<Map<String, String?>>()
+                                ?.get("id")
+                                ?: userId
+
+                            val prescriptionList = SupabaseClientProvider.client.postgrest
+                                .from("prescriptions")
+                                .select { filter { eq("patient_id", patientId) } }
+                                .decodeList<Prescription>()
+
+                            val doctorIds = prescriptionList.mapNotNull { it.doctor_id }.distinct()
+                            val doctorNames: Map<String, String> = if (doctorIds.isEmpty()) {
+                                emptyMap()
+                            } else {
+                                SupabaseClientProvider.client.postgrest
+                                    .from("doctors")
+                                    .select(columns = Columns.list("id", "name", "surname")) {
+                                        filter { isIn("id", doctorIds) }
+                                    }
+                                    .decodeList<Map<String, String?>>()
+                                    .associate { doc ->
+                                        (doc["id"] ?: "") to "Dr. ${doc["name"] ?: ""} ${doc["surname"] ?: ""}".trim()
+                                    }
+                            }
+
+                            val display = prescriptionList
+                                .sortedByDescending { it.created_at }
+                                .map { PrescriptionDisplay(it, doctorNames[it.doctor_id] ?: "Unknown Doctor") }
+
+                            Result.success(display)
+                        } catch (e: Exception) {
+                            Result.failure(e)
+                        }
+                    }
+                },
+
                 fetchReviews = {
 
                     val userId =
@@ -2278,29 +2319,13 @@ fun AppNavGraph() {
                                     SupabaseClientProvider.client
                                         .postgrest
                                         .from("doctors")
-                                        .select {
-                                            filter {
-                                                isIn(
-                                                    "id",
-                                                    doctorIds
-                                                )
-                                            }
+                                        .select(columns = Columns.list("id", "name", "surname")) {
+                                            filter { isIn("id", doctorIds) }
                                         }
                                         .decodeList<Map<String, String?>>()
                                         .associate { doc ->
-
-                                            (
-                                                    doc["id"]
-                                                        ?: ""
-                                                    ) to
-                                                    "Dr. ${
-                                                        doc["name"]
-                                                            ?: ""
-                                                    } ${
-                                                        doc["surname"]
-                                                            ?: ""
-                                                    }"
-                                                        .trim()
+                                            (doc["id"] ?: "") to
+                                                    "Dr. ${doc["name"] ?: ""} ${doc["surname"] ?: ""}".trim()
                                         }
                                 }
 
@@ -2824,31 +2849,13 @@ fun AppNavGraph() {
                                     SupabaseClientProvider.client
                                         .postgrest
                                         .from("doctors")
-                                        .select {
-                                            filter {
-                                                isIn(
-                                                    "id",
-                                                    doctorIds
-                                                )
-                                            }
+                                        .select(columns = Columns.list("id", "name", "surname")) {
+                                            filter { isIn("id", doctorIds) }
                                         }
                                         .decodeList<Map<String, String?>>()
                                         .associate { doc ->
-
-                                            val id =
-                                                doc["id"]
-                                                    ?: ""
-
-                                            val name =
-                                                "Dr. ${
-                                                    doc["name"]
-                                                        ?: ""
-                                                } ${
-                                                    doc["surname"]
-                                                        ?: ""
-                                                }"
-                                                    .trim()
-
+                                            val id = doc["id"] ?: ""
+                                            val name = "Dr. ${doc["name"] ?: ""} ${doc["surname"] ?: ""}".trim()
                                             id to name
                                         }
                                 }
@@ -2995,44 +3002,22 @@ fun AppNavGraph() {
 
 
                 fetchBookedTimes = { date ->
-
                     try {
-
-                        val booked =
-                            SupabaseClientProvider.client
-                                .postgrest
-                                .from("appointments")
-                                .select {
-
-                                    filter {
-
-                                        eq(
-                                            "doctor_id",
-                                            doctorId
-                                        )
-
-                                        eq(
-                                            "date",
-                                            date
-                                        )
-
-                                        neq(
-                                            "status",
-                                            "cancelled"
-                                        )
-                                    }
+                        val booked = SupabaseClientProvider.client.postgrest
+                            .from("appointments")
+                            .select(columns = Columns.list("time")) {
+                                filter {
+                                    eq("doctor_id", doctorId)
+                                    eq("date", date)
+                                    neq("status", "cancelled")
                                 }
-                                .decodeList<Map<String, String?>>()
-                                .mapNotNull {
-                                    it["time"]?.take(5)
-                                }
-                                .toSet()
-
+                            }
+                            .decodeList<Map<String, String?>>()
+                            .mapNotNull { it["time"]?.take(5) }
+                            .toSet()
 
                         Result.success(booked)
-
                     } catch (e: Exception) {
-
                         Result.failure(e)
                     }
                 },
@@ -3058,21 +3043,12 @@ fun AppNavGraph() {
                                     )
 
 
-                            val patient =
-                                SupabaseClientProvider.client
-                                    .postgrest
-                                    .from("patients")
-                                    .select {
-                                        filter {
-                                            eq(
-                                                "user_id",
-                                                userId
-                                            )
-                                        }
-                                    }
-                                    .decodeSingleOrNull<
-                                            Map<String, String?>
-                                            >()
+                            val patient = SupabaseClientProvider.client.postgrest
+                                .from("patients")
+                                .select(columns = Columns.list("name", "surname")) {
+                                    filter { eq("user_id", userId) }
+                                }
+                                .decodeSingleOrNull<Map<String, String?>>()
 
 
                             val patientName =
@@ -3377,21 +3353,12 @@ fun AppNavGraph() {
                                         "Not logged in"
                                     )
 
-                            val appt =
-                                SupabaseClientProvider.client
-                                    .postgrest
-                                    .from("appointments")
-                                    .select {
-                                        filter {
-                                            eq(
-                                                "id",
-                                                appointmentId
-                                            )
-                                        }
-                                    }
-                                    .decodeSingleOrNull<
-                                            Map<String, String?>
-                                            >()
+                            val appt = SupabaseClientProvider.client.postgrest
+                                .from("appointments")
+                                .select(columns = Columns.list("doctor_id")) {
+                                    filter { eq("id", appointmentId) }
+                                }
+                                .decodeSingleOrNull<Map<String, String?>>()
 
                             val doctorId =
                                 appt?.get(
@@ -3621,42 +3588,19 @@ fun AppNavGraph() {
 
                                 try {
 
-                                    val booked =
-                                        SupabaseClientProvider.client
-                                            .postgrest
-                                            .from("appointments")
-                                            .select {
-
-                                                filter {
-
-                                                    eq(
-                                                        "doctor_id",
-                                                        doctorIdForFetch
-                                                    )
-
-                                                    eq(
-                                                        "date",
-                                                        date
-                                                    )
-
-                                                    neq(
-                                                        "status",
-                                                        "cancelled"
-                                                    )
-
-                                                    neq(
-                                                        "id",
-                                                        appointmentId
-                                                    )
-                                                }
+                                    val booked = SupabaseClientProvider.client.postgrest
+                                        .from("appointments")
+                                        .select(columns = Columns.list("time")) {
+                                            filter {
+                                                eq("doctor_id", doctorIdForFetch)
+                                                eq("date", date)
+                                                neq("status", "cancelled")
+                                                neq("id", appointmentId)
                                             }
-                                            .decodeList<
-                                                    Map<String, String?>
-                                                    >()
-                                            .mapNotNull {
-                                                it["time"]?.take(5)
-                                            }
-                                            .toSet()
+                                        }
+                                        .decodeList<Map<String, String?>>()
+                                        .mapNotNull { it["time"]?.take(5) }
+                                        .toSet()
 
 
                                     Result.success(
@@ -3778,6 +3722,69 @@ fun AppNavGraph() {
 
                         Text(
                             "Back to Dashboard"
+                        )
+                    }
+                }
+            }
+        }
+
+        composable("patientPrescriptions") {
+            var prescriptions by remember { mutableStateOf<List<Prescription>>(emptyList()) }
+            var isLoading by remember { mutableStateOf(true) }
+            var errorMessage by remember { mutableStateOf<String?>(null) }
+
+            LaunchedEffect(Unit) {
+                val userId = SupabaseClientProvider.client.auth.currentSessionOrNull()?.user?.id
+                if (userId == null) {
+                    errorMessage = "Not logged in."
+                } else {
+                    try {
+                        val patientId = SupabaseClientProvider.client.postgrest
+                            .from("patients")
+                            .select(columns = Columns.list("id")) {
+                                filter { eq("user_id", userId) }
+                            }
+                            .decodeSingleOrNull<Map<String, String?>>()
+                            ?.get("id")
+                            ?: userId
+
+                        prescriptions = SupabaseClientProvider.client.postgrest
+                            .from("prescriptions")
+                            .select { filter { eq("patient_id", patientId) } }
+                            .decodeList<Prescription>()
+                            .sortedByDescending { it.created_at }
+                    } catch (e: Exception) {
+                        Log.e("PatientPrescriptions", "Failed to load prescriptions", e)
+                        errorMessage = e.message ?: "Could not load prescriptions."
+                    }
+                }
+                isLoading = false
+            }
+
+            androidx.compose.material3.Scaffold(
+                topBar = {
+                    androidx.compose.material3.TopAppBar(
+                        title = { Text("My Prescriptions") },
+                        navigationIcon = {
+                            androidx.compose.material3.IconButton(
+                                onClick = { navController.popBackStack() }
+                            ) {
+                                androidx.compose.material3.Icon(
+                                    androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back"
+                                )
+                            }
+                        }
+                    )
+                }
+            ) { padding ->
+                Box(modifier = Modifier.padding(padding)) {
+                    if (errorMessage != null) {
+                        Text(errorMessage!!, modifier = Modifier.padding(16.dp))
+                    } else {
+                        PatientPrescriptionsScreen(
+                            prescriptions = prescriptions,
+                            isLoading = isLoading
                         )
                     }
                 }

@@ -56,6 +56,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import androidx.compose.foundation.shape.CircleShape
+
+
 private val navy = Color(0xFF0B1828)
 private val ink = Color(0xFF0F1F3D)
 private val muted = Color(0xFF64748B)
@@ -86,23 +89,39 @@ fun categorize(appt: Appointment): AppointmentCategory {
 fun PatientAppointmentsScreen(
     onBack: () -> Unit,
     onFindDoctors: () -> Unit,
+    onViewDoctorProfile: (String) -> Unit,
+    initialCategory: AppointmentCategory = AppointmentCategory.ALL,
+
+    fetchDoctor: suspend (String) -> Result<DoctorProfile>,
+
     fetchAppointments: suspend () -> Result<List<Appointment>>,
+
     fetchReviewedAppointmentIds: suspend () -> Result<Set<String>>,
-    onSubmitReview: (appointmentId: String, doctorId: String?, rating: Int, comment: String) -> Unit,
+
     isSubmittingReview: Boolean,
+
+    onSubmitReview: (
+        String,
+        String?,
+        Int,
+        String
+    ) -> Unit,
+
     onRescheduleAppointment: (String) -> Unit,
+
     cancelAppointment: suspend (String) -> Result<Unit>
 ) {
     var appointments by remember { mutableStateOf<List<Appointment>>(emptyList()) }
     var reviewedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var isLoading by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf<String?>(null) }
-    var selectedCategory by remember { mutableStateOf(AppointmentCategory.ALL) }
+    var selectedCategory by remember { mutableStateOf(initialCategory) }
     var reviewTargetAppointmentId by remember { mutableStateOf<String?>(null) }
     var detailsAppointment by remember { mutableStateOf<Appointment?>(null) }
     var selectedAppointment by remember { mutableStateOf<Appointment?>(null) }
     var isCancelling by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
 
     LaunchedEffect(Unit) {
         val apptResult = fetchAppointments()
@@ -191,6 +210,8 @@ fun PatientAppointmentsScreen(
                             val category = categorize(appt)
                             AppointmentDetailCard(
                                 appt = appt,
+                                fetchDoctor = fetchDoctor,
+                                onViewDoctorProfile = onViewDoctorProfile,
                                 showLeaveReview = category == AppointmentCategory.COMPLETED && appt.id !in reviewedIds,
                                 onLeaveReview = { reviewTargetAppointmentId = appt.id },
                                 onClick = { selectedAppointment = appt }
@@ -325,10 +346,27 @@ private fun Modifier.clickableStar(onClick: () -> Unit): Modifier =
 @Composable
 private fun AppointmentDetailCard(
     appt: Appointment,
+    fetchDoctor: suspend (String) -> Result<DoctorProfile>,
+    onViewDoctorProfile: (String) -> Unit,
     showLeaveReview: Boolean,
     onLeaveReview: () -> Unit,
     onClick: () -> Unit
 ) {
+    var doctor by remember {
+        mutableStateOf<DoctorProfile?>(null)
+    }
+
+    LaunchedEffect(appt.doctor_id) {
+        val doctorId = appt.doctor_id
+
+        if (doctorId != null) {
+            fetchDoctor(doctorId)
+                .onSuccess {
+                    doctor = it
+                }
+        }
+    }
+
     val statusColor = when (appt.status) {
         "confirmed" -> Color(0xFF10B981)
         "pending" -> Color(0xFFF59E0B)
@@ -355,6 +393,76 @@ private fun AppointmentDetailCard(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
+            doctor?.let { doctorInfo ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            val doctorId = appt.doctor_id
+                            if (doctorId != null) {
+                                onViewDoctorProfile(doctorId)
+                            }
+                        }
+                        .padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(teal, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val firstInitial =
+                            doctorInfo.name
+                                ?.trim()
+                                ?.firstOrNull()
+                                ?.uppercaseChar()
+                                ?: 'D'
+
+                        val lastInitial =
+                            doctorInfo.surname
+                                ?.trim()
+                                ?.firstOrNull()
+                                ?.uppercaseChar()
+                                ?: 'R'
+
+                        Text(
+                            text = "$firstInitial$lastInitial",
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.size(12.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Dr. ${doctorInfo.name ?: ""} ${doctorInfo.surname ?: ""}".trim(),
+                            color = ink,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        doctorInfo.discipline?.let { discipline ->
+                            Text(
+                                text = discipline,
+                                color = muted,
+                                fontSize = 12.sp
+                            )
+                        }
+
+                        Text(
+                            text = "View doctor profile",
+                            color = teal,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+            }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("📅 ${appt.date ?: "-"}   🕐 ${appt.time ?: "-"}", color = ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 Box(modifier = Modifier.background(statusBg, RoundedCornerShape(20.dp)).padding(horizontal = 10.dp, vertical = 4.dp)) {

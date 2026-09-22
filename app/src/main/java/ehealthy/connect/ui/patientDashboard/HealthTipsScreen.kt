@@ -795,6 +795,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.LocalDate
 import kotlin.time.Duration.Companion.milliseconds
+import androidx.core.content.edit
 
 enum class TipCategory(val label: String) {
     ALL("All Tips"),
@@ -988,7 +989,7 @@ fun HealthTipsScreen(
         if (tipId !in seenIds) {
             val updated = seenIds + tipId
             seenIds = updated
-            prefs.edit().putStringSet(SEEN_TIP_IDS_KEY, updated).apply()
+            prefs.edit { putStringSet(SEEN_TIP_IDS_KEY, updated) }
         }
     }
 

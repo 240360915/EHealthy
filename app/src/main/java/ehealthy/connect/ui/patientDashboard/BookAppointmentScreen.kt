@@ -24,7 +24,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CreditCard
@@ -112,9 +113,19 @@ private val teal = Color(0xFF0D9488)
 private val tealSoft = Color(0xFFCCFBF1)
 private val red = Color(0xFFDC2626)
 
+
 private val timeSlotOptions =
     listOf("08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00")
 
+private fun currentDateString(): String {
+    val cal = Calendar.getInstance()
+    return "%04d-%02d-%02d".format(cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH))
+}
+
+private fun currentTimeString(): String {
+    val cal = Calendar.getInstance()
+    return "%02d:%02d".format(cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE))
+}
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BookAppointmentScreen(
@@ -128,7 +139,7 @@ fun BookAppointmentScreen(
     var doctor by remember { mutableStateOf<DoctorBookingInfo?>(null) }
     var isLoadingDoctor by rememberSaveable { mutableStateOf(true) }
     var doctorLoadError by rememberSaveable { mutableStateOf<String?>(null) }
-
+    var slotError by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedDate by rememberSaveable { mutableStateOf("") }
     var bookedTimes by rememberSaveable { mutableStateOf(setOf<String>()) }
     var isLoadingSlots by rememberSaveable { mutableStateOf(false) }
@@ -196,7 +207,7 @@ fun BookAppointmentScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = ink)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = ink)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
@@ -315,7 +326,7 @@ fun BookAppointmentScreen(
                     SectionCard(icon = Icons.Outlined.CalendarMonth, title = "Choose a Date", ) {
                         Box(modifier = Modifier.fillMaxWidth()) {
                             OutlinedTextField(
-                                value = if (selectedDate.isBlank()) "" else selectedDate,
+                                value = selectedDate.ifBlank { "" },
                                 onValueChange = {},
                                 enabled = false,
                                 placeholder = { Text("Select appointment date") },
@@ -354,6 +365,7 @@ fun BookAppointmentScreen(
                                                         dateError = "That date is a public holiday — please pick another day."
                                                     else -> {
                                                         dateError = null
+                                                        slotError = null
                                                         selectedDate = dateStr
                                                         selectedTime = null
                                                     }
@@ -399,19 +411,67 @@ fun BookAppointmentScreen(
                                     )
                                 }
                             } else {
+
+                                Spacer(modifier = Modifier.height(14.dp))
+                                slotError?.let {
+                                    Text(it, color = red, fontSize = 12.sp, modifier = Modifier.padding(bottom = 6.dp))
+                                }
+                                androidx.compose.material3.TextButton(
+                                    onClick = {
+                                        val now = Calendar.getInstance()
+                                        android.app.TimePickerDialog(
+                                            context,
+                                            { _, hour, minute ->
+                                                val customTime = "%02d:%02d".format(hour, minute)
+                                                slotError = when {
+                                                    selectedDate == currentDateString() && customTime <= currentTimeString() ->
+                                                        "Please choose a time that hasn't already passed."
+
+                                                    bookedTimes.contains(customTime) ->
+                                                        "That exact time is already booked — please choose another."
+
+                                                    else -> null
+                                                }
+                                                if (slotError == null) selectedTime = customTime
+                                            },
+                                            now.get(Calendar.HOUR_OF_DAY),
+                                            now.get(Calendar.MINUTE),
+                                            true
+                                        ).show()
+                                    }
+                                ) {
+                                    Text("Need an urgent time? Pick any time →", color = teal, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                }
+                                val visibleTimeSlots = remember(selectedDate) {
+                                    if (selectedDate == currentDateString()) {
+                                        timeSlotOptions.filter { it > currentTimeString() }
+                                    } else {
+                                        timeSlotOptions
+                                    }
+                                }
+
                                 Legend()
                                 Spacer(modifier = Modifier.height(12.dp))
-                                LazyVerticalGrid(
-                                    columns = GridCells.Fixed(4),
-                                    modifier = Modifier.height(((timeSlotOptions.size / 4 + 1) * 52).dp)
-                                ) {
-                                    items(timeSlotOptions) { slot ->
-                                        SlotButton(
-                                            label = slot,
-                                            isTaken = bookedTimes.contains(slot),
-                                            isSelected = selectedTime == slot,
-                                            onClick = { selectedTime = slot }
-                                        )
+                                if (visibleTimeSlots.isEmpty()) {
+                                    Text(
+                                        "No more slots left today — pick another date, or use \"Need an urgent time?\" below.",
+                                        color = muted,
+                                        fontSize = 12.5.sp,
+                                        modifier = Modifier.padding(vertical = 8.dp)
+                                    )
+                                } else {
+                                    LazyVerticalGrid(
+                                        columns = GridCells.Fixed(4),
+                                        modifier = Modifier.height(((visibleTimeSlots.size / 4 + 1) * 52).dp)
+                                    ) {
+                                        items(visibleTimeSlots) { slot ->
+                                            SlotButton(
+                                                label = slot,
+                                                isTaken = bookedTimes.contains(slot),
+                                                isSelected = selectedTime == slot,
+                                                onClick = { selectedTime = slot; slotError = null }
+                                            )
+                                        }
                                     }
                                 }
                                 selectedTime?.let {
@@ -796,19 +856,6 @@ private fun CardPreview(name: String, number: String, expiry: String) {
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun SummaryRow(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(label, color = muted, fontSize = 13.5.sp)
-        Text(value, color = ink, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 

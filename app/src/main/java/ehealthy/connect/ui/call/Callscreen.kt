@@ -1,6 +1,5 @@
 package ehealthy.connect.ui.call
 
-
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -112,7 +111,11 @@ fun CallScreen(
             val joinResult = streamCall.join(create = true)
 
             if (joinResult.isFailure) {
-                screenState = CallScreenState.Error("Could not join the call. Please check your connection and try again.")
+                val cause = joinResult.errorOrNull()
+                android.util.Log.e("CallScreen", "Stream join failed: $cause")
+                screenState = CallScreenState.Error(
+                    "Could not join the call.\n\nDetails: ${cause?.message ?: cause.toString()}"
+                )
                 return@LaunchedEffect
             }
 

@@ -20,9 +20,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material3.AlertDialog
@@ -56,7 +57,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import java.time.LocalDate
-import androidx.compose.foundation.shape.CircleShape
 
 
 private val navy = Color(0xFF0B1828)
@@ -108,8 +108,8 @@ fun PatientAppointmentsScreen(
     ) -> Unit,
 
     onRescheduleAppointment: (String) -> Unit,
-
-    cancelAppointment: suspend (String) -> Result<Unit>
+    cancelAppointment: suspend (String) -> Result<Unit>,
+    onRequestCompletionCode: suspend (String) -> Result<String> = { Result.failure(Exception("Not available")) }
 ) {
     var appointments by remember { mutableStateOf<List<Appointment>>(emptyList()) }
     var reviewedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -144,7 +144,7 @@ fun PatientAppointmentsScreen(
                 title = { Text("My Appointments", color = ink, fontWeight = FontWeight.Bold, fontSize = 18.sp) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = ink)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = ink)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
@@ -262,6 +262,15 @@ fun PatientAppointmentsScreen(
                     isCancelling = false
                     selectedAppointment = null
                 }
+            },
+            onRequestCompletionCode = { appointmentId ->
+                val result = onRequestCompletionCode(appointmentId)
+                result.onSuccess { code ->
+                    appointments = appointments.map {
+                        if (it.id == appointmentId) it.copy(completion_code = code) else it
+                    }
+                }
+                result
             }
         )
     }
@@ -281,6 +290,10 @@ private fun AppointmentListDetailsDialog(appt: Appointment, onDismiss: () -> Uni
                 Text("Visit type: ${if (appt.appointment_type == "online") "Online" else "In Person"}")
                 appt.payment_method?.let { Text("Payment method: $it") }
                 appt.amount_paid?.let { Text("Amount paid: R %.2f".format(it)) }
+                cancellationExplanation(appt)?.let {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(it)
+                }
             }
         },
         confirmButton = {
@@ -478,6 +491,10 @@ private fun AppointmentDetailCard(
             appt.amount_paid?.let {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text("💰 R %.2f".format(it), color = muted, fontSize = 13.sp)
+            }
+            cancellationExplanation(appt)?.let {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(it, color = muted, fontSize = 12.sp, lineHeight = 16.sp)
             }
             if (showLeaveReview) {
                 Spacer(modifier = Modifier.height(10.dp))

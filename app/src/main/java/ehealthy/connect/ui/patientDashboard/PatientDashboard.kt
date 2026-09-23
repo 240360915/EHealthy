@@ -1,9 +1,6 @@
 package ehealthy.connect.ui.patientDashboard
 
 
-import androidx.compose.material3.AlertDialog
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.text.style.TextAlign
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
@@ -35,6 +32,7 @@ import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.RateReview
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Videocam
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -53,6 +51,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,6 +60,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -72,6 +72,7 @@ import kotlinx.serialization.Serializable
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
+import kotlin.time.Duration.Companion.milliseconds
 
 @Serializable
 data class Appointment(
@@ -84,8 +85,26 @@ data class Appointment(
     val payment_method: String? = null,
     val amount_paid: Double? = null,
     val doctor_id: String? = null,
-    val appointment_type: String? = null
+    val appointment_type: String? = null,
+    val completion_code: String? = null,
+    val cancelled_reason: String? = null,
+    val refund_percent: Double? = null
 )
+
+/**
+ * A short, patient-facing explanation for a cancelled appointment, when the
+ * backend recorded a specific reason (doctor/patient no-show). Returns null
+ * for manual cancellations, which need no extra explanation.
+ */
+fun cancellationExplanation(appt: Appointment): String? {
+    if (appt.status != "cancelled") return null
+    val percent = appt.refund_percent?.toInt()
+    return when (appt.cancelled_reason) {
+        "doctor_no_show" -> "The doctor didn't join within 5 minutes — you were refunded${percent?.let { " $it%" } ?: " in full"}."
+        "patient_no_show" -> "You didn't join in time, so this was cancelled${percent?.let { " with a $it% refund" } ?: ""}. A portion goes to the doctor for the missed time."
+        else -> null
+    }
+}
 
 @Serializable
 data class Review(
@@ -225,8 +244,10 @@ fun PatientDashboard(
 
     onRescheduleAppointment: (String) -> Unit,
     cancelAppointment: suspend (String) -> Result<Unit>,
-
-    onStartCall: (String) -> Unit = {}
+    onStartCall: (String) -> Unit = {},
+    onRequestCompletionCode: suspend (String) -> Result<String> = {
+        Result.failure(Exception("Not available"))
+    }
 ) {
     val background = MaterialTheme.colorScheme.background
     val navy = MaterialTheme.colorScheme.onBackground
@@ -329,7 +350,7 @@ fun PatientDashboard(
 
     LaunchedEffect(Unit) {
         while (true) {
-            delay(30_000)
+            delay(30_000.milliseconds)
             now = LocalDateTime.now()
         }
     }
@@ -551,6 +572,15 @@ fun PatientDashboard(
                     isCancelling = false
                     selectedAppointment = null
                 }
+            },
+            onRequestCompletionCode = { appointmentId ->
+                val result = onRequestCompletionCode(appointmentId)
+                result.onSuccess { code ->
+                    appointments = appointments.map {
+                        if (it.id == appointmentId) it.copy(completion_code = code) else it
+                    }
+                }
+                result
             }
         )
     }
@@ -1148,7 +1178,6 @@ private fun ProfileTabContent(
         )
 
         Spacer(modifier = Modifier.height(8.dp))
-
         ProfileMenuItem(
             Icons.Outlined.ExitToApp,
             "Logout",
@@ -1566,6 +1595,16 @@ private fun AppointmentCard(
                     )
                 }
 
+                cancellationExplanation(appt)?.let { explanation ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        explanation,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp
+                    )
+                }
+
                 if (isOnline && !isCancelled) {
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -1700,6 +1739,7 @@ private fun AppointmentDetailsDialog(
         },
 
         text = {
+
 
             Column(
                 modifier = Modifier.fillMaxWidth()
@@ -1898,6 +1938,16 @@ private fun AppointmentDetailsDialog(
                     Text(
                         "Amount paid: R %.2f".format(it),
                         fontSize = 13.sp
+                    )
+                }
+
+                cancellationExplanation(appt)?.let { explanation ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        explanation,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp
                     )
                 }
             }

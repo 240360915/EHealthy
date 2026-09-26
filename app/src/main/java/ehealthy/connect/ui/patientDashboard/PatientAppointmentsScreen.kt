@@ -57,13 +57,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import androidx.compose.material3.MaterialTheme
 
-
-private val navy = Color(0xFF0B1828)
-private val ink = Color(0xFF0F1F3D)
-private val muted = Color(0xFF64748B)
-private val teal = Color(0xFF0D9488)
-private val bg = Color(0xFFF4F7FA)
 
 enum class AppointmentCategory(val label: String) {
     ALL("All"),
@@ -121,7 +116,11 @@ fun PatientAppointmentsScreen(
     var selectedAppointment by remember { mutableStateOf<Appointment?>(null) }
     var isCancelling by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-
+    val navy = MaterialTheme.colorScheme.primary
+    val ink = MaterialTheme.colorScheme.onSurface
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val teal = MaterialTheme.colorScheme.primary
+    val bg = MaterialTheme.colorScheme.background
 
     LaunchedEffect(Unit) {
         val apptResult = fetchAppointments()
@@ -147,7 +146,7 @@ fun PatientAppointmentsScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = ink)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
         },
         containerColor = bg
@@ -168,8 +167,8 @@ fun PatientAppointmentsScreen(
                         shape = RoundedCornerShape(20.dp),
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = navy,
-                            selectedLabelColor = Color.White,
-                            containerColor = Color.White,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                            containerColor = MaterialTheme.colorScheme.surface,
                             labelColor = muted
                         ),
                         border = null
@@ -308,6 +307,8 @@ private fun ReviewDialog(
     onDismiss: () -> Unit,
     onSubmit: (rating: Int, comment: String) -> Unit
 ) {
+    val teal = MaterialTheme.colorScheme.primary
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
     var rating by remember { mutableIntStateOf(5) }
     var comment by remember { mutableStateOf("") }
 
@@ -368,6 +369,9 @@ private fun AppointmentDetailCard(
     var doctor by remember {
         mutableStateOf<DoctorProfile?>(null)
     }
+    val ink = MaterialTheme.colorScheme.onSurface
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val teal = MaterialTheme.colorScheme.primary
 
     LaunchedEffect(appt.doctor_id) {
         val doctorId = appt.doctor_id
@@ -401,7 +405,7 @@ private fun AppointmentDetailCard(
     }
 
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(14.dp),
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
     ) {
@@ -441,7 +445,7 @@ private fun AppointmentDetailCard(
 
                         Text(
                             text = "$firstInitial$lastInitial",
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onPrimary,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold
                         )

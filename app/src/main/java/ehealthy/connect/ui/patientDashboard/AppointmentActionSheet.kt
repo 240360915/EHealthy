@@ -40,7 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
-
+import androidx.compose.material3.MaterialTheme
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppointmentActionSheet(
@@ -51,10 +51,10 @@ fun AppointmentActionSheet(
     onCancel: () -> Unit,
     onRequestCompletionCode: suspend (String) -> Result<String> = { Result.failure(Exception("Not available")) }
 ) {
-    val navy = Color(0xFF0F1F3D)
-    val muted = Color(0xFF64748B)
+    val navy = MaterialTheme.colorScheme.onSurface
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val danger = Color(0xFFEF4444)
-    val teal = Color(0xFF0D9488)
+    val teal = MaterialTheme.colorScheme.primary
     val sheetState = rememberModalBottomSheetState()
     val scope = rememberCoroutineScope()
 
@@ -167,7 +167,7 @@ fun AppointmentActionSheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFFF0FDF9))
+                            .background(MaterialTheme.colorScheme.primaryContainer)
                             .padding(vertical = 20.dp),
                         contentAlignment = Alignment.Center
                     ) {

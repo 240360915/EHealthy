@@ -1,4 +1,4 @@
-package ehealthy.connect.ui.doctor
+package ehealthy.connect.ui.doctorDashboard
 
 import android.content.Context
 import android.net.Uri

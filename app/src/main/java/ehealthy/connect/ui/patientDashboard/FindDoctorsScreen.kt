@@ -52,7 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import kotlinx.serialization.Serializable
-
+import androidx.compose.material3.MaterialTheme
 @Serializable
 data class DoctorListing(
     val id: String,
@@ -74,10 +74,10 @@ fun FindDoctorsScreen(
     onViewProfile: (DoctorListing) -> Unit,
     fetchDoctors: suspend () -> Result<List<DoctorListing>>
 ) {
-    val background = Color(0xFFF0F4F8)
-    val navy = Color(0xFF0B1828)
-    val teal = Color(0xFF0D9488)
-    val muted = Color(0xFF64748B)
+    val background = MaterialTheme.colorScheme.background
+    val navy = MaterialTheme.colorScheme.primary
+    val teal = MaterialTheme.colorScheme.primary
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
 
     var allDoctors by remember { mutableStateOf<List<DoctorListing>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
@@ -127,7 +127,7 @@ fun FindDoctorsScreen(
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = navy)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
         }
     ) { paddingValues ->
@@ -261,7 +261,7 @@ private fun DoctorCard(
     onBookNow: () -> Unit
 ) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -294,7 +294,7 @@ private fun DoctorCard(
                             "${doc.name.firstOrNull() ?: ' '}${doc.surname.firstOrNull() ?: ' '}"
                         Text(
                             initials.uppercase(),
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onPrimary,
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
                         )
@@ -334,7 +334,7 @@ private fun DoctorCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFFF0FDF9))
+                    .background(MaterialTheme.colorScheme.primaryContainer)
                     .padding(horizontal = 14.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
@@ -357,7 +357,7 @@ private fun DoctorCard(
             ) {
                 Text(
                     "Book Now",
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
                 )

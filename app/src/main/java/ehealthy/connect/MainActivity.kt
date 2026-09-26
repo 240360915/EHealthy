@@ -33,19 +33,19 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import ehealthy.connect.ui.common.PrivacyPolicyScreen
 import ehealthy.connect.ui.common.isPasswordStrong
-import ehealthy.connect.ui.doctor.DoctorAccountSettings
-import ehealthy.connect.ui.doctor.DoctorDashboard
-import ehealthy.connect.ui.doctor.DoctorForgotPassword
+import ehealthy.connect.ui.doctorDashboard.DoctorAccountSettings
+import ehealthy.connect.ui.doctorDashboard.DoctorDashboard
+import ehealthy.connect.ui.doctorDashboard.DoctorForgotPassword
 import ehealthy.connect.ui.doctor.DoctorLogin
-import ehealthy.connect.ui.doctor.DoctorPrescriptions
-import ehealthy.connect.ui.doctor.DoctorProfile
-import ehealthy.connect.ui.doctor.DoctorProfileRow
+import ehealthy.connect.ui.doctorDashboard.DoctorPrescriptions
+import ehealthy.connect.ui.doctorDashboard.DoctorProfile
+import ehealthy.connect.ui.doctorDashboard.DoctorProfileRow
 import ehealthy.connect.ui.doctor.DoctorRegister
-import ehealthy.connect.ui.doctor.DoctorRegistrationFiles
+import ehealthy.connect.ui.doctorDashboard.DoctorRegistrationFiles
 import ehealthy.connect.ui.doctor.DoctorResetPassword
-import ehealthy.connect.ui.doctor.DoctorSettingsScreen
-import ehealthy.connect.ui.doctor.DoctorTimeSlots
-import ehealthy.connect.ui.doctor.PrescriptionPatient
+import ehealthy.connect.ui.doctorDashboard.DoctorSettingsScreen
+import ehealthy.connect.ui.doctorDashboard.DoctorTimeSlots
+import ehealthy.connect.ui.doctorDashboard.PrescriptionPatient
 import ehealthy.connect.ui.doctor.fetchConfirmedPrescriptionPatients
 import ehealthy.connect.ui.doctor.fetchDoctorTimeSlots
 import ehealthy.connect.ui.doctor.friendlyAuthError
@@ -54,9 +54,9 @@ import ehealthy.connect.ui.doctor.saveDoctorTimeSlots
 import ehealthy.connect.ui.doctor.savePrescription
 import ehealthy.connect.ui.doctor.sendDoctorPasswordResetEmail
 import ehealthy.connect.ui.doctor.signInDoctorWithEmail
-import ehealthy.connect.ui.doctor.toDoctorProfile
-import ehealthy.connect.ui.doctor.uploadDoctorProfilePhoto
-import ehealthy.connect.ui.doctor.uriToDoctorFileUpload
+import ehealthy.connect.ui.doctorDashboard.toDoctorProfile
+import ehealthy.connect.ui.doctorDashboard.uploadDoctorProfilePhoto
+import ehealthy.connect.ui.doctorDashboard.uriToDoctorFileUpload
 import ehealthy.connect.ui.doctor.verifyDoctorResetCodeAndSetPassword
 import ehealthy.connect.ui.onboarding.ChooseRoleScreen
 import ehealthy.connect.ui.onboarding.OnBoardingScreenThree
@@ -132,9 +132,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         ThemeManager.init(this)
         enableEdgeToEdge()
+        val pendingRoute = intent.getStringExtra("navigateTo")
         setContent {
             EHealthyTheme(darkTheme = ThemeManager.isDarkMode) {   // add darkTheme = ThemeManager.isDarkMode
-                AppNavGraph()
+                AppNavGraph(pendingRoute = pendingRoute)
             }
         }
     }
@@ -150,8 +151,15 @@ private data class DoctorLookup(
 )
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun AppNavGraph() {
+fun AppNavGraph(pendingRoute: String? = null) {
     val navController = rememberNavController()
+
+    LaunchedEffect(pendingRoute) {
+        if (pendingRoute != null) {
+            navController.navigate(pendingRoute)
+        }
+    }
+
     NavHost(navController = navController, startDestination = "splash") {
 
         composable("splash") {
@@ -889,7 +897,50 @@ fun AppNavGraph() {
                 },
                 onNavigatePrescriptions = { navController.navigate("doctorPrescriptions") },
                 onNavigateSettings = { navController.navigate("doctorSettings") },
-                onNavigateTimeSlots = { navController.navigate("doctorTimeSlots") }
+                onNavigateTimeSlots = { navController.navigate("doctorTimeSlots") },
+                onStartCall = { appointmentId -> navController.navigate("doctorCall/$appointmentId") }
+            )
+        }
+
+        composable(
+            "doctorCall/{appointmentId}",
+            arguments = listOf(navArgument("appointmentId") { defaultValue = "" })
+        ) { backStackEntry ->
+            val appointmentId = backStackEntry.arguments?.getString("appointmentId") ?: ""
+
+            ehealthy.connect.ui.call.CallScreen(
+                appointmentId = appointmentId,
+                displayName = "Doctor",
+                isDoctorView = true,
+                fetchAppointmentStatus = {
+                    try {
+                        val row = SupabaseClientProvider.client.postgrest
+                            .from("appointments")
+                            .select(columns = Columns.list("status", "cancelled_reason")) {
+                                filter { eq("id", appointmentId) }
+                            }
+                            .decodeSingleOrNull<Map<String, String?>>()
+                        Result.success(
+                            ehealthy.connect.ui.call.CallAppointmentStatus(
+                                status = row?.get("status"),
+                                cancelledReason = row?.get("cancelled_reason")
+                            )
+                        )
+                    } catch (e: Exception) {
+                        Result.failure(e)
+                    }
+                },
+                onJoined = {
+                    try {
+                        SupabaseClientProvider.client.postgrest.from("appointments")
+                            .update({ set("call_joined_doctor_at", java.time.Instant.now().toString()) }) {
+                                filter { eq("id", appointmentId) }
+                            }
+                    } catch (e: Exception) {
+                        Log.e("CallScreen", "Failed to mark doctor joined", e)
+                    }
+                },
+                onBack = { navController.popBackStack() }
             )
         }
 
@@ -1298,7 +1349,7 @@ fun AppNavGraph() {
                         Result.failure(e)
                     }
                 },
-                onMarkPatientJoined = {
+                onJoined = {
                     try {
                         SupabaseClientProvider.client.postgrest.from("appointments")
                             .update({ set("call_joined_patient_at", java.time.Instant.now().toString()) }) {

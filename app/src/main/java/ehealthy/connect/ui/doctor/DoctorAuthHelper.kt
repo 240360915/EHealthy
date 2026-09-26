@@ -1,5 +1,10 @@
 package ehealthy.connect.ui.doctor
 
+import ehealthy.connect.ui.doctorDashboard.DoctorRegistrationFiles
+import ehealthy.connect.ui.doctorDashboard.PrescriptionPatient
+import ehealthy.connect.ui.doctorDashboard.TimeSlotRow
+import ehealthy.connect.ui.doctorDashboard.uploadDoctorDocument
+import ehealthy.connect.ui.doctorDashboard.uploadDoctorProfilePhoto
 import ehealthy.connect.util.SupabaseClientProvider
 import io.github.jan.supabase.auth.OtpType
 import io.github.jan.supabase.auth.auth
@@ -78,12 +83,48 @@ suspend fun registerDoctor(
         val hourlyRate = info.consultationFee.trim().toDoubleOrNull()
 
         val profilePhotoUrl = files.profilePhoto?.let { uploadDoctorProfilePhoto(userId, it) }
-        val idDocumentPath = files.idDocument?.let { uploadDoctorDocument(userId, "id_document", it) }
-        val hpcsaCertPath = files.hpcsaCertificate?.let { uploadDoctorDocument(userId, "hpcsa_certificate", it) }
-        val medicalDegreePath = files.medicalDegree?.let { uploadDoctorDocument(userId, "medical_degree", it) }
-        val specialistCertPath = files.specialistCertificate?.let { uploadDoctorDocument(userId, "specialist_certificate", it) }
-        val practiceCertPath = files.practiceCertificate?.let { uploadDoctorDocument(userId, "practice_certificate", it) }
-        val proofOfAddressPath = files.proofOfAddress?.let { uploadDoctorDocument(userId, "proof_of_address", it) }
+        val idDocumentPath = files.idDocument?.let {
+            uploadDoctorDocument(
+                userId,
+                "id_document",
+                it
+            )
+        }
+        val hpcsaCertPath = files.hpcsaCertificate?.let {
+            uploadDoctorDocument(
+                userId,
+                "hpcsa_certificate",
+                it
+            )
+        }
+        val medicalDegreePath = files.medicalDegree?.let {
+            uploadDoctorDocument(
+                userId,
+                "medical_degree",
+                it
+            )
+        }
+        val specialistCertPath = files.specialistCertificate?.let {
+            uploadDoctorDocument(
+                userId,
+                "specialist_certificate",
+                it
+            )
+        }
+        val practiceCertPath = files.practiceCertificate?.let {
+            uploadDoctorDocument(
+                userId,
+                "practice_certificate",
+                it
+            )
+        }
+        val proofOfAddressPath = files.proofOfAddress?.let {
+            uploadDoctorDocument(
+                userId,
+                "proof_of_address",
+                it
+            )
+        }
 
         val row = buildJsonObject {
             put("practice_number", info.practiceNumber)
@@ -189,7 +230,7 @@ suspend fun savePrescription(
  *  expose patient_id and I haven't confirmed a FK relationship exists. */
 suspend fun fetchConfirmedPrescriptionPatients(doctorId: String): Result<List<PrescriptionPatient>> {
     return try {
-        @kotlinx.serialization.Serializable
+        @Serializable
         data class Row(val patient_id: String? = null, val patient_name: String? = null)
 
         val rows = SupabaseClientProvider.client.postgrest

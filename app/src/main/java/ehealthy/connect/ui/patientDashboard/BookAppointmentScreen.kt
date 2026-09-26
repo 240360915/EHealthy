@@ -68,7 +68,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.serialization.Serializable
 import java.util.Calendar
-
+import androidx.compose.material3.MaterialTheme
 @Serializable
 data class DoctorBookingInfo(
     val id: String,
@@ -105,13 +105,7 @@ private val publicHolidays = setOf(
     "2026-12-25", // Christmas Day
     "2026-12-26"  // Day of Goodwill
 )
-private val navy = Color(0xFF0B1828)
-private val ink = Color(0xFF0F1F3D)
-private val muted = Color(0xFF64748B)
-private val bg = Color(0xFFF4F7FA)
-private val teal = Color(0xFF0D9488)
-private val tealSoft = Color(0xFFCCFBF1)
-private val red = Color(0xFFDC2626)
+
 
 
 private val timeSlotOptions =
@@ -157,6 +151,13 @@ fun BookAppointmentScreen(
     var dateError by rememberSaveable { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val calendar = Calendar.getInstance()
+    val navy = MaterialTheme.colorScheme.primary
+    val ink = MaterialTheme.colorScheme.onSurface
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val bg = MaterialTheme.colorScheme.background
+    val teal = MaterialTheme.colorScheme.primary
+    val tealSoft = MaterialTheme.colorScheme.primaryContainer
+    val red = Color(0xFFDC2626)
     val banks = listOf(
         "Capitec",
         "FNB",
@@ -165,7 +166,8 @@ fun BookAppointmentScreen(
         "TymeBank",
         "African Bank",
         "Discovery Bank",
-        "Investec"
+        "Investec",
+        "NedBank"
     )
 
     LaunchedEffect(Unit) {
@@ -210,7 +212,7 @@ fun BookAppointmentScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = ink)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
         },
         bottomBar = {
@@ -219,7 +221,7 @@ fun BookAppointmentScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color.White)
+                        .background(MaterialTheme.colorScheme.surface)
                         .padding(horizontal = 20.dp, vertical = 12.dp)
                 ) {
                     (localError ?: errorMessage)?.let {
@@ -278,9 +280,9 @@ fun BookAppointmentScreen(
                         shape = RoundedCornerShape(14.dp)
                     ) {
                         if (isLoading) {
-                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                         } else {
-                            Text("Confirm & Pay Booking", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Text("Confirm & Pay Booking", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                         }
                     }
                 }
@@ -323,7 +325,7 @@ fun BookAppointmentScreen(
                     DoctorBanner(doc)
 
                     // ---- DATE ----
-                    SectionCard(icon = Icons.Outlined.CalendarMonth, title = "Choose a Date", ) {
+                    SectionCard(icon = Icons.Outlined.CalendarMonth, title = "Choose a Date") {
                         Box(modifier = Modifier.fillMaxWidth()) {
                             OutlinedTextField(
                                 value = selectedDate.ifBlank { "" },
@@ -678,6 +680,8 @@ fun BookAppointmentScreen(
 
 @Composable
 private fun DoctorBanner(doc: DoctorBookingInfo) {
+    val teal = MaterialTheme.colorScheme.primary
+    val navy = MaterialTheme.colorScheme.primary
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -720,8 +724,11 @@ private fun SectionCard(
     title: String,
     content: @Composable () -> Unit
 ) {
+    val teal = MaterialTheme.colorScheme.primary
+    val ink = MaterialTheme.colorScheme.onSurface
+
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier
             .fillMaxWidth()
@@ -752,10 +759,15 @@ private fun VisitTypeOption(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val teal = MaterialTheme.colorScheme.primary
+    val tealSoft = MaterialTheme.colorScheme.primaryContainer
+    val ink = MaterialTheme.colorScheme.onSurface
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) tealSoft else Color(0xFFF4F7FA))
+            .background(if (selected) tealSoft else MaterialTheme.colorScheme.surfaceVariant)
             .clickable(onClick = onClick)
             .padding(14.dp)
     ) {
@@ -769,15 +781,20 @@ private fun VisitTypeOption(
 
 @Composable
 private fun Legend() {
+    val teal = MaterialTheme.colorScheme.primary
+    val navy = MaterialTheme.colorScheme.primary
+
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         LegendItem(teal, "Available")
-        LegendItem(red, "Booked")
+        LegendItem(Color(0xFFDC2626), "Booked")
         LegendItem(navy, "Your pick")
     }
 }
 
 @Composable
 private fun LegendItem(color: Color, label: String) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
             modifier = Modifier
@@ -792,9 +809,13 @@ private fun LegendItem(color: Color, label: String) {
 
 @Composable
 private fun SlotButton(label: String, isTaken: Boolean, isSelected: Boolean, onClick: () -> Unit) {
+    val navy = MaterialTheme.colorScheme.primary
+    val tealSoft = MaterialTheme.colorScheme.primaryContainer
+    val teal = MaterialTheme.colorScheme.primary
+
     val (bgColor, textColor) = when {
-        isSelected -> navy to Color.White
-        isTaken -> Color(0xFFFEE2E2) to red
+        isSelected -> navy to MaterialTheme.colorScheme.onPrimary
+        isTaken -> Color(0xFFFEE2E2) to Color(0xFFDC2626)
         else -> tealSoft to teal
     }
     Box(

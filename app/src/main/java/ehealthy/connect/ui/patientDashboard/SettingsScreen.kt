@@ -45,7 +45,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.serialization.Serializable
-
+import androidx.compose.material3.MaterialTheme
 @Serializable
 data class PatientSettings(
     val email_notifications: Boolean = true,
@@ -53,10 +53,8 @@ data class PatientSettings(
     val profile_visible: Boolean = true
 )
 
-private val settingsNavy = Color(0xFF1B2A4E)
-private val settingsMuted = Color(0xFF64748B)
-private val settingsBg = Color(0xFFF0F4F8)
-private val settingsAccent = Color(0xFF3B82F6)
+// Logout stays a fixed semantic red regardless of theme — it's a warning
+// color, not a surface color, so it doesn't need to flip with dark mode.
 private val settingsRed = Color(0xFFEF4444)
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -88,24 +86,31 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings", color = settingsNavy, fontWeight = FontWeight.Bold, fontSize = 18.sp) },
+                title = {
+                    Text(
+                        "Settings",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = settingsNavy)
+                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
         },
-        containerColor = settingsBg
-    ) { paddingValues ->
-        if (isLoading) {
-            Box(
-                modifier = Modifier.fillMaxSize().padding(paddingValues),
-                contentAlignment = Alignment.Center
-            ) { CircularProgressIndicator(color = settingsAccent) }
-            return@Scaffold
-        }
+        containerColor = MaterialTheme.colorScheme.background
+        ) { paddingValues ->
+            if (isLoading) {
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(paddingValues),
+                    contentAlignment = Alignment.Center
+                ) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
+                return@Scaffold
+            }
 
         Column(modifier = Modifier.fillMaxSize().padding(paddingValues).padding(20.dp)) {
             SettingsSection("Account") {
@@ -160,9 +165,19 @@ fun SettingsScreen(
 
 @Composable
 private fun SettingsSection(title: String, content: @Composable () -> Unit) {
-    Text(title.uppercase(), color = settingsMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp)
+    Text(
+        title.uppercase(),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 0.6.sp
+    )
     Spacer(modifier = Modifier.height(8.dp))
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
         Column { content() }
     }
 }
@@ -173,15 +188,18 @@ private fun SettingsToggleRow(icon: ImageVector, label: String, description: Str
         modifier = Modifier.fillMaxWidth().padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, contentDescription = null, tint = settingsNavy, modifier = Modifier.padding(end = 12.dp))
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(end = 12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(label, color = settingsNavy, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            Text(description, color = settingsMuted, fontSize = 11.5.sp)
+            Text(label, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.5.sp)
         }
         Switch(
             checked = checked,
             onCheckedChange = onToggle,
-            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = settingsAccent)
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = MaterialTheme.colorScheme.primary
+            )
         )
     }
 }
@@ -195,7 +213,7 @@ private fun SettingsLinkRow(icon: ImageVector, label: String, onClick: () -> Uni
             .clickable(onClick = onClick),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, contentDescription = null, tint = settingsNavy, modifier = Modifier.padding(end = 12.dp))
-        Text(label, color = settingsNavy, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(end = 12.dp))
+        Text(label, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
     }
 }

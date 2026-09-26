@@ -17,7 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-
+import androidx.compose.material3.MaterialTheme
 enum class PatientTab(
     val label: String,
     val selectedIcon: ImageVector,
@@ -34,10 +34,10 @@ fun PatientBottomNavBar(
     selectedTab: PatientTab,
     onTabSelected: (PatientTab) -> Unit
 ) {
-    val accent = Color(0xFF3B82F6)
-    val muted = Color(0xFF94A3B8)
+    val accent = MaterialTheme.colorScheme.primary
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
 
-    NavigationBar(containerColor = Color.White) {
+    NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
         PatientTab.entries.forEach { tab ->
             val selected = tab == selectedTab
             NavigationBarItem(

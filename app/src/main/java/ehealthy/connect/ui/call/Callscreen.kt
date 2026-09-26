@@ -26,8 +26,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,6 +47,7 @@ import io.getstream.video.android.core.GEO
 import io.getstream.video.android.core.StreamVideoBuilder
 import io.getstream.video.android.model.User
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
 private val navy = Color(0xFF0B1828)
@@ -59,38 +62,51 @@ private const val STREAM_API_KEY = "67jj8rzevh48"
 private sealed class CallScreenState {
     data object Loading : CallScreenState()
     data class Error(val message: String) : CallScreenState()
-    data object WaitingForDoctor : CallScreenState()
-    data object DoctorNotAvailable : CallScreenState()
+    data object Waiting : CallScreenState()
+    data object OtherPartyNotAvailable : CallScreenState()
     data object InCall : CallScreenState()
     data object AppointmentCancelled : CallScreenState()
+    data object NoAnswer : CallScreenState()
 }
 
 /**
  * Minimal shape of what this screen needs to know about the appointment's
  * live status — passed in via a polling fetch so we can detect the backend
- * cron job cancelling the appointment (doctor no-show) while we're waiting.
+ * cron job cancelling the appointment (no-show) while we're waiting.
  */
 data class CallAppointmentStatus(
     val status: String?,
     val cancelledReason: String?
 )
 
+/**
+ * Shared call screen for both patient and doctor. Set [isDoctorView] to true
+ * when a doctor is joining — this swaps the waiting-room copy ("waiting for
+ * the patient" instead of "waiting for the doctor"), hides the Reschedule
+ * action (that's a patient-only action), and keeps cancellation messaging
+ * generic rather than patient-specific refund wording.
+ */
 @Composable
 fun CallScreen(
     appointmentId: String,
     displayName: String,
+    isDoctorView: Boolean = false,
     fetchAppointmentStatus: suspend () -> Result<CallAppointmentStatus>,
-    onMarkPatientJoined: suspend () -> Unit,
+    onJoined: suspend () -> Unit,
     onBack: () -> Unit,
-    onReschedule: () -> Unit
+    onReschedule: () -> Unit = onBack
 ) {
-    val context = LocalContext.current
-
     var screenState by remember { mutableStateOf<CallScreenState>(CallScreenState.Loading) }
     var call by remember { mutableStateOf<Call?>(null) }
+    var retryKey by remember { mutableIntStateOf(0) }
+    var waitingSince by remember { mutableStateOf<Long?>(null) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     // ---- Set up Stream client + join the call ----
-    LaunchedEffect(Unit) {
+    LaunchedEffect(retryKey) {
+        screenState = CallScreenState.Loading
+
         try {
             val tokenResult = fetchStreamToken()
             val tokenResponse = tokenResult.getOrElse {
@@ -120,16 +136,17 @@ fun CallScreen(
             }
 
             call = streamCall
-            onMarkPatientJoined()
-            screenState = CallScreenState.WaitingForDoctor
+            onJoined()
+            waitingSince = System.currentTimeMillis()
+            screenState = CallScreenState.Waiting
         } catch (e: Exception) {
             screenState = CallScreenState.Error(e.message ?: "Something went wrong starting the call.")
         }
     }
 
-    // ---- Watch for the doctor actually joining ----
+    // ---- Watch for the other party actually joining ----
     val currentCall = call
-    if (currentCall != null && screenState is CallScreenState.WaitingForDoctor) {
+    if (currentCall != null && screenState is CallScreenState.Waiting) {
         val remoteParticipants by currentCall.state.remoteParticipants.collectAsState()
         LaunchedEffect(remoteParticipants.size) {
             if (remoteParticipants.isNotEmpty()) {
@@ -138,15 +155,29 @@ fun CallScreen(
         }
     }
 
-    // ---- Poll appointment status while waiting, to catch a doctor-no-show cancellation ----
+    // ---- Poll appointment status while waiting, to catch a no-show cancellation ----
+    // ---- Doctor-only: if the patient doesn't answer within 30s, stop ringing ----
+    // ---- Doctor-only: if the patient doesn't answer within 30s, stop ringing ----
+    LaunchedEffect(waitingSince, retryKey) {
+        val since = waitingSince ?: return@LaunchedEffect
+        if (!isDoctorView) return@LaunchedEffect
+        val remaining = 30_000 - (System.currentTimeMillis() - since)
+        if (remaining > 0) delay(remaining.milliseconds)
+        if (screenState is CallScreenState.Waiting) {
+            call?.leave()
+            screenState = CallScreenState.NoAnswer
+        }
+    }
+
+    // ---- Poll appointment status while waiting, to catch a no-show cancellation ----
     LaunchedEffect(screenState) {
-        while (screenState is CallScreenState.WaitingForDoctor) {
+        while (screenState is CallScreenState.Waiting) {
             delay(15_000.milliseconds)
             val result = fetchAppointmentStatus()
             result.onSuccess { status ->
                 if (status.status == "cancelled") {
-                    screenState = if (status.cancelledReason == "doctor_no_show") {
-                        CallScreenState.DoctorNotAvailable
+                    screenState = if (status.cancelledReason == "doctor_no_show" || status.cancelledReason == "patient_no_show") {
+                        CallScreenState.OtherPartyNotAvailable
                     } else {
                         CallScreenState.AppointmentCancelled
                     }
@@ -166,9 +197,13 @@ fun CallScreen(
             when (val state = screenState) {
                 is CallScreenState.Loading -> LoadingState()
                 is CallScreenState.Error -> ErrorState(state.message, onBack)
-                is CallScreenState.WaitingForDoctor -> WaitingForDoctorState()
-                is CallScreenState.DoctorNotAvailable -> DoctorNotAvailableState(onReschedule, onBack)
+                is CallScreenState.Waiting -> WaitingState(isDoctorView)
+                is CallScreenState.OtherPartyNotAvailable -> NotAvailableState(isDoctorView, onReschedule, onBack)
                 is CallScreenState.AppointmentCancelled -> AppointmentCancelledState(onBack)
+                is CallScreenState.NoAnswer -> NoAnswerState(
+                    onRetry = { retryKey++ },
+                    onBack = onBack
+                )
                 is CallScreenState.InCall -> {
                     currentCall?.let { activeCall ->
                         Column(modifier = Modifier.fillMaxSize()) {
@@ -176,7 +211,15 @@ fun CallScreen(
                             CallContent(
                                 modifier = Modifier.fillMaxSize(),
                                 call = activeCall,
-                                onBackPressed = onBack
+                                onBackPressed = onBack,
+                                onCallAction = { action ->
+                                    if (action is io.getstream.video.android.core.call.state.LeaveCall) {
+                                        scope.launch {
+                                            activeCall.end()
+                                            onBack()
+                                        }
+                                    }
+                                }
                             )
                         }
                     }
@@ -219,15 +262,18 @@ private fun LoadingState() {
 }
 
 @Composable
-private fun WaitingForDoctorState() {
+private fun WaitingState(isDoctorView: Boolean) {
     Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             CircularProgressIndicator(color = teal)
             Spacer(modifier = Modifier.height(20.dp))
-            Text("Waiting for the doctor to join…", color = ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            Text(
+                if (isDoctorView) "Waiting for the patient to join…" else "Waiting for the doctor to join…",
+                color = ink, fontSize = 17.sp, fontWeight = FontWeight.Bold
+            )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "You're connected. The call will start automatically once your doctor joins.",
+                "You're connected. The call will start automatically once the other person joins.",
                 color = muted,
                 fontSize = 13.sp,
                 textAlign = TextAlign.Center
@@ -237,29 +283,37 @@ private fun WaitingForDoctorState() {
 }
 
 @Composable
-private fun DoctorNotAvailableState(onReschedule: () -> Unit, onBack: () -> Unit) {
+private fun NotAvailableState(isDoctorView: Boolean, onReschedule: () -> Unit, onBack: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Icons.Outlined.WifiOff, contentDescription = null, tint = red, modifier = Modifier.height(40.dp))
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Doctor not available", color = ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text(
+                if (isDoctorView) "Appointment cancelled" else "Doctor not available",
+                color = ink, fontSize = 18.sp, fontWeight = FontWeight.Bold
+            )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "The doctor didn't join within 5 minutes of the scheduled time. You've been fully refunded automatically.",
+                if (isDoctorView)
+                    "This appointment was automatically cancelled because one party didn't join in time."
+                else
+                    "The doctor didn't join within 5 minutes of the scheduled time. You've been fully refunded automatically.",
                 color = muted,
                 fontSize = 13.sp,
                 textAlign = TextAlign.Center
             )
             Spacer(modifier = Modifier.height(24.dp))
-            Button(
-                onClick = onReschedule,
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = navy),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text("Reschedule", color = Color.White, fontWeight = FontWeight.SemiBold)
+            if (!isDoctorView) {
+                Button(
+                    onClick = onReschedule,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = navy),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Reschedule", color = Color.White, fontWeight = FontWeight.SemiBold)
+                }
+                Spacer(modifier = Modifier.height(10.dp))
             }
-            Spacer(modifier = Modifier.height(10.dp))
             OutlinedButton(
                 onClick = onBack,
                 modifier = Modifier.fillMaxWidth().height(48.dp),
@@ -284,6 +338,40 @@ private fun AppointmentCancelledState(onBack: () -> Unit) {
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Text("Back to Dashboard", color = Color.White, fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+}
+@Composable
+private fun NoAnswerState(onRetry: () -> Unit, onBack: () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(Icons.Outlined.WifiOff, contentDescription = null, tint = red, modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("No answer", color = ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "The patient didn't join within 30 seconds. You can try calling again.",
+                color = muted,
+                fontSize = 13.sp,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            Button(
+                onClick = onRetry,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = navy),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Try Again", color = Color.White, fontWeight = FontWeight.SemiBold)
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            OutlinedButton(
+                onClick = onBack,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Back to Dashboard", color = ink, fontWeight = FontWeight.SemiBold)
             }
         }
     }

@@ -102,6 +102,7 @@ import ehealthy.connect.ui.theme.EHealthyTheme
 import ehealthy.connect.util.SupabaseClientProvider
 import ehealthy.connect.util.ThemeManager
 import ehealthy.connect.util.signInWithGoogle
+import ehealthy.connect.util.showBoldToast
 import io.github.jan.supabase.auth.OtpType
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
@@ -140,7 +141,10 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-
+@Serializable
+private data class ProfileExistsRow(
+    val user_id: String? = null
+)
 @Serializable
 private data class DoctorLookup(
     val name: String? = null,
@@ -363,9 +367,11 @@ fun AppNavGraph(pendingRoute: String? = null) {
 
         composable("patientLogin") {
             val scope = rememberCoroutineScope()
+            val context = LocalContext.current
 
             var mode by remember { mutableStateOf(LoginMode.LOGIN) }
             var isLoading by remember { mutableStateOf(false) }
+            var isGoogleLoading by remember { mutableStateOf(false) }
             var email by remember { mutableStateOf("") }
             var password by remember { mutableStateOf("") }
             var otp by remember { mutableStateOf("") }
@@ -377,6 +383,7 @@ fun AppNavGraph(pendingRoute: String? = null) {
             PatientLogin(
                 mode = mode,
                 isLoading = isLoading,
+
                 email = email,
                 password = password,
                 otp = otp,
@@ -411,7 +418,13 @@ fun AppNavGraph(pendingRoute: String? = null) {
                         } catch (e: Exception) {
                             isLoading = false
                             Log.e("LoginDebug", "Login failed", e)
-                            errorMessage = e.message ?: "Login failed."
+                            errorMessage = if (e.message?.contains("invalid_credentials", ignoreCase = true) == true ||
+                                e.message?.contains("Invalid login credentials", ignoreCase = true) == true
+                            ) {
+                                "Invalid email or password. Please try again."
+                            } else {
+                                "Login failed. Please try again."
+                            }
                         }
                     }
                 },

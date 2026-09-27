@@ -33,6 +33,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -46,14 +47,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.serialization.Serializable
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import coil.compose.AsyncImage
 @Serializable
 data class MedicalRecord(
     val id: String,
@@ -66,7 +66,8 @@ data class MedicalRecord(
 
 data class MedicalRecordDisplay(
     val record: MedicalRecord,
-    val doctorName: String
+    val doctorName: String,
+    val doctorPhoto: String? = null
 )
 
 enum class RecordSort(val label: String) {
@@ -85,11 +86,6 @@ fun MedicalRecordsScreen(
     var loadError by remember { mutableStateOf<String?>(null) }
     var selectedType by remember { mutableStateOf<String?>(null) }
     var sortOrder by remember { mutableStateOf(RecordSort.NEWEST) }
-    val navy = MaterialTheme.colorScheme.primary
-    val ink = MaterialTheme.colorScheme.onSurface
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val bg = MaterialTheme.colorScheme.background
-    val accent = MaterialTheme.colorScheme.secondaryContainer
 
     LaunchedEffect(Unit) {
         val result = fetchRecords()
@@ -116,32 +112,37 @@ fun MedicalRecordsScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        "Medical Records",
-                        color = ink,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp
-                    )
+                    Column {
+                        Text(
+                            "Medical Records",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp
+                        )
+                        Text(
+                            "Your complete health history",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.5.sp
+                        )
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = ink)
+                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
         },
-        containerColor = bg
+        containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
         Column(modifier = Modifier.padding(paddingValues)) {
-
-            HeroHeader()
 
             // ---- FILTERS ----
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
                 Text(
                     "FILTER BY TYPE",
-                    color = muted,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 0.6.sp
@@ -157,10 +158,10 @@ fun MedicalRecordsScreen(
                         label = { Text("All Records", fontSize = 13.sp) },
                         shape = RoundedCornerShape(20.dp),
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = navy,
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
                             selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
                             containerColor = MaterialTheme.colorScheme.surface,
-                            labelColor = muted
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
                         ),
                         border = null
                     )
@@ -176,10 +177,10 @@ fun MedicalRecordsScreen(
                             },
                             shape = RoundedCornerShape(20.dp),
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = accent,
-                                selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
                                 containerColor = MaterialTheme.colorScheme.surface,
-                                labelColor = muted
+                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant
                             ),
                             border = null
                         )
@@ -189,7 +190,7 @@ fun MedicalRecordsScreen(
                 Spacer(modifier = Modifier.height(14.dp))
                 Text(
                     "SORT",
-                    color = muted,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 0.6.sp
@@ -203,10 +204,10 @@ fun MedicalRecordsScreen(
                             label = { Text(order.label, fontSize = 13.sp) },
                             shape = RoundedCornerShape(20.dp),
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = accent,
-                                selectedLabelColor = Color.White,
-                                containerColor = Color.White,
-                                labelColor = muted
+                                selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                                containerColor = MaterialTheme.colorScheme.surface,
+                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant
                             ),
                             border = null
                         )
@@ -230,14 +231,16 @@ fun MedicalRecordsScreen(
                 loadError != null -> {
                     EmptyState(
                         icon = Icons.Outlined.SearchOff,
-                        message = loadError ?: "Something went wrong."
+                        message = loadError ?: "Something went wrong.",
+                        subtitle = "Pull down to try again, or check your connection."
                     )
                 }
 
                 displayedRecords.isEmpty() -> {
                     EmptyState(
                         icon = Icons.Outlined.Description,
-                        message = if (records.isEmpty()) "No medical records found yet." else "No records match your filter."
+                        message = if (records.isEmpty()) "No medical records found yet." else "No records match your filter.",
+                        subtitle = if (records.isEmpty()) "Records from your consultations will appear here." else "Try a different type or clear the filter."
                     )
                 }
 
@@ -258,67 +261,14 @@ fun MedicalRecordsScreen(
 }
 
 @Composable
-private fun HeroHeader() {
-    val navy = MaterialTheme.colorScheme.primary
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Brush.linearGradient(colors = listOf(navy, Color(0xFF1A3A5C))))
-            .padding(horizontal = 24.dp, vertical = 28.dp)
-    ) {
-        Column {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(Color.White.copy(alpha = 0.12f))
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
-            ) {
-                Text(
-                    "HEALTH HISTORY",
-                    color = Color(0xFF93C5FD),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.2.sp
-                )
-            }
-            Spacer(modifier = Modifier.height(14.dp))
-            Text(
-                "Your complete\nmedical history.",
-                color = Color.White,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                lineHeight = 30.sp
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                "Every prescription and record from your consultations, in one place.",
-                color = Color.White.copy(alpha = 0.65f),
-                fontSize = 13.sp,
-                lineHeight = 19.sp
-            )
-        }
-    }
-}
-
-@Composable
 private fun RecordCard(item: MedicalRecordDisplay) {
     val record = item.record
     val dateLabel = remember(record.created_at) { formatRecordDate(record.created_at) }
-    val navy = MaterialTheme.colorScheme.primary
-    val ink = MaterialTheme.colorScheme.onSurface
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val accent = MaterialTheme.colorScheme.onSecondaryContainer
-    val accentSoft = MaterialTheme.colorScheme.secondaryContainer
+
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(16.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(
-                elevation = 2.dp,
-                shape = RoundedCornerShape(16.dp),
-                spotColor = Color(0x1A0B1828)
-            )
+        modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
             Row(
@@ -329,12 +279,12 @@ private fun RecordCard(item: MedicalRecordDisplay) {
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
-                        .background(accentSoft)
+                        .background(MaterialTheme.colorScheme.secondaryContainer)
                         .padding(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     Text(
                         (record.record_type ?: "prescription").uppercase(),
-                        color = accent,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
                         fontSize = 10.5.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 0.5.sp
@@ -344,11 +294,11 @@ private fun RecordCard(item: MedicalRecordDisplay) {
                     Icon(
                         Icons.Outlined.CalendarMonth,
                         contentDescription = null,
-                        tint = muted,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(13.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(dateLabel, color = muted, fontSize = 12.sp)
+                    Text(dateLabel, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 }
             }
 
@@ -357,28 +307,52 @@ private fun RecordCard(item: MedicalRecordDisplay) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(30.dp)
+                        .size(44.dp)
                         .clip(CircleShape)
-                        .background(navy),
+                        .background(MaterialTheme.colorScheme.primaryContainer),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        Icons.Outlined.MedicalServices,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(15.dp)
+                    if (!item.doctorPhoto.isNullOrBlank()) {
+                        AsyncImage(
+                            model = item.doctorPhoto,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.size(44.dp).clip(CircleShape)
+                        )
+                    } else {
+                        Icon(
+                            Icons.Outlined.MedicalServices,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(14.dp))
+                Column {
+                    Text(
+                        "Prescribed by",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.5.sp
+                    )
+                    Text(
+                        item.doctorName,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
-                Spacer(modifier = Modifier.width(10.dp))
-                Text("Prescribed by ", color = muted, fontSize = 13.sp)
-                Text(item.doctorName, color = ink, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
 
             Spacer(modifier = Modifier.height(14.dp))
 
             val meds = record.medications.orEmpty()
             if (meds.isEmpty()) {
-                Text("No medications listed", color = muted, fontSize = 12.5.sp)
+                Text(
+                    "No medications listed",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.5.sp
+                )
             } else {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     meds.forEach { med ->
@@ -391,7 +365,7 @@ private fun RecordCard(item: MedicalRecordDisplay) {
                         ) {
                             Text(
                                 med,
-                                color = navy,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 12.5.sp,
                                 fontWeight = FontWeight.Medium
                             )
@@ -402,27 +376,40 @@ private fun RecordCard(item: MedicalRecordDisplay) {
 
             record.notes?.takeIf { it.isNotBlank() }?.let {
                 Spacer(modifier = Modifier.height(12.dp))
-                Text(it, color = muted, fontSize = 12.5.sp, lineHeight = 18.sp)
+                Text(
+                    it,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.5.sp,
+                    lineHeight = 18.sp
+                )
             }
         }
     }
 }
 
 @Composable
-private fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, message: String) {
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    Box(modifier = Modifier
-        .fillMaxWidth()
-        .padding(48.dp), contentAlignment = Alignment.Center) {
+private fun EmptyState(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    message: String,
+    subtitle: String
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(48.dp),
+        contentAlignment = Alignment.Center
+    ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(
                 icon,
                 contentDescription = null,
-                tint = Color(0xFF94A3B8),
+                tint = MaterialTheme.colorScheme.outline,
                 modifier = Modifier.size(40.dp)
             )
             Spacer(modifier = Modifier.height(12.dp))
-            Text(message, color = muted, fontSize = 14.sp)
+            Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
         }
     }
 }

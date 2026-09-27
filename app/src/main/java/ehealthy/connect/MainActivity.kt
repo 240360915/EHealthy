@@ -401,9 +401,17 @@ fun AppNavGraph(pendingRoute: String? = null) {
                                 this.email = email
                                 this.password = password
                             }
-                            if (SupabaseClientProvider.client.auth.currentSessionOrNull() == null) {
-                                throw Exception("Sign-in did not create a session. Please sign in again.")
+                            val userId = SupabaseClientProvider.client.auth.currentSessionOrNull()?.user?.id
+                                ?: throw Exception("Sign-in did not create a session. Please sign in again.")
+
+                            val patientRow = SupabaseClientProvider.client.postgrest.from("patients")
+                                .select(columns = Columns.list("id")) { filter { eq("user_id", userId) } }
+                                .decodeSingleOrNull<Map<String, String?>>()
+                            if (patientRow == null) {
+                                SupabaseClientProvider.client.auth.signOut()
+                                throw Exception("Invalid credentials. please try again")
                             }
+
                             isLoading = false
                             navController.navigate("patientDashboard") {
                                 popUpTo("patientLogin") { inclusive = true }
@@ -601,12 +609,23 @@ fun AppNavGraph(pendingRoute: String? = null) {
                         isLoading = true
                         errorMessage = null
                         val result = signInDoctorWithEmail(email, password)
-                        isLoading = false
                         result.onSuccess {
-                            navController.navigate("doctorDashboard")
+                            val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
+                            val doctorRow = userId?.let {
+                                SupabaseClientProvider.client.postgrest.from("doctors")
+                                    .select(columns = Columns.list("id")) { filter { eq("user_id", it) } }
+                                    .decodeSingleOrNull<Map<String, String?>>()
+                            }
+                            if (doctorRow == null) {
+                                SupabaseClientProvider.client.auth.signOut()
+                                errorMessage = "Invalid credentials. Please try again."
+                            } else {
+                                navController.navigate("doctorDashboard")
+                            }
                         }.onFailure { error ->
                             errorMessage = error.message
                         }
+                        isLoading = false
                     }
                 },
                 onForgotPassword = { navController.navigate("forgotPassword") },
@@ -619,7 +638,18 @@ fun AppNavGraph(pendingRoute: String? = null) {
                         val result = signInWithGoogle(context)
                         isGoogleLoading = false
                         result.onSuccess {
-                            navController.navigate("doctorDashboard")
+                            val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
+                            val doctorRow = userId?.let {
+                                SupabaseClientProvider.client.postgrest.from("doctors")
+                                    .select(columns = Columns.list("id")) { filter { eq("user_id", it) } }
+                                    .decodeSingleOrNull<Map<String, String?>>()
+                            }
+                            if (doctorRow == null) {
+                                SupabaseClientProvider.client.auth.signOut()
+                                errorMessage = "This Google account isn't registered as a doctor. Please register first, or use the patient login."
+                            } else {
+                                navController.navigate("doctorDashboard")
+                            }
                         }.onFailure { error ->
                             errorMessage = "Google sign-in failed: ${error.message}"
                         }
@@ -1606,20 +1636,27 @@ fun AppNavGraph(pendingRoute: String? = null) {
                                 .decodeList<MedicalRecord>()
 
                             val doctorIds = records.mapNotNull { it.doctor_id }.distinct()
-                            val doctorNames: Map<String, String> = if (doctorIds.isEmpty()) {
-                                emptyMap()
+                            val doctorNames: Map<String, String>
+                            val doctorPhotos: Map<String, String>
+                            if (doctorIds.isEmpty()) {
+                                doctorNames = emptyMap()
+                                doctorPhotos = emptyMap()
                             } else {
-                                SupabaseClientProvider.client.postgrest
+                                val doctors = SupabaseClientProvider.client.postgrest
                                     .from("doctors")
                                     .select { filter { isIn("id", doctorIds) } }
                                     .decodeList<DoctorListing>()
-                                    .associate { doc -> doc.id to "Dr. ${doc.name} ${doc.surname}".trim() }
+                                doctorNames = doctors.associate { doc -> doc.id to "Dr. ${doc.name} ${doc.surname}".trim() }
+                                doctorPhotos = doctors.mapNotNull { doc ->
+                                    doc.profile_image_url?.takeIf { it.isNotBlank() }?.let { doc.id to it }
+                                }.toMap()
                             }
 
                             val display = records.map { record ->
                                 MedicalRecordDisplay(
                                     record = record,
-                                    doctorName = doctorNames[record.doctor_id] ?: "Unknown Doctor"
+                                    doctorName = doctorNames[record.doctor_id] ?: "Unknown Doctor",
+                                    doctorPhoto = record.doctor_id?.let { doctorPhotos[it] }
                                 )
                             }
 

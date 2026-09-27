@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import kotlinx.serialization.Serializable
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.layout.ContentScale
 @Serializable
 data class DoctorListing(
     val id: String,
@@ -285,6 +286,7 @@ private fun DoctorCard(
                         AsyncImage(
                             model = doc.profile_image_url,
                             contentDescription = null,
+                            contentScale = ContentScale.Crop,
                             modifier = Modifier
                                 .size(52.dp)
                                 .clip(RoundedCornerShape(14.dp))

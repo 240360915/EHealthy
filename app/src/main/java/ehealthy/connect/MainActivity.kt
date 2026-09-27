@@ -898,7 +898,36 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 onNavigatePrescriptions = { navController.navigate("doctorPrescriptions") },
                 onNavigateSettings = { navController.navigate("doctorSettings") },
                 onNavigateTimeSlots = { navController.navigate("doctorTimeSlots") },
-                onStartCall = { appointmentId -> navController.navigate("doctorCall/$appointmentId") }
+                onStartCall = { appointmentId -> navController.navigate("doctorCall/$appointmentId") },
+                onVerifyCompletionCode = { appointmentId, enteredCode ->
+                    try {
+                        val row = SupabaseClientProvider.client.postgrest
+                            .from("appointments")
+                            .select(columns = Columns.list("completion_code")) {
+                                filter { eq("id", appointmentId) }
+                            }
+                            .decodeSingleOrNull<Map<String, String?>>()
+                        val realCode = row?.get("completion_code")
+
+                        if (realCode.isNullOrBlank()) {
+                            Result.failure(Exception("The patient hasn't requested a completion code yet."))
+                        } else if (realCode != enteredCode) {
+                            Result.failure(Exception("Incorrect code — please try again."))
+                        } else {
+                            SupabaseClientProvider.client.postgrest.from("appointments")
+                                .update({
+                                    set("status", "completed")
+                                    set("funds_released", true)
+                                    set("completion_code_verified", true)
+                                }) {
+                                    filter { eq("id", appointmentId) }
+                                }
+                            Result.success(Unit)
+                        }
+                    } catch (e: Exception) {
+                        Result.failure(e)
+                    }
+                }
             )
         }
 
@@ -1009,6 +1038,24 @@ fun AppNavGraph(pendingRoute: String? = null) {
 
         composable("doctorSettings") {
             val scope = rememberCoroutineScope()
+
+            val notificationPermissionLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.RequestPermission()
+            ) { /* granted or denied — token fetch below runs either way */ }
+
+            LaunchedEffect(Unit) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                }
+                try {
+                    val token = com.google.firebase.messaging.FirebaseMessaging.getInstance().token.await()
+                    Log.d("FCM", "Fetched doctor token: $token")
+                    ehealthy.connect.util.saveFcmToken(token)
+                } catch (e: Exception) {
+                    Log.e("FCM", "Failed to get/save doctor token", e)
+                }
+            }
+
             DoctorSettingsScreen(
                 isDarkMode = ThemeManager.isDarkMode,
                 onToggleDarkMode = { ThemeManager.updateDarkMode(it) },
@@ -1709,8 +1756,12 @@ fun AppNavGraph(pendingRoute: String? = null) {
             )
         }
         composable("patientPrescriptions") {
+            val scope = rememberCoroutineScope()
             var prescriptions by remember { mutableStateOf<List<Prescription>>(emptyList()) }
+            var doctorNames by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+            var doctorPhotos by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
             var isLoading by remember { mutableStateOf(true) }
+
             LaunchedEffect(Unit) {
                 try {
                     val userId = SupabaseClientProvider.client.auth.currentSessionOrNull()?.user?.id
@@ -1718,14 +1769,57 @@ fun AppNavGraph(pendingRoute: String? = null) {
                     val patientId = SupabaseClientProvider.client.postgrest.from("patients")
                         .select(columns = Columns.list("id")) { filter { eq("user_id", userId) } }
                         .decodeSingleOrNull<Map<String, String?>>()?.get("id") ?: userId
-                    prescriptions = SupabaseClientProvider.client.postgrest.from("prescriptions")
+                    val fetchedPrescriptions = SupabaseClientProvider.client.postgrest.from("prescriptions")
                         .select { filter { eq("patient_id", patientId) } }
-                        .decodeList()
+                        .decodeList<Prescription>()
+                    prescriptions = fetchedPrescriptions
+
+                    val doctorIds = fetchedPrescriptions.mapNotNull { it.doctor_id }.distinct()
+                    if (doctorIds.isNotEmpty()) {
+                        val doctors = SupabaseClientProvider.client.postgrest.from("doctors")
+                            .select(columns = Columns.list("id", "name", "surname", "profile_image_url")) {
+                                filter { isIn("id", doctorIds) }
+                            }
+                            .decodeList<Map<String, String?>>()
+                        doctorNames = doctors.associate { doc ->
+                            (doc["id"] ?: "") to "Dr. ${doc["name"] ?: ""} ${doc["surname"] ?: ""}".trim()
+                        }
+                        doctorPhotos = doctors.mapNotNull { doc ->
+                            val id = doc["id"]
+                            val photo = doc["profile_image_url"]
+                            if (id != null && !photo.isNullOrBlank()) id to photo else null
+                        }.toMap()
+                    }
                 } finally {
                     isLoading = false
                 }
             }
-            PatientPrescriptionsScreen(prescriptions = prescriptions, isLoading = isLoading)
+
+            PatientPrescriptionsScreen(
+                prescriptions = prescriptions,
+                isLoading = isLoading,
+                onBack = { navController.popBackStack() },
+                doctorNames = doctorNames,
+                doctorPhotos = doctorPhotos,
+                onRequestRefill = { prescription ->
+                    scope.launch {
+                        try {
+                            SupabaseClientProvider.client.postgrest.from("prescriptions")
+                                .update({
+                                    set("refill_status", "requested")
+                                    set("refill_requested_at", java.time.Instant.now().toString())
+                                }) {
+                                    filter { eq("id", prescription.id) }
+                                }
+                            prescriptions = prescriptions.map {
+                                if (it.id == prescription.id) it.copy(refill_status = "requested") else it
+                            }
+                        } catch (e: Exception) {
+                            Log.e("RefillRequest", "Failed to request refill", e)
+                        }
+                    }
+                }
+            )
         }
         composable("patientAppointments") {
             val scope = rememberCoroutineScope()

@@ -77,7 +77,8 @@ fun DoctorAppointmentsTab(
     isLoading: Boolean,
     loadError: String?,
     onUpdateStatus: (appointmentId: String, newStatus: String) -> Unit,
-    onStartCall: (appointmentId: String) -> Unit = {}
+    onStartCall: (appointmentId: String) -> Unit = {},
+    onVerifyCompletionCode: suspend (appointmentId: String, code: String) -> Result<Unit> = { _, _ -> Result.failure(Exception("Not available")) }
 ) {
     val background = Color(0xFFF0F4F8)
     val navy = Color(0xFF0F1F3D)
@@ -194,7 +195,8 @@ fun DoctorAppointmentsTab(
             onStartCall = {
                 onStartCall(appt.id)
                 actionTarget = null
-            }
+            },
+            onVerifyCompletionCode = { code -> onVerifyCompletionCode(appt.id, code) }
         )
     }
 

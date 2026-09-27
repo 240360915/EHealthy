@@ -1,5 +1,7 @@
-package ehealthy.connect.ui.doctor
+package ehealthy.connect.ui.doctorDashboard
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -67,13 +69,16 @@ private fun matchesFilter(appt: Appointment, filter: DoctorAppointmentFilter): B
         DoctorAppointmentFilter.CANCELLED -> appt.status == "cancelled"
     }
 
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun DoctorAppointmentsTab(
     modifier: Modifier = Modifier,
     appointments: List<Appointment>,
     isLoading: Boolean,
     loadError: String?,
-    onUpdateStatus: (appointmentId: String, newStatus: String) -> Unit
+    onUpdateStatus: (appointmentId: String, newStatus: String) -> Unit,
+    onStartCall: (appointmentId: String) -> Unit = {},
+    onVerifyCompletionCode: suspend (appointmentId: String, code: String) -> Result<Unit> = { _, _ -> Result.failure(Exception("Not available")) }
 ) {
     val background = Color(0xFFF0F4F8)
     val navy = Color(0xFF0F1F3D)
@@ -186,7 +191,12 @@ fun DoctorAppointmentsTab(
             onCancel = {
                 onUpdateStatus(appt.id, "cancelled")
                 actionTarget = null
-            }
+            },
+            onStartCall = {
+                onStartCall(appt.id)
+                actionTarget = null
+            },
+            onVerifyCompletionCode = { code -> onVerifyCompletionCode(appt.id, code) }
         )
     }
 

@@ -1,4 +1,4 @@
-package ehealthy.connect.ui.doctor
+package ehealthy.connect.ui.doctorDashboard
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -31,7 +31,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -48,6 +47,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 
 
 /** One patient this doctor can prescribe to — currently scoped to patients
@@ -186,7 +187,7 @@ fun DoctorPrescriptions(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            androidx.compose.material3.Button(
+            Button(
                 onClick = {
                     val patientId = selectedPatientId ?: return@Button
                     onSave(patientId, selectedMedications)
@@ -194,7 +195,7 @@ fun DoctorPrescriptions(
                 enabled = !isSaving && selectedPatientId != null && selectedMedications.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(28.dp),
-                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = navy)
+                colors = ButtonDefaults.buttonColors(containerColor = navy)
             ) {
                 if (isSaving) {
                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)

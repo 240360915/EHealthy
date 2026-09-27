@@ -53,7 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.serialization.Serializable
-
+import androidx.compose.material3.MaterialTheme
 @Serializable
 data class MedicalRecord(
     val id: String,
@@ -74,13 +74,6 @@ enum class RecordSort(val label: String) {
     OLDEST("Oldest First")
 }
 
-private val navy = Color(0xFF0B1828)
-private val ink = Color(0xFF0F1F3D)
-private val muted = Color(0xFF64748B)
-private val bg = Color(0xFFF4F7FA)
-private val accent = Color(0xFF2563EB)
-private val accentSoft = Color(0xFFDBEAFE)
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MedicalRecordsScreen(
@@ -92,6 +85,11 @@ fun MedicalRecordsScreen(
     var loadError by remember { mutableStateOf<String?>(null) }
     var selectedType by remember { mutableStateOf<String?>(null) }
     var sortOrder by remember { mutableStateOf(RecordSort.NEWEST) }
+    val navy = MaterialTheme.colorScheme.primary
+    val ink = MaterialTheme.colorScheme.onSurface
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val bg = MaterialTheme.colorScheme.background
+    val accent = MaterialTheme.colorScheme.secondaryContainer
 
     LaunchedEffect(Unit) {
         val result = fetchRecords()
@@ -130,7 +128,7 @@ fun MedicalRecordsScreen(
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = ink)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
         },
         containerColor = bg
@@ -160,8 +158,8 @@ fun MedicalRecordsScreen(
                         shape = RoundedCornerShape(20.dp),
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = navy,
-                            selectedLabelColor = Color.White,
-                            containerColor = Color.White,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                            containerColor = MaterialTheme.colorScheme.surface,
                             labelColor = muted
                         ),
                         border = null
@@ -178,9 +176,9 @@ fun MedicalRecordsScreen(
                             },
                             shape = RoundedCornerShape(20.dp),
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = navy,
-                                selectedLabelColor = Color.White,
-                                containerColor = Color.White,
+                                selectedContainerColor = accent,
+                                selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                                containerColor = MaterialTheme.colorScheme.surface,
                                 labelColor = muted
                             ),
                             border = null
@@ -225,7 +223,7 @@ fun MedicalRecordsScreen(
                             .padding(40.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = accent)
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }
                 }
 
@@ -261,6 +259,7 @@ fun MedicalRecordsScreen(
 
 @Composable
 private fun HeroHeader() {
+    val navy = MaterialTheme.colorScheme.primary
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -305,9 +304,13 @@ private fun HeroHeader() {
 private fun RecordCard(item: MedicalRecordDisplay) {
     val record = item.record
     val dateLabel = remember(record.created_at) { formatRecordDate(record.created_at) }
-
+    val navy = MaterialTheme.colorScheme.primary
+    val ink = MaterialTheme.colorScheme.onSurface
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val accent = MaterialTheme.colorScheme.onSecondaryContainer
+    val accentSoft = MaterialTheme.colorScheme.secondaryContainer
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier
             .fillMaxWidth()
@@ -362,7 +365,7 @@ private fun RecordCard(item: MedicalRecordDisplay) {
                     Icon(
                         Icons.Outlined.MedicalServices,
                         contentDescription = null,
-                        tint = Color.White,
+                        tint = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.size(15.dp)
                     )
                 }
@@ -382,7 +385,7 @@ private fun RecordCard(item: MedicalRecordDisplay) {
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(20.dp))
-                                .background(Color(0xFFF0F4FF))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
                                 .padding(horizontal = 12.dp, vertical = 6.dp)
                                 .padding(bottom = 4.dp)
                         ) {
@@ -407,6 +410,7 @@ private fun RecordCard(item: MedicalRecordDisplay) {
 
 @Composable
 private fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, message: String) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Box(modifier = Modifier
         .fillMaxWidth()
         .padding(48.dp), contentAlignment = Alignment.Center) {

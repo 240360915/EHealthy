@@ -1,5 +1,7 @@
-package ehealthy.connect.ui.doctor
+package ehealthy.connect.ui.doctorDashboard
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,7 +26,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CameraAlt
-import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ExitToApp
 import androidx.compose.material.icons.outlined.Medication
 import androidx.compose.material.icons.outlined.Person
@@ -104,6 +105,7 @@ fun DoctorProfileRow.toDoctorProfile(): DoctorProfile = DoctorProfile(
     verificationStatus = verificationStatus
 )
 
+@RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DoctorDashboard(
@@ -117,7 +119,8 @@ fun DoctorDashboard(
     onNavigatePrescriptions: () -> Unit,
     onNavigateSettings: () -> Unit,
     onNavigateTimeSlots: () -> Unit,
-
+    onStartCall: (appointmentId: String) -> Unit = {},
+    onVerifyCompletionCode: suspend (appointmentId: String, code: String) -> Result<Unit> = { _, _ -> Result.failure(Exception("Not available")) }
 ) {
     val background = MaterialTheme.colorScheme.background
     val navy = MaterialTheme.colorScheme.onBackground
@@ -213,7 +216,9 @@ fun DoctorDashboard(
                 appointments = appointments,
                 isLoading = isLoadingAppointments,
                 loadError = loadError,
-                onUpdateStatus = handleStatusUpdate
+                onUpdateStatus = handleStatusUpdate,
+                onStartCall = onStartCall,
+                onVerifyCompletionCode = onVerifyCompletionCode
             )
 
             DoctorTab.PATIENTS -> PatientsTabContent(

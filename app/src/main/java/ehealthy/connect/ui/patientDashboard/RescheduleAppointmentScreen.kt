@@ -20,7 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -34,6 +34,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -57,13 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Calendar
 
-private val rNavy = Color(0xFF0B1828)
-private val rInk = Color(0xFF0F1F3D)
-private val rMuted = Color(0xFF64748B)
-private val rBg = Color(0xFFF4F7FA)
-private val rTeal = Color(0xFF0D9488)
-private val rTealSoft = Color(0xFFCCFBF1)
-private val rRed = Color(0xFFDC2626)
+
 
 private val rescheduleTimeSlots =
     listOf("08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00")
@@ -93,6 +88,13 @@ fun RescheduleAppointmentScreen(
 
     val context = LocalContext.current
     val calendar = Calendar.getInstance()
+    val rNavy = MaterialTheme.colorScheme.primary
+    val rInk = MaterialTheme.colorScheme.onSurface
+    val rMuted = MaterialTheme.colorScheme.onSurfaceVariant
+    val rBg = MaterialTheme.colorScheme.background
+    val rTeal = MaterialTheme.colorScheme.primary
+    val rTealSoft = MaterialTheme.colorScheme.primaryContainer
+    val rRed = Color(0xFFDC2626)
 
     LaunchedEffect(selectedDate) {
         if (selectedDate.isNotBlank()) {
@@ -116,7 +118,7 @@ fun RescheduleAppointmentScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = rInk)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = rInk)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
@@ -131,7 +133,7 @@ fun RescheduleAppointmentScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             Card(
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -345,14 +347,14 @@ fun RescheduleAppointmentScreen(
             ) {
                 if (isLoading) {
                     CircularProgressIndicator(
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.size(20.dp),
                         strokeWidth = 2.dp
                     )
                 } else {
                     Text(
                         "Confirm New Time",
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onPrimary,
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp
                     )
@@ -368,8 +370,11 @@ private fun RescheduleSectionCard(
     title: String,
     content: @Composable () -> Unit
 ) {
+    val rInk = MaterialTheme.colorScheme.onSurface
+    val rTeal = MaterialTheme.colorScheme.primary
+
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier
             .fillMaxWidth()
@@ -394,8 +399,12 @@ private fun RescheduleSlotButton(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
+    val rNavy = MaterialTheme.colorScheme.primary
+    val rTeal = MaterialTheme.colorScheme.primary
+    val rTealSoft = MaterialTheme.colorScheme.primaryContainer
+    val rRed = Color(0xFFDC2626)
     val (bgColor, textColor) = when {
-        isSelected -> rNavy to Color.White
+        isSelected -> rNavy to MaterialTheme.colorScheme.surface
         isTaken -> Color(0xFFFEE2E2) to rRed
         else -> rTealSoft to rTeal
     }

@@ -34,7 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-
+import androidx.compose.material3.MaterialTheme
 data class BookingConfirmation(
     val doctorName: String,
     val date: String,
@@ -45,12 +45,7 @@ data class BookingConfirmation(
     val reference: String
 )
 
-private val navy = Color(0xFF0B1828)
-private val ink = Color(0xFF0F1F3D)
-private val muted = Color(0xFF64748B)
-private val teal = Color(0xFF0D9488)
-private val tealSoft = Color(0xFFCCFBF1)
-private val bg = Color(0xFFF4F7FA)
+
 
 @Composable
 fun BookingConfirmedScreen(
@@ -58,6 +53,12 @@ fun BookingConfirmedScreen(
     onGoToDashboard: () -> Unit,
     onViewAppointments: () -> Unit
 ) {
+    val navy = MaterialTheme.colorScheme.primary
+    val ink = MaterialTheme.colorScheme.onSurface
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val bg = MaterialTheme.colorScheme.background
+    val teal = MaterialTheme.colorScheme.primary
+    val tealSoft = MaterialTheme.colorScheme.primaryContainer
     Scaffold(containerColor = bg) { paddingValues ->
         Column(
             modifier = Modifier
@@ -95,7 +96,7 @@ fun BookingConfirmedScreen(
             ) {
                 Text(
                     "Ref: ${confirmation.reference}",
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onPrimary,
                     fontSize = 12.5.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -104,7 +105,7 @@ fun BookingConfirmedScreen(
             Spacer(modifier = Modifier.height(28.dp))
 
             Card(
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -174,7 +175,7 @@ fun BookingConfirmedScreen(
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("View My Appointments", color = Color.White, fontWeight = FontWeight.Bold)
+                Text("View My Appointments", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
             }
             Spacer(modifier = Modifier.height(10.dp))
             OutlinedButton(
@@ -192,6 +193,9 @@ fun BookingConfirmedScreen(
 
 @Composable
 private fun ConfirmRow(label: String, value: String) {
+    val ink = MaterialTheme.colorScheme.onSurface
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+
     Row(
         modifier = Modifier
             .fillMaxWidth()

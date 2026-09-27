@@ -1,4 +1,4 @@
-package ehealthy.connect.ui.doctor
+package ehealthy.connect.ui.doctorDashboard
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +27,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.Alignment
 
 @Composable
 fun DoctorForgotPassword(
@@ -143,7 +144,7 @@ fun DoctorForgotPassword(
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier
-                    .align(androidx.compose.ui.Alignment.CenterHorizontally)
+                    .align(Alignment.CenterHorizontally)
                     .clickable { onBackToLogin() }
             )
         }

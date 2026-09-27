@@ -29,9 +29,53 @@ class EHealthyMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
+
+        if (message.data["type"] == "incoming_call") {
+            showIncomingCall(message.data)
+            return
+        }
+
         val title = message.notification?.title ?: "eHealthy Connect"
         val body = message.notification?.body ?: "You have an update."
         showNotification(title, body)
+    }
+
+    private fun showIncomingCall(data: Map<String, String>) {
+        val channelId = "incoming_calls"
+        val manager = getSystemService(NotificationManager::class.java)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                channelId,
+                "Incoming appointment calls",
+                NotificationManager.IMPORTANCE_HIGH
+            )
+            manager.createNotificationChannel(channel)
+        }
+
+        val fullScreenIntent = Intent(this, IncomingCallActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("appointmentId", data["appointmentId"])
+            putExtra("role", data["role"])
+            putExtra("otherPartyName", data["otherPartyName"])
+        }
+        val fullScreenPendingIntent = PendingIntent.getActivity(
+            this, 0, fullScreenIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(this, channelId)
+            .setContentTitle("Appointment starting now")
+            .setContentText(data["otherPartyName"] ?: "Your appointment is starting")
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setFullScreenIntent(fullScreenPendingIntent, true)
+            .setContentIntent(fullScreenPendingIntent)
+            .setAutoCancel(true)
+            .build()
+
+        manager.notify(9999, notification)
     }
 
     private fun showNotification(title: String, body: String) {
@@ -69,16 +113,43 @@ class EHealthyMessagingService : FirebaseMessagingService() {
 }
 
 /**
- * Saves the current device's FCM token against the logged-in patient's row.
- * Safe to call repeatedly — no-ops if nobody is logged in yet.
+ * Saves the current device's FCM token against the logged-in person's row —
+ * whichever table they actually belong to (patient or doctor), since this
+ * app serves both roles but shares one FirebaseMessagingService.
+ * Safe to call repeatedly — no-ops if nobody is logged in yet, or if
+ * somehow neither table has a matching row.
  */
 suspend fun saveFcmToken(token: String) {
     val userId = SupabaseClientProvider.client.auth.currentSessionOrNull()?.user?.id ?: return
     try {
-        SupabaseClientProvider.client.postgrest.from("patients")
-            .update({ set("fcm_token", token) }) {
+        val patientRow = SupabaseClientProvider.client.postgrest
+            .from("patients")
+            .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id")) {
                 filter { eq("user_id", userId) }
             }
+            .decodeSingleOrNull<Map<String, String?>>()
+
+        if (patientRow != null) {
+            SupabaseClientProvider.client.postgrest.from("patients")
+                .update({ set("fcm_token", token) }) {
+                    filter { eq("user_id", userId) }
+                }
+            return
+        }
+
+        val doctorRow = SupabaseClientProvider.client.postgrest
+            .from("doctors")
+            .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id")) {
+                filter { eq("user_id", userId) }
+            }
+            .decodeSingleOrNull<Map<String, String?>>()
+
+        if (doctorRow != null) {
+            SupabaseClientProvider.client.postgrest.from("doctors")
+                .update({ set("fcm_token", token) }) {
+                    filter { eq("user_id", userId) }
+                }
+        }
     } catch (e: Exception) {
         android.util.Log.e("FCM", "Failed to save token", e)
     }

@@ -24,7 +24,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CreditCard
@@ -67,7 +68,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.serialization.Serializable
 import java.util.Calendar
-
+import androidx.compose.material3.MaterialTheme
 @Serializable
 data class DoctorBookingInfo(
     val id: String,
@@ -104,17 +105,21 @@ private val publicHolidays = setOf(
     "2026-12-25", // Christmas Day
     "2026-12-26"  // Day of Goodwill
 )
-private val navy = Color(0xFF0B1828)
-private val ink = Color(0xFF0F1F3D)
-private val muted = Color(0xFF64748B)
-private val bg = Color(0xFFF4F7FA)
-private val teal = Color(0xFF0D9488)
-private val tealSoft = Color(0xFFCCFBF1)
-private val red = Color(0xFFDC2626)
+
+
 
 private val timeSlotOptions =
     listOf("08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00")
 
+private fun currentDateString(): String {
+    val cal = Calendar.getInstance()
+    return "%04d-%02d-%02d".format(cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH))
+}
+
+private fun currentTimeString(): String {
+    val cal = Calendar.getInstance()
+    return "%02d:%02d".format(cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE))
+}
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BookAppointmentScreen(
@@ -128,7 +133,7 @@ fun BookAppointmentScreen(
     var doctor by remember { mutableStateOf<DoctorBookingInfo?>(null) }
     var isLoadingDoctor by rememberSaveable { mutableStateOf(true) }
     var doctorLoadError by rememberSaveable { mutableStateOf<String?>(null) }
-
+    var slotError by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedDate by rememberSaveable { mutableStateOf("") }
     var bookedTimes by rememberSaveable { mutableStateOf(setOf<String>()) }
     var isLoadingSlots by rememberSaveable { mutableStateOf(false) }
@@ -146,6 +151,13 @@ fun BookAppointmentScreen(
     var dateError by rememberSaveable { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val calendar = Calendar.getInstance()
+    val navy = MaterialTheme.colorScheme.primary
+    val ink = MaterialTheme.colorScheme.onSurface
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val bg = MaterialTheme.colorScheme.background
+    val teal = MaterialTheme.colorScheme.primary
+    val tealSoft = MaterialTheme.colorScheme.primaryContainer
+    val red = Color(0xFFDC2626)
     val banks = listOf(
         "Capitec",
         "FNB",
@@ -154,7 +166,8 @@ fun BookAppointmentScreen(
         "TymeBank",
         "African Bank",
         "Discovery Bank",
-        "Investec"
+        "Investec",
+        "NedBank"
     )
 
     LaunchedEffect(Unit) {
@@ -196,10 +209,10 @@ fun BookAppointmentScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = ink)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = ink)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
         },
         bottomBar = {
@@ -208,7 +221,7 @@ fun BookAppointmentScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color.White)
+                        .background(MaterialTheme.colorScheme.surface)
                         .padding(horizontal = 20.dp, vertical = 12.dp)
                 ) {
                     (localError ?: errorMessage)?.let {
@@ -267,9 +280,9 @@ fun BookAppointmentScreen(
                         shape = RoundedCornerShape(14.dp)
                     ) {
                         if (isLoading) {
-                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                         } else {
-                            Text("Confirm & Pay Booking", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Text("Confirm & Pay Booking", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                         }
                     }
                 }
@@ -312,10 +325,10 @@ fun BookAppointmentScreen(
                     DoctorBanner(doc)
 
                     // ---- DATE ----
-                    SectionCard(icon = Icons.Outlined.CalendarMonth, title = "Choose a Date", ) {
+                    SectionCard(icon = Icons.Outlined.CalendarMonth, title = "Choose a Date") {
                         Box(modifier = Modifier.fillMaxWidth()) {
                             OutlinedTextField(
-                                value = if (selectedDate.isBlank()) "" else selectedDate,
+                                value = selectedDate.ifBlank { "" },
                                 onValueChange = {},
                                 enabled = false,
                                 placeholder = { Text("Select appointment date") },
@@ -354,6 +367,7 @@ fun BookAppointmentScreen(
                                                         dateError = "That date is a public holiday — please pick another day."
                                                     else -> {
                                                         dateError = null
+                                                        slotError = null
                                                         selectedDate = dateStr
                                                         selectedTime = null
                                                     }
@@ -399,19 +413,67 @@ fun BookAppointmentScreen(
                                     )
                                 }
                             } else {
+
+                                Spacer(modifier = Modifier.height(14.dp))
+                                slotError?.let {
+                                    Text(it, color = red, fontSize = 12.sp, modifier = Modifier.padding(bottom = 6.dp))
+                                }
+                                androidx.compose.material3.TextButton(
+                                    onClick = {
+                                        val now = Calendar.getInstance()
+                                        android.app.TimePickerDialog(
+                                            context,
+                                            { _, hour, minute ->
+                                                val customTime = "%02d:%02d".format(hour, minute)
+                                                slotError = when {
+                                                    selectedDate == currentDateString() && customTime <= currentTimeString() ->
+                                                        "Please choose a time that hasn't already passed."
+
+                                                    bookedTimes.contains(customTime) ->
+                                                        "That exact time is already booked — please choose another."
+
+                                                    else -> null
+                                                }
+                                                if (slotError == null) selectedTime = customTime
+                                            },
+                                            now.get(Calendar.HOUR_OF_DAY),
+                                            now.get(Calendar.MINUTE),
+                                            true
+                                        ).show()
+                                    }
+                                ) {
+                                    Text("Need an urgent time? Pick any time →", color = teal, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                }
+                                val visibleTimeSlots = remember(selectedDate) {
+                                    if (selectedDate == currentDateString()) {
+                                        timeSlotOptions.filter { it > currentTimeString() }
+                                    } else {
+                                        timeSlotOptions
+                                    }
+                                }
+
                                 Legend()
                                 Spacer(modifier = Modifier.height(12.dp))
-                                LazyVerticalGrid(
-                                    columns = GridCells.Fixed(4),
-                                    modifier = Modifier.height(((timeSlotOptions.size / 4 + 1) * 52).dp)
-                                ) {
-                                    items(timeSlotOptions) { slot ->
-                                        SlotButton(
-                                            label = slot,
-                                            isTaken = bookedTimes.contains(slot),
-                                            isSelected = selectedTime == slot,
-                                            onClick = { selectedTime = slot }
-                                        )
+                                if (visibleTimeSlots.isEmpty()) {
+                                    Text(
+                                        "No more slots left today — pick another date, or use \"Need an urgent time?\" below.",
+                                        color = muted,
+                                        fontSize = 12.5.sp,
+                                        modifier = Modifier.padding(vertical = 8.dp)
+                                    )
+                                } else {
+                                    LazyVerticalGrid(
+                                        columns = GridCells.Fixed(4),
+                                        modifier = Modifier.height(((visibleTimeSlots.size / 4 + 1) * 52).dp)
+                                    ) {
+                                        items(visibleTimeSlots) { slot ->
+                                            SlotButton(
+                                                label = slot,
+                                                isTaken = bookedTimes.contains(slot),
+                                                isSelected = selectedTime == slot,
+                                                onClick = { selectedTime = slot; slotError = null }
+                                            )
+                                        }
                                     }
                                 }
                                 selectedTime?.let {
@@ -618,6 +680,8 @@ fun BookAppointmentScreen(
 
 @Composable
 private fun DoctorBanner(doc: DoctorBookingInfo) {
+    val teal = MaterialTheme.colorScheme.primary
+    val navy = MaterialTheme.colorScheme.primary
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -660,8 +724,11 @@ private fun SectionCard(
     title: String,
     content: @Composable () -> Unit
 ) {
+    val teal = MaterialTheme.colorScheme.primary
+    val ink = MaterialTheme.colorScheme.onSurface
+
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier
             .fillMaxWidth()
@@ -692,10 +759,15 @@ private fun VisitTypeOption(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val teal = MaterialTheme.colorScheme.primary
+    val tealSoft = MaterialTheme.colorScheme.primaryContainer
+    val ink = MaterialTheme.colorScheme.onSurface
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) tealSoft else Color(0xFFF4F7FA))
+            .background(if (selected) tealSoft else MaterialTheme.colorScheme.surfaceVariant)
             .clickable(onClick = onClick)
             .padding(14.dp)
     ) {
@@ -709,15 +781,20 @@ private fun VisitTypeOption(
 
 @Composable
 private fun Legend() {
+    val teal = MaterialTheme.colorScheme.primary
+    val navy = MaterialTheme.colorScheme.primary
+
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         LegendItem(teal, "Available")
-        LegendItem(red, "Booked")
+        LegendItem(Color(0xFFDC2626), "Booked")
         LegendItem(navy, "Your pick")
     }
 }
 
 @Composable
 private fun LegendItem(color: Color, label: String) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
             modifier = Modifier
@@ -732,9 +809,13 @@ private fun LegendItem(color: Color, label: String) {
 
 @Composable
 private fun SlotButton(label: String, isTaken: Boolean, isSelected: Boolean, onClick: () -> Unit) {
+    val navy = MaterialTheme.colorScheme.primary
+    val tealSoft = MaterialTheme.colorScheme.primaryContainer
+    val teal = MaterialTheme.colorScheme.primary
+
     val (bgColor, textColor) = when {
-        isSelected -> navy to Color.White
-        isTaken -> Color(0xFFFEE2E2) to red
+        isSelected -> navy to MaterialTheme.colorScheme.onPrimary
+        isTaken -> Color(0xFFFEE2E2) to Color(0xFFDC2626)
         else -> tealSoft to teal
     }
     Box(
@@ -796,19 +877,6 @@ private fun CardPreview(name: String, number: String, expiry: String) {
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun SummaryRow(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(label, color = muted, fontSize = 13.5.sp)
-        Text(value, color = ink, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 

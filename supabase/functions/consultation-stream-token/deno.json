@@ -1,0 +1,7 @@
+{
+  "compilerOptions": { "strict": true },
+  "tasks": {
+    "check": "deno check index.ts ../../operations/configure-consultation-stream.ts",
+    "test": "deno test handler_test.ts"
+  }
+}

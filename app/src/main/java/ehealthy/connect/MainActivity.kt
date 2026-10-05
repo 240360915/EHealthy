@@ -98,7 +98,6 @@ import ehealthy.connect.ui.patientDashboard.SettingsScreen
 import ehealthy.connect.ui.theme.EHealthyTheme
 import ehealthy.connect.util.SupabaseClientProvider
 import ehealthy.connect.util.ThemeManager
-import ehealthy.connect.util.signInWithGoogle
 import ehealthy.connect.util.showBoldToast
 import io.github.jan.supabase.auth.OtpType
 import io.github.jan.supabase.auth.auth
@@ -117,6 +116,8 @@ import ehealthy.connect.ui.patientDashboard.myVisits.PatientVisitsScreen
 import ehealthy.connect.ui.patientDashboard.myVisits.RateVisitScreen
 import ehealthy.connect.ui.patientDashboard.myVisits.RescheduleAppointmentScreen
 import ehealthy.connect.ui.doctorDashboard.RefillRequest
+import ehealthy.connect.data.ProfileRepository
+import ehealthy.connect.data.BookingRepository
 
 
 private object BookingConfirmationHolder {

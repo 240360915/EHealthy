@@ -81,12 +81,8 @@ fun MessagingScreen(
     onBack: () -> Unit
 ) {
 
-    val patientId =
-        SupabaseClientProvider.client
-            .auth
-            .currentSessionOrNull()
-            ?.user
-            ?.id
+    var patientId by remember { mutableStateOf<String?>(null) }
+    var isSending by remember { mutableStateOf(false) }
 
     var messages by remember {
         mutableStateOf<List<MessageRow>>(emptyList())
@@ -108,6 +104,12 @@ fun MessagingScreen(
         mutableStateOf("Doctor")
     }
 
+    LaunchedEffect(Unit) {
+        try { patientId = ehealthy.connect.data.ProfileRepository.patientId() }
+        catch (e: kotlinx.coroutines.CancellationException) { throw e }
+        catch (_: Exception) { error = "Patient profile could not be loaded. Go back and retry."; isLoading = false }
+    }
+
     LaunchedEffect(doctorId) {
         try {
             val doctor = SupabaseClientProvider.client
@@ -122,7 +124,8 @@ fun MessagingScreen(
 
             doctorName = "${doctor.name} ${doctor.surname}"
 
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e
+    } catch (e: Exception) {
             // Keep "Doctor" if the name cannot be loaded
         }
     }
@@ -136,7 +139,8 @@ fun MessagingScreen(
      */
     suspend fun loadMessages() {
 
-        if (patientId == null) {
+        val resolvedPatientId = patientId
+        if (resolvedPatientId == null) {
 
             error = "Please log in to send messages."
             isLoading = false
@@ -156,7 +160,7 @@ fun MessagingScreen(
 
                             eq(
                                 "patient_id",
-                                patientId
+                                resolvedPatientId
                             )
 
                             eq(
@@ -174,10 +178,11 @@ fun MessagingScreen(
 
             error = null
 
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e
+    } catch (e: Exception) {
 
             error =
-                "Could not load messages: ${e.message}"
+                "Could not load messages. Please retry."
 
         } finally {
 
@@ -193,7 +198,7 @@ fun MessagingScreen(
         doctorId
     ) {
 
-        loadMessages()
+        if (patientId != null) loadMessages()
     }
 
     /*
@@ -221,9 +226,8 @@ fun MessagingScreen(
 
         while (true) {
 
+            if (patientId != null) loadMessages()
             delay(5000)
-
-            loadMessages()
         }
     }
 
@@ -238,10 +242,11 @@ fun MessagingScreen(
         val messageText =
             text.trim()
 
-        if (messageText.isBlank()) {
+        if (messageText.isBlank() || isSending) {
             return
         }
 
+        isSending = true
         scope.launch {
 
             try {
@@ -278,7 +283,7 @@ fun MessagingScreen(
                 /*
                  * Clear input after successful send.
                  */
-                text = ""
+                if (text.trim() == messageText) text = ""
 
                 /*
                  * Reload messages so the new
@@ -286,11 +291,12 @@ fun MessagingScreen(
                  */
                 loadMessages()
 
-            } catch (e: Exception) {
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e
+    } catch (e: Exception) {
 
                 error =
-                    "Message could not be sent: ${e.message}"
-            }
+                    "Message could not be sent. Please retry."
+            } finally { isSending = false }
         }
     }
 
@@ -411,7 +417,7 @@ fun MessagingScreen(
                     },
 
                     enabled =
-                        text.isNotBlank() &&
+                        !isSending && text.isNotBlank() &&
                                 patientId != null
                 ) {
 

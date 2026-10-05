@@ -1,11 +1,16 @@
 package ehealthy.connect.ui.patientDashboard
 
 import android.app.DatePickerDialog
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,36 +20,38 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.CalendarMonth
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.CreditCard
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.VideoCall
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -52,23 +59,26 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ehealthy.connect.data.patient.AvailableSlot
+import ehealthy.connect.data.patient.PatientRepository
+import ehealthy.connect.data.patient.ReserveSlotResult
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import java.util.Calendar
-import androidx.compose.material3.MaterialTheme
+import java.util.UUID
+import androidx.compose.material3.OutlinedTextFieldDefaults
 @Serializable
 data class DoctorBookingInfo(
     val id: String,
@@ -77,10 +87,44 @@ data class DoctorBookingInfo(
     val discipline: String? = null,
     val hourlyRate: Double? = null,
     val operatingHours: String? = null
-)
+) {
 
-enum class AppointmentType { ONLINE, IN_PERSON }
+    val fullName: String
+        get() =
+            "Dr. $name $surname"
+                .trim()
 
+    val specialty: String
+        get() =
+            discipline
+                ?.takeIf { it.isNotBlank() }
+                ?: "General Practitioner"
+}
+
+enum class AppointmentType {
+
+    ONLINE,
+
+    IN_PERSON;
+
+    val databaseValue: String
+        get() =
+            when (this) {
+
+                ONLINE ->
+                    "online"
+
+                IN_PERSON ->
+                    "in_person"
+            }
+}
+
+/**
+ * Kept temporarily because MainActivity still references it.
+ *
+ * New bookings no longer use this object to write appointments.
+ * The secure reserve_slot() RPC performs the booking.
+ */
 data class BookingSubmission(
     val date: String,
     val time: String,
@@ -89,589 +133,2401 @@ data class BookingSubmission(
     val paymentReference: String,
     val appointmentType: AppointmentType
 )
-// South African public holidays. Verify exact dates each year —
-// Easter-based holidays (Good Friday / Family Day) shift annually.
-private val publicHolidays = setOf(
-    "2026-01-01", // New Year's Day
-    "2026-03-21", // Human Rights Day
-    "2026-04-03", // Good Friday
-    "2026-04-06", // Family Day
-    "2026-04-27", // Freedom Day
-    "2026-05-01", // Workers' Day
-    "2026-06-16", // Youth Day
-    "2026-08-09", // National Women's Day
-    "2026-09-24", // Heritage Day
-    "2026-12-16", // Day of Reconciliation
-    "2026-12-25", // Christmas Day
-    "2026-12-26"  // Day of Goodwill
-)
 
+private enum class BookingStep(
+    val number: Int,
+    val title: String
+) {
 
+    DATE(
+        1,
+        "Date"
+    ),
 
-private val timeSlotOptions =
-    listOf("08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00")
+    TIME(
+        2,
+        "Time"
+    ),
 
-private fun currentDateString(): String {
-    val cal = Calendar.getInstance()
-    return "%04d-%02d-%02d".format(cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH))
+    TYPE(
+        3,
+        "Visit"
+    ),
+
+    DETAILS(
+        4,
+        "Details"
+    )
 }
 
-private fun currentTimeString(): String {
-    val cal = Calendar.getInstance()
-    return "%02d:%02d".format(cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE))
-}
+private val BookingHeroStart =
+    Color(0xFF0B3B60)
+
+private val BookingHeroEnd =
+    Color(0xFF087F8C)
+
+private val SuccessGreen =
+    Color(0xFF15803D)
+
 @OptIn(ExperimentalMaterial3Api::class)
+@Suppress("UNUSED_PARAMETER")
 @Composable
 fun BookAppointmentScreen(
     isLoading: Boolean,
     errorMessage: String?,
     fetchDoctor: suspend () -> Result<DoctorBookingInfo>,
-    fetchBookedTimes: suspend (date: String) -> Result<Set<String>>,
+    fetchAvailableTimes: suspend (date: String) -> Result<Set<String>>,
     onBack: () -> Unit,
     onConfirmBooking: (BookingSubmission) -> Unit
 ) {
-    var doctor by remember { mutableStateOf<DoctorBookingInfo?>(null) }
-    var isLoadingDoctor by rememberSaveable { mutableStateOf(true) }
-    var doctorLoadError by rememberSaveable { mutableStateOf<String?>(null) }
-    var slotError by rememberSaveable { mutableStateOf<String?>(null) }
-    var selectedDate by rememberSaveable { mutableStateOf("") }
-    var bookedTimes by rememberSaveable { mutableStateOf(setOf<String>()) }
-    var isLoadingSlots by rememberSaveable { mutableStateOf(false) }
-    var selectedTime by rememberSaveable { mutableStateOf<String?>(null) }
-    var appointmentType by rememberSaveable { mutableStateOf<AppointmentType?>(null) }
-    var reason by rememberSaveable { mutableStateOf("") }
-    var fee by rememberSaveable { mutableStateOf("") }
-    var cardName by rememberSaveable { mutableStateOf("") }
-    var cardNumber by rememberSaveable { mutableStateOf("") }
-    var cardExpiry by rememberSaveable { mutableStateOf("") }
-    var cardCvv by rememberSaveable { mutableStateOf("") }
-    var selectedBank by rememberSaveable { mutableStateOf<String?>(null) }
-    var bankMenuExpanded by rememberSaveable { mutableStateOf(false) }
-    var localError by rememberSaveable { mutableStateOf<String?>(null) }
-    var dateError by rememberSaveable { mutableStateOf<String?>(null) }
-    val context = LocalContext.current
-    val calendar = Calendar.getInstance()
-    val navy = MaterialTheme.colorScheme.primary
-    val ink = MaterialTheme.colorScheme.onSurface
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val bg = MaterialTheme.colorScheme.background
-    val teal = MaterialTheme.colorScheme.primary
-    val tealSoft = MaterialTheme.colorScheme.primaryContainer
-    val red = Color(0xFFDC2626)
-    val banks = listOf(
-        "Capitec",
-        "FNB",
-        "ABSA",
-        "Standard Bank",
-        "TymeBank",
-        "African Bank",
-        "Discovery Bank",
-        "Investec",
-        "NedBank"
-    )
 
-    LaunchedEffect(Unit) {
-        val result = fetchDoctor()
-        isLoadingDoctor = false
-        result
+    val scope =
+        rememberCoroutineScope()
+
+    var doctor by remember {
+        mutableStateOf<DoctorBookingInfo?>(
+            null
+        )
+    }
+
+    var isLoadingDoctor by remember {
+        mutableStateOf(true)
+    }
+
+    var doctorError by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    var selectedDate by rememberSaveable {
+        mutableStateOf("")
+    }
+
+    var availableSlots by remember {
+        mutableStateOf<List<AvailableSlot>>(
+            emptyList()
+        )
+    }
+
+    var alternativeSlots by remember {
+        mutableStateOf<List<AvailableSlot>>(
+            emptyList()
+        )
+    }
+
+    var isLoadingAlternatives by remember {
+        mutableStateOf(false)
+    }
+
+    var selectedSlot by remember {
+        mutableStateOf<AvailableSlot?>(
+            null
+        )
+    }
+
+    var isLoadingSlots by remember {
+        mutableStateOf(false)
+    }
+
+    var slotError by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    var appointmentType by rememberSaveable {
+        mutableStateOf<AppointmentType?>(
+            null
+        )
+    }
+
+    var reason by rememberSaveable {
+        mutableStateOf("")
+    }
+
+    var bookingError by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    var isBooking by remember {
+        mutableStateOf(false)
+    }
+
+    var bookingResult by remember {
+        mutableStateOf<ReserveSlotResult?>(
+            null
+        )
+    }
+
+    var bookingRequestId by remember {
+        mutableStateOf(
+            UUID.randomUUID()
+                .toString()
+        )
+    }
+
+    suspend fun loadDoctor() {
+
+        isLoadingDoctor = true
+
+        doctorError = null
+
+        fetchDoctor()
             .onSuccess {
                 doctor = it
-                if (fee.isBlank()) it.hourlyRate?.let { rate -> fee = "%.2f".format(rate) }
             }
-            .onFailure { doctorLoadError = it.message ?: "Could not load doctor details." }
+            .onFailure {
+
+                doctorError =
+                    it.message
+                        ?: "Unable to load this doctor."
+            }
+
+        isLoadingDoctor = false
     }
 
-    fun onDateSelected(date: String) {
-        selectedDate = date
-        selectedTime = null
-        bookedTimes = emptySet()
+    suspend fun loadSlots(
+        date: String
+    ) {
+
+        val currentDoctor =
+            doctor ?: return
+
         isLoadingSlots = true
+        isLoadingAlternatives = false
+
+        slotError = null
+        selectedSlot = null
+
+        availableSlots =
+            emptyList()
+
+        alternativeSlots =
+            emptyList()
+
+
+        PatientRepository
+            .getAvailableSlots(
+                doctorId = currentDoctor.id,
+                date = date
+            )
+            .onSuccess { slots ->
+
+                val openSlots =
+                    slots.filter {
+                        !it.is_booked
+                    }
+
+                availableSlots =
+                    openSlots
+
+
+                /*
+                 * If this date has no availability,
+                 * find the doctor's next available dates.
+                 */
+                if (openSlots.isEmpty()) {
+
+                    isLoadingAlternatives =
+                        true
+
+
+                    PatientRepository
+                        .getAvailableSlots(
+                            doctorId =
+                                currentDoctor.id,
+                            date =
+                                null
+                        )
+                        .onSuccess { allSlots ->
+
+                            val futureSlots =
+                                allSlots
+                                    .filter { slot ->
+
+                                        !slot.is_booked &&
+
+                                                /*
+                                                 * YYYY-MM-DD strings can be
+                                                 * compared safely in this format.
+                                                 */
+                                                slot.date > date
+                                    }
+                                    .sortedWith(
+                                        compareBy<AvailableSlot> {
+                                            it.date
+                                        }.thenBy {
+                                            it.time
+                                        }
+                                    )
+
+
+                            /*
+                             * Only show the next 3 dates.
+                             *
+                             * We keep every available time
+                             * belonging to those dates.
+                             */
+                            val nextDates =
+                                futureSlots
+                                    .map {
+                                        it.date
+                                    }
+                                    .distinct()
+                                    .take(3)
+                                    .toSet()
+
+
+                            alternativeSlots =
+                                futureSlots.filter {
+                                    it.date in nextDates
+                                }
+                        }
+                        .onFailure {
+
+                            /*
+                             * The selected date query worked,
+                             * so don't turn this into a full
+                             * booking error just because
+                             * suggestions could not load.
+                             */
+                            alternativeSlots =
+                                emptyList()
+                        }
+
+
+                    isLoadingAlternatives =
+                        false
+                }
+            }
+            .onFailure {
+
+                slotError =
+                    it.message
+                        ?: "Unable to load this doctor's availability."
+            }
+
+
+        isLoadingSlots = false
     }
 
-    LaunchedEffect(selectedDate) {
-        if (selectedDate.isNotBlank()) {
-            val result = fetchBookedTimes(selectedDate)
-            isLoadingSlots = false
-            result.onSuccess { bookedTimes = it }
+    fun chooseDate(
+        value: String
+    ) {
+
+        selectedDate =
+            value
+
+        appointmentType =
+            null
+
+        reason =
+            ""
+
+        bookingError =
+            null
+
+        scope.launch {
+
+            loadSlots(
+                value
+            )
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        "Book Appointment",
-                        color = ink,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = ink)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
-            )
-        },
-        bottomBar = {
-            if (selectedTime != null && appointmentType != null && doctor != null) {
+    fun submitBooking() {
 
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surface)
-                        .padding(horizontal = 20.dp, vertical = 12.dp)
-                ) {
-                    (localError ?: errorMessage)?.let {
-                        Text(it, color = red, fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp))
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(tealSoft)
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Total amount", color = teal, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        val slot =
+            selectedSlot
+
+        val type =
+            appointmentType
+
+        if (
+            slot == null
+        ) {
+
+            bookingError =
+                "Choose an available time."
+
+            return
+        }
+
+        if (
+            type == null
+        ) {
+
+            bookingError =
+                "Choose whether this will be online or in person."
+
+            return
+        }
+
+        if (
+            reason.trim()
+                .length < 3
+        ) {
+
+            bookingError =
+                "Please briefly tell the doctor why you need the appointment."
+
+            return
+        }
+
+        bookingError =
+            null
+
+        isBooking =
+            true
+
+        scope.launch {
+
+            PatientRepository
+                .reserveSlot(
+                    slotId =
+                        slot.id,
+
+                    appointmentType =
+                        type.databaseValue,
+
+                    reason =
+                        reason.trim(),
+
+                    idempotencyKey =
+                        bookingRequestId
+                )
+                .onSuccess { result ->
+
+                    bookingResult =
+                        result
+                }
+                .onFailure {
+
+                    bookingError =
+                        friendlyBookingError(
+                            it.message
+                        )
+
+                    /*
+                     * Generate a new key only if the server rejected
+                     * the request and the patient changes/retries the
+                     * booking.
+                     *
+                     * A retry of an uncertain network request should
+                     * keep the same key.
+                     */
+                }
+
+            isBooking =
+                false
+        }
+    }
+
+    LaunchedEffect(Unit) {
+
+        loadDoctor()
+    }
+
+    val activeStep =
+
+        when {
+
+            selectedDate
+                .isBlank() ->
+
+                BookingStep.DATE
+
+            selectedSlot == null ->
+
+                BookingStep.TIME
+
+            appointmentType == null ->
+
+                BookingStep.TYPE
+
+            else ->
+
+                BookingStep.DETAILS
+        }
+
+    Scaffold(
+
+        containerColor =
+            MaterialTheme
+                .colorScheme
+                .background,
+
+        topBar = {
+
+            TopAppBar(
+
+                title = {
+
+                    Column {
+
                         Text(
-                            "R %.2f".format(fee.toDoubleOrNull() ?: 0.0),
-                            color = teal,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold
+                            text =
+                                "Book appointment",
+                            fontWeight =
+                                FontWeight.Bold
+                        )
+
+                        doctor?.let {
+
+                            Text(
+                                text =
+                                    it.fullName,
+                                fontSize =
+                                    11.sp,
+                                color =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onSurfaceVariant
+                            )
+                        }
+                    }
+                },
+
+                navigationIcon = {
+
+                    IconButton(
+                        onClick =
+                            onBack
+                    ) {
+
+                        Icon(
+                            imageVector =
+                                Icons.AutoMirrored
+                                    .Filled
+                                    .ArrowBack,
+                            contentDescription =
+                                "Back"
                         )
                     }
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Button(
-                        onClick = {
-                            localError = null
-                            val cleanCardNumber = cardNumber.replace(" ", "")
-                            val feeAmount = fee.toDoubleOrNull()
-                            when {
-                                appointmentType == null -> localError = "Please choose in-person or online."
-                                reason.isBlank() -> localError = "Please enter a reason for your visit."
-                                feeAmount == null || feeAmount <= 0 -> localError = "Please enter a valid consultation fee."
-                                cardName.isBlank() -> localError = "Please enter the cardholder name."
-                                cleanCardNumber.length < 16 -> localError = "Please enter a valid card number."
-                                !cardExpiry.matches(Regex("(0[1-9]|1[0-2])/\\d{2}")) -> localError = "Please enter a valid expiry (MM/YY)."
-                                isCardExpired(cardExpiry) -> localError = "This card has expired."
-                                cardCvv.length < 3 -> localError = "Please enter the CVV."
-                                selectedBank == null -> localError = "Please select your bank."
-                                else -> {
-                                    val reference = "$selectedBank ••••${cleanCardNumber.takeLast(4)}"
-                                    onConfirmBooking(
-                                        BookingSubmission(
-                                            date = selectedDate,
-                                            time = selectedTime!!,
-                                            reason = reason,
-                                            fee = feeAmount,
-                                            paymentReference = reference,
-                                            appointmentType = appointmentType!!
+                },
+
+                colors =
+                    TopAppBarDefaults
+                        .topAppBarColors(
+                            containerColor =
+                                MaterialTheme
+                                    .colorScheme
+                                    .surface
+                        )
+            )
+        },
+
+        bottomBar = {
+
+            if (
+                bookingResult == null &&
+                doctor != null
+            ) {
+
+                BookingBottomBar(
+
+                    doctor =
+                        doctor!!,
+
+                    selectedSlot =
+                        selectedSlot,
+
+                    appointmentType =
+                        appointmentType,
+
+                    isBooking =
+                        isBooking,
+
+                    onBook =
+                        ::submitBooking
+                )
+            }
+        }
+
+    ) { innerPadding ->
+
+        when {
+
+            isLoadingDoctor -> {
+
+                LoadingBookingScreen(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(
+                                innerPadding
+                            )
+                )
+            }
+
+            doctor == null -> {
+
+                BookingErrorScreen(
+
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(
+                                innerPadding
+                            ),
+
+                    message =
+                        doctorError
+                            ?: "Doctor unavailable.",
+
+                    onRetry = {
+
+                        scope.launch {
+                            loadDoctor()
+                        }
+                    },
+
+                    onBack =
+                        onBack
+                )
+            }
+
+            bookingResult != null -> {
+
+                BookingSuccessScreen(
+
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(
+                                innerPadding
+                            ),
+
+                    doctor =
+                        doctor!!,
+
+                    result =
+                        bookingResult!!,
+
+                    appointmentType =
+                        appointmentType
+                            ?: AppointmentType
+                                .IN_PERSON,
+
+                    onDone =
+                        onBack,
+
+                    onBookAnother = {
+
+                        bookingResult =
+                            null
+
+                        selectedDate =
+                            ""
+
+                        selectedSlot =
+                            null
+
+                        availableSlots =
+                            emptyList()
+
+                        appointmentType =
+                            null
+
+                        reason =
+                            ""
+
+                        bookingError =
+                            null
+
+                        bookingRequestId =
+                            UUID.randomUUID()
+                                .toString()
+                    }
+                )
+            }
+
+            else -> {
+
+                LazyColumn(
+
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(
+                                innerPadding
+                            )
+                            .imePadding(),
+
+                    contentPadding =
+                        PaddingValues(
+                            bottom =
+                                150.dp
+                        ),
+
+                    verticalArrangement =
+                        Arrangement.spacedBy(
+                            12.dp
+                        )
+
+                ) {
+
+                    item {
+
+                        BookingHero(
+                            doctor =
+                                doctor!!
+                        )
+                    }
+
+                    item {
+
+                        BookingProgress(
+                            activeStep =
+                                activeStep
+                        )
+                    }
+
+                    item {
+
+                        DateSection(
+
+                            selectedDate =
+                                selectedDate,
+
+                            onDateSelected =
+                                ::chooseDate
+                        )
+                    }
+
+                    item {
+
+                        AnimatedVisibility(
+                            visible =
+                                selectedDate
+                                    .isNotBlank()
+                        ) {
+
+                            SlotSection(
+
+                                selectedDate =
+                                    selectedDate,
+
+                                slots =
+                                    availableSlots,
+
+                                alternativeSlots =
+                                    alternativeSlots,
+
+                                selectedSlot =
+                                    selectedSlot,
+
+                                isLoading =
+                                    isLoadingSlots,
+
+                                isLoadingAlternatives =
+                                    isLoadingAlternatives,
+
+                                error =
+                                    slotError,
+
+                                onRetry = {
+
+                                    scope.launch {
+
+                                        loadSlots(
+                                            selectedDate
+                                        )
+                                    }
+                                },
+
+                                onSelect = {
+
+                                    selectedSlot =
+                                        it
+
+                                    appointmentType =
+                                        null
+
+                                    bookingError =
+                                        null
+                                },
+
+                                onSelectAlternative = { slot ->
+
+                                    /*
+                                     * Automatically switch to the suggested date
+                                     * and select the chosen time.
+                                     */
+                                    selectedDate =
+                                        slot.date
+
+                                    selectedSlot =
+                                        slot
+
+                                    availableSlots =
+                                        alternativeSlots.filter {
+                                            it.date == slot.date
+                                        }
+
+                                    alternativeSlots =
+                                        emptyList()
+
+                                    appointmentType =
+                                        null
+
+                                    bookingError =
+                                        null
+                                }
+                            )
+                        }
+                    }
+
+                    item {
+
+                        AnimatedVisibility(
+                            visible =
+                                selectedSlot != null
+                        ) {
+
+                            VisitTypeSection(
+
+                                selected =
+                                    appointmentType,
+
+                                onSelect = {
+
+                                    appointmentType =
+                                        it
+
+                                    bookingError =
+                                        null
+                                }
+                            )
+                        }
+                    }
+
+                    item {
+
+                        AnimatedVisibility(
+                            visible =
+                                appointmentType !=
+                                        null
+                        ) {
+
+                            ReasonSection(
+
+                                reason =
+                                    reason,
+
+                                onReasonChange = {
+
+                                    if (
+                                        it.length <= 500
+                                    ) {
+
+                                        reason =
+                                            it
+
+                                        bookingError =
+                                            null
+                                    }
+                                }
+                            )
+                        }
+                    }
+
+                    item {
+
+                        AnimatedVisibility(
+                            visible =
+                                appointmentType !=
+                                        null
+                        ) {
+
+                            PriceInformationCard(
+                                doctor =
+                                    doctor!!
+                            )
+                        }
+                    }
+
+                    if (
+                        bookingError != null ||
+                        errorMessage != null
+                    ) {
+
+                        item {
+
+                            BookingErrorMessage(
+                                message =
+                                    bookingError
+                                        ?: errorMessage
+                                            .orEmpty()
+                            )
+                        }
+                    }
+
+                    item {
+
+                        SecureBookingNotice()
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BookingHero(
+    doctor: DoctorBookingInfo
+) {
+
+    Box(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 16.dp
+                )
+                .clip(
+                    RoundedCornerShape(
+                        28.dp
+                    )
+                )
+                .background(
+                    PatientColors
+                        .ConsultationGradient
+                )
+                .padding(
+                    20.dp
+                )
+    ) {
+
+        /*
+         * Decorative background circles
+         */
+        Box(
+            modifier =
+                Modifier
+                    .align(
+                        Alignment.TopEnd
+                    )
+                    .size(
+                        110.dp
+                    )
+                    .clip(
+                        CircleShape
+                    )
+                    .background(
+                        Color.White.copy(
+                            alpha = 0.07f
+                        )
+                    )
+        )
+
+
+        Box(
+            modifier =
+                Modifier
+                    .align(
+                        Alignment.BottomEnd
+                    )
+                    .size(
+                        60.dp
+                    )
+                    .clip(
+                        CircleShape
+                    )
+                    .background(
+                        Color.White.copy(
+                            alpha = 0.05f
+                        )
+                    )
+        )
+
+
+        Column(
+            modifier =
+                Modifier.fillMaxWidth()
+        ) {
+
+            /*
+             * Small booking label
+             */
+            Row(
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+
+                Box(
+                    modifier =
+                        Modifier
+                            .size(
+                                35.dp
+                            )
+                            .clip(
+                                RoundedCornerShape(
+                                    11.dp
+                                )
+                            )
+                            .background(
+                                Color.White.copy(
+                                    alpha = 0.16f
+                                )
+                            ),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+
+                    Icon(
+                        imageVector =
+                            Icons.Outlined.CalendarMonth,
+                        contentDescription =
+                            null,
+                        tint =
+                            Color.White,
+                        modifier =
+                            Modifier.size(
+                                18.dp
+                            )
+                    )
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.width(
+                            9.dp
+                        )
+                )
+
+
+                Text(
+                    text =
+                        "BOOK APPOINTMENT",
+                    color =
+                        Color.White.copy(
+                            alpha = 0.90f
+                        ),
+                    fontSize =
+                        9.5.sp,
+                    fontWeight =
+                        FontWeight.ExtraBold,
+                    letterSpacing =
+                        0.7.sp
+                )
+            }
+
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        16.dp
+                    )
+            )
+
+
+            Text(
+                text =
+                    doctor.fullName,
+                color =
+                    Color.White,
+                fontWeight =
+                    FontWeight.ExtraBold,
+                fontSize =
+                    21.sp
+            )
+
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        4.dp
+                    )
+            )
+
+
+            Text(
+                text =
+                    doctor.specialty,
+                color =
+                    Color.White.copy(
+                        alpha = 0.84f
+                    ),
+                fontSize =
+                    13.sp,
+                fontWeight =
+                    FontWeight.Medium
+            )
+
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        16.dp
+                    )
+            )
+
+
+            /*
+             * Doctor booking information
+             */
+            Row(
+                modifier =
+                    Modifier.fillMaxWidth(),
+                horizontalArrangement =
+                    Arrangement.spacedBy(
+                        9.dp
+                    )
+            ) {
+
+                /*
+                 * Operating hours
+                 */
+                doctor.operatingHours
+                    ?.takeIf {
+                        it.isNotBlank()
+                    }
+                    ?.let { hours ->
+
+                        Row(
+                            modifier =
+                                Modifier
+                                    .weight(1f)
+                                    .clip(
+                                        RoundedCornerShape(
+                                            15.dp
                                         )
                                     )
-                                }
+                                    .background(
+                                        Color.White.copy(
+                                            alpha = 0.13f
+                                        )
+                                    )
+                                    .padding(
+                                        horizontal = 10.dp,
+                                        vertical = 9.dp
+                                    ),
+                            verticalAlignment =
+                                Alignment.CenterVertically
+                        ) {
+
+                            Icon(
+                                imageVector =
+                                    Icons.Outlined.Schedule,
+                                contentDescription =
+                                    null,
+                                tint =
+                                    Color.White,
+                                modifier =
+                                    Modifier.size(
+                                        16.dp
+                                    )
+                            )
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.width(
+                                        6.dp
+                                    )
+                            )
+
+
+                            Column {
+
+                                Text(
+                                    text =
+                                        "Availability",
+                                    color =
+                                        Color.White.copy(
+                                            alpha = 0.70f
+                                        ),
+                                    fontSize =
+                                        8.5.sp
+                                )
+
+
+                                Text(
+                                    text =
+                                        hours,
+                                    color =
+                                        Color.White,
+                                    fontSize =
+                                        10.5.sp,
+                                    fontWeight =
+                                        FontWeight.SemiBold,
+                                    maxLines =
+                                        1,
+                                    overflow =
+                                        TextOverflow.Ellipsis
+                                )
                             }
-                        },
-                        enabled = !isLoading,
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = navy),
-                        shape = RoundedCornerShape(14.dp)
+                        }
+                    }
+
+
+                /*
+                 * Estimated consultation fee
+                 */
+                Row(
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .clip(
+                                RoundedCornerShape(
+                                    15.dp
+                                )
+                            )
+                            .background(
+                                Color.White.copy(
+                                    alpha = 0.13f
+                                )
+                            )
+                            .padding(
+                                horizontal = 10.dp,
+                                vertical = 9.dp
+                            ),
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+
+                    Icon(
+                        imageVector =
+                            Icons.Outlined.Payments,
+                        contentDescription =
+                            null,
+                        tint =
+                            Color.White,
+                        modifier =
+                            Modifier.size(
+                                16.dp
+                            )
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(
+                                6.dp
+                            )
+                    )
+
+
+                    Column {
+
+                        Text(
+                            text =
+                                "Estimated fee",
+                            color =
+                                Color.White.copy(
+                                    alpha = 0.70f
+                                ),
+                            fontSize =
+                                8.5.sp
+                        )
+
+
+                        Text(
+                            text =
+                                doctor.hourlyRate
+                                    ?.let {
+                                        "R %.2f".format(it)
+                                    }
+                                    ?: "To be confirmed",
+                            color =
+                                Color.White,
+                            fontSize =
+                                10.5.sp,
+                            fontWeight =
+                                FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        13.dp
+                    )
+            )
+
+
+            /*
+             * Small message
+             */
+            Row(
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+
+                Icon(
+                    imageVector =
+                        Icons.Outlined.Lock,
+                    contentDescription =
+                        null,
+                    tint =
+                        Color.White.copy(
+                            alpha = 0.75f
+                        ),
+                    modifier =
+                        Modifier.size(
+                            14.dp
+                        )
+                )
+
+
+                Spacer(
+                    modifier =
+                        Modifier.width(
+                            5.dp
+                        )
+                )
+
+
+                Text(
+                    text =
+                        "Choose an available slot to continue",
+                    color =
+                        Color.White.copy(
+                            alpha = 0.76f
+                        ),
+                    fontSize =
+                        10.5.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BookingProgress(
+    activeStep: BookingStep
+) {
+
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 16.dp
+                )
+    ) {
+
+        Row(
+            modifier =
+                Modifier.fillMaxWidth(),
+            verticalAlignment =
+                Alignment.CenterVertically
+        ) {
+
+            Column(
+                modifier =
+                    Modifier.weight(1f)
+            ) {
+
+                Text(
+                    text = "Appointment setup",
+                    color =
+                        PatientColors.TextPrimary,
+                    fontSize = 16.sp,
+                    fontWeight =
+                        FontWeight.ExtraBold
+                )
+
+                Spacer(
+                    modifier =
+                        Modifier.height(2.dp)
+                )
+
+                Text(
+                    text =
+                        "Complete the steps below to reserve your visit.",
+                    color =
+                        PatientColors.TextSecondary,
+                    fontSize = 10.5.sp
+                )
+            }
+
+
+            /*
+             * Current progress label
+             */
+            Box(
+                modifier =
+                    Modifier
+                        .clip(
+                            RoundedCornerShape(
+                                20.dp
+                            )
+                        )
+                        .background(
+                            PatientColors.AppointmentCard
+                        )
+                        .padding(
+                            horizontal = 9.dp,
+                            vertical = 5.dp
+                        )
+            ) {
+
+                Text(
+                    text =
+                        "${activeStep.number}/4",
+                    color =
+                        PatientColors.AppointmentAccent,
+                    fontSize = 10.sp,
+                    fontWeight =
+                        FontWeight.Bold
+                )
+            }
+        }
+
+
+        Spacer(
+            modifier =
+                Modifier.height(16.dp)
+        )
+
+
+        /*
+         * Step circles + connector lines
+         */
+        Row(
+            modifier =
+                Modifier.fillMaxWidth(),
+            verticalAlignment =
+                Alignment.CenterVertically
+        ) {
+
+            BookingStep.entries
+                .forEachIndexed { index, step ->
+
+                    val completed =
+                        step.number <
+                                activeStep.number
+
+                    val active =
+                        step == activeStep
+
+
+                    Column(
+                        horizontalAlignment =
+                            Alignment.CenterHorizontally
                     ) {
-                        if (isLoading) {
-                            CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+
+                        Box(
+                            modifier =
+                                Modifier
+                                    .size(
+                                        38.dp
+                                    )
+                                    .clip(
+                                        CircleShape
+                                    )
+                                    .background(
+                                        when {
+
+                                            completed ->
+                                                PatientColors
+                                                    .SuccessAccent
+
+                                            active ->
+                                                PatientColors
+                                                    .AppointmentAccent
+
+                                            else ->
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .surfaceVariant
+                                        }
+                                    ),
+                            contentAlignment =
+                                Alignment.Center
+                        ) {
+
+                            if (completed) {
+
+                                Icon(
+                                    imageVector =
+                                        Icons.Filled.CheckCircle,
+                                    contentDescription =
+                                        "Completed",
+                                    tint =
+                                        Color.White,
+                                    modifier =
+                                        Modifier.size(
+                                            20.dp
+                                        )
+                                )
+
+                            } else {
+
+                                Text(
+                                    text =
+                                        step.number
+                                            .toString(),
+                                    color =
+                                        if (active) {
+                                            Color.White
+                                        } else {
+                                            PatientColors
+                                                .TextSecondary
+                                        },
+                                    fontSize =
+                                        12.sp,
+                                    fontWeight =
+                                        FontWeight.ExtraBold
+                                )
+                            }
+                        }
+                    }
+
+
+                    /*
+                     * Connector between steps
+                     */
+                    if (
+                        index <
+                        BookingStep.entries.lastIndex
+                    ) {
+
+                        Box(
+                            modifier =
+                                Modifier
+                                    .weight(1f)
+                                    .height(
+                                        3.dp
+                                    )
+                                    .background(
+                                        if (
+                                            step.number <
+                                            activeStep.number
+                                        ) {
+                                            PatientColors
+                                                .SuccessAccent
+                                        } else {
+                                            MaterialTheme
+                                                .colorScheme
+                                                .surfaceVariant
+                                        },
+                                        RoundedCornerShape(
+                                            10.dp
+                                        )
+                                    )
+                        )
+                    }
+                }
+        }
+
+
+        Spacer(
+            modifier =
+                Modifier.height(8.dp)
+        )
+
+
+        /*
+         * Labels
+         */
+        Row(
+            modifier =
+                Modifier.fillMaxWidth()
+        ) {
+
+            BookingStep.entries
+                .forEach { step ->
+
+                    val completed =
+                        step.number <
+                                activeStep.number
+
+                    val active =
+                        step == activeStep
+
+
+                    Text(
+                        text =
+                            step.title,
+                        modifier =
+                            Modifier.weight(
+                                1f
+                            ),
+                        textAlign =
+                            TextAlign.Center,
+                        color =
+                            when {
+
+                                completed ->
+                                    PatientColors
+                                        .SuccessAccent
+
+                                active ->
+                                    PatientColors
+                                        .AppointmentAccent
+
+                                else ->
+                                    PatientColors
+                                        .TextSecondary
+                            },
+                        fontSize =
+                            9.5.sp,
+                        fontWeight =
+                            if (
+                                active ||
+                                completed
+                            ) {
+                                FontWeight.Bold
+                            } else {
+                                FontWeight.Medium
+                            }
+                    )
+                }
+        }
+
+
+        Spacer(
+            modifier =
+                Modifier.height(5.dp)
+        )
+
+
+        /*
+         * Active step message
+         */
+        Text(
+            text =
+                when (activeStep) {
+
+                    BookingStep.DATE ->
+                        "Start by choosing an appointment date."
+
+                    BookingStep.TIME ->
+                        "Now select an available time."
+
+                    BookingStep.TYPE ->
+                        "Choose how you would like to attend."
+
+                    BookingStep.DETAILS ->
+                        "Almost done — add your visit details."
+                },
+            modifier =
+                Modifier.fillMaxWidth(),
+            color =
+                PatientColors.TextSecondary,
+            fontSize =
+                10.5.sp,
+            textAlign =
+                TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun DateSection(
+    selectedDate: String,
+    onDateSelected: (String) -> Unit
+) {
+
+    val context =
+        androidx.compose.ui.platform
+            .LocalContext
+            .current
+
+    val calendar =
+        remember {
+            Calendar.getInstance()
+        }
+
+    BookingSectionCard(
+        icon =
+            Icons.Outlined.CalendarMonth,
+        title =
+            "Choose a date",
+        subtitle =
+            "Select when you would like to see the doctor."
+    ) {
+
+        Card(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clickable {
+
+                        DatePickerDialog(
+                            context,
+
+                            { _, year, month, day ->
+
+                                onDateSelected(
+                                    "%04d-%02d-%02d"
+                                        .format(
+                                            year,
+                                            month + 1,
+                                            day
+                                        )
+                                )
+                            },
+
+                            calendar.get(
+                                Calendar.YEAR
+                            ),
+
+                            calendar.get(
+                                Calendar.MONTH
+                            ),
+
+                            calendar.get(
+                                Calendar.DAY_OF_MONTH
+                            )
+                        )
+                            .apply {
+
+                                datePicker.minDate =
+                                    System.currentTimeMillis() -
+                                            1000
+                            }
+                            .show()
+                    },
+            shape =
+                RoundedCornerShape(
+                    18.dp
+                ),
+            colors =
+                CardDefaults.cardColors(
+                    containerColor =
+                        if (
+                            selectedDate.isBlank()
+                        ) {
+                            PatientColors
+                                .AppointmentCard
+                                .copy(
+                                    alpha = 0.55f
+                                )
                         } else {
-                            Text("Confirm & Pay Booking", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            PatientColors
+                                .SuccessCard
+                        }
+                ),
+            border =
+                BorderStroke(
+                    width = 1.dp,
+                    color =
+                        if (
+                            selectedDate.isBlank()
+                        ) {
+                            PatientColors
+                                .AppointmentAccent
+                                .copy(
+                                    alpha = 0.15f
+                                )
+                        } else {
+                            PatientColors
+                                .SuccessAccent
+                                .copy(
+                                    alpha = 0.18f
+                                )
+                        }
+                ),
+            elevation =
+                CardDefaults.cardElevation(
+                    defaultElevation = 0.dp
+                )
+        ) {
+
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            15.dp
+                        ),
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+
+                Box(
+                    modifier =
+                        Modifier
+                            .size(
+                                44.dp
+                            )
+                            .clip(
+                                RoundedCornerShape(
+                                    13.dp
+                                )
+                            )
+                            .background(
+                                if (
+                                    selectedDate.isBlank()
+                                ) {
+                                    PatientColors
+                                        .AppointmentAccent
+                                        .copy(
+                                            alpha = 0.12f
+                                        )
+                                } else {
+                                    PatientColors
+                                        .SuccessAccent
+                                        .copy(
+                                            alpha = 0.12f
+                                        )
+                                }
+                            ),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+
+                    Icon(
+                        imageVector =
+                            if (
+                                selectedDate.isBlank()
+                            ) {
+                                Icons.Outlined.CalendarMonth
+                            } else {
+                                Icons.Filled.CheckCircle
+                            },
+                        contentDescription =
+                            null,
+                        tint =
+                            if (
+                                selectedDate.isBlank()
+                            ) {
+                                PatientColors
+                                    .AppointmentAccent
+                            } else {
+                                PatientColors
+                                    .SuccessAccent
+                            },
+                        modifier =
+                            Modifier.size(
+                                21.dp
+                            )
+                    )
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.width(
+                            12.dp
+                        )
+                )
+
+
+                Column(
+                    modifier =
+                        Modifier.weight(1f)
+                ) {
+
+                    Text(
+                        text =
+                            if (
+                                selectedDate.isBlank()
+                            ) {
+                                "Select appointment date"
+                            } else {
+                                selectedDate
+                            },
+                        color =
+                            PatientColors
+                                .TextPrimary,
+                        fontWeight =
+                            FontWeight.Bold,
+                        fontSize =
+                            13.5.sp
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                2.dp
+                            )
+                    )
+
+
+                    Text(
+                        text =
+                            if (
+                                selectedDate.isBlank()
+                            ) {
+                                "Tap to open the calendar"
+                            } else {
+                                "Selected • Tap to change"
+                            },
+                        color =
+                            PatientColors
+                                .TextSecondary,
+                        fontSize =
+                            10.5.sp
+                    )
+                }
+
+
+                Text(
+                    text =
+                        if (
+                            selectedDate.isBlank()
+                        ) {
+                            "Choose"
+                        } else {
+                            "Change"
+                        },
+                    color =
+                        if (
+                            selectedDate.isBlank()
+                        ) {
+                            PatientColors
+                                .AppointmentAccent
+                        } else {
+                            PatientColors
+                                .SuccessAccent
+                        },
+                    fontSize =
+                        10.5.sp,
+                    fontWeight =
+                        FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SlotSection(
+    selectedDate: String,
+    slots: List<AvailableSlot>,
+    alternativeSlots: List<AvailableSlot>,
+    selectedSlot: AvailableSlot?,
+    isLoading: Boolean,
+    isLoadingAlternatives: Boolean,
+    error: String?,
+    onRetry: () -> Unit,
+    onSelect: (AvailableSlot) -> Unit,
+    onSelectAlternative: (AvailableSlot) -> Unit
+) {
+
+    BookingSectionCard(
+        icon =
+            Icons.Outlined.Schedule,
+        title =
+            "Available times",
+        subtitle =
+            "Live availability for $selectedDate"
+    ) {
+
+        when {
+
+            isLoading -> {
+
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                vertical = 18.dp
+                            ),
+                    horizontalAlignment =
+                        Alignment.CenterHorizontally
+                ) {
+
+                    CircularProgressIndicator(
+                        modifier =
+                            Modifier.size(
+                                27.dp
+                            ),
+                        strokeWidth =
+                            2.5.dp,
+                        color =
+                            PatientColors
+                                .AppointmentAccent
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                9.dp
+                            )
+                    )
+
+
+                    Text(
+                        text =
+                            "Checking available times...",
+                        color =
+                            PatientColors
+                                .TextSecondary,
+                        fontSize =
+                            11.5.sp
+                    )
+                }
+            }
+
+
+            error != null -> {
+
+                Card(
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    shape =
+                        RoundedCornerShape(
+                            17.dp
+                        ),
+                    colors =
+                        CardDefaults.cardColors(
+                            containerColor =
+                                PatientColors.RedSoft
+                        ),
+                    border =
+                        BorderStroke(
+                            1.dp,
+                            PatientColors.Red
+                                .copy(
+                                    alpha = 0.12f
+                                )
+                        )
+                ) {
+
+                    Column(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    15.dp
+                                ),
+                        horizontalAlignment =
+                            Alignment.CenterHorizontally
+                    ) {
+
+                        Icon(
+                            imageVector =
+                                Icons.Outlined.Info,
+                            contentDescription =
+                                null,
+                            tint =
+                                PatientColors.Red,
+                            modifier =
+                                Modifier.size(
+                                    26.dp
+                                )
+                        )
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(
+                                    7.dp
+                                )
+                        )
+
+
+                        Text(
+                            text =
+                                "Couldn't load available times",
+                            color =
+                                PatientColors
+                                    .TextPrimary,
+                            fontWeight =
+                                FontWeight.Bold,
+                            fontSize =
+                                13.sp,
+                            textAlign =
+                                TextAlign.Center
+                        )
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(
+                                    4.dp
+                                )
+                        )
+
+
+                        Text(
+                            text =
+                                "Please try loading the doctor's availability again.",
+                            color =
+                                PatientColors
+                                    .TextSecondary,
+                            fontSize =
+                                10.5.sp,
+                            textAlign =
+                                TextAlign.Center
+                        )
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(
+                                    10.dp
+                                )
+                        )
+
+
+                        FilledTonalButton(
+                            onClick =
+                                onRetry
+                        ) {
+
+                            Icon(
+                                imageVector =
+                                    Icons.Filled.Refresh,
+                                contentDescription =
+                                    null,
+                                modifier =
+                                    Modifier.size(
+                                        17.dp
+                                    )
+                            )
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.width(
+                                        6.dp
+                                    )
+                            )
+
+
+                            Text(
+                                text =
+                                    "Try again",
+                                fontWeight =
+                                    FontWeight.Bold
+                            )
                         }
                     }
                 }
             }
-        },
-        containerColor = bg
 
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .verticalScroll(rememberScrollState())
-                .imePadding()
-        ) {
-            when {
-                isLoadingDoctor -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(48.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(color = teal)
-                    }
-                }
 
-                doctorLoadError != null -> {
-                    Text(
-                        doctorLoadError ?: "",
-                        color = red,
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(20.dp)
-                    )
-                }
+            slots.isEmpty() -> {
 
-                doctor != null -> {
-                    val doc = doctor!!
+                Column(
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    horizontalAlignment =
+                        Alignment.CenterHorizontally
+                ) {
 
-                    DoctorBanner(doc)
-
-                    // ---- DATE ----
-                    SectionCard(icon = Icons.Outlined.CalendarMonth, title = "Choose a Date") {
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            OutlinedTextField(
-                                value = selectedDate.ifBlank { "" },
-                                onValueChange = {},
-                                enabled = false,
-                                placeholder = { Text("Select appointment date") },
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    disabledTextColor = ink,
-                                    disabledBorderColor = Color(0xFFCBD5E1),
-                                    disabledContainerColor = Color.Transparent,
-                                    disabledPlaceholderColor = muted,
-                                    disabledTrailingIconColor = muted
-                                ),
-                                shape = RoundedCornerShape(12.dp),
-                                trailingIcon = {
-                                    Icon(
-                                        Icons.Outlined.CalendarMonth,
-                                        contentDescription = null,
-                                        tint = muted
-                                    )
-                                },
-                                modifier = Modifier.fillMaxWidth()
+                    Icon(
+                        imageVector =
+                            Icons.Outlined.Schedule,
+                        contentDescription =
+                            null,
+                        tint =
+                            MaterialTheme
+                                .colorScheme
+                                .primary,
+                        modifier =
+                            Modifier.size(
+                                34.dp
                             )
-                            Box(
-                                modifier = Modifier
-                                    .matchParentSize()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .clickable {
-                                        DatePickerDialog(
-                                            context,
-                                            { _, year, month, day ->
-                                                val dateStr = "%04d-%02d-%02d".format(year, month + 1, day)
-                                                val picked = Calendar.getInstance().apply { set(year, month, day) }
-                                                val dayOfWeek = picked.get(Calendar.DAY_OF_WEEK)
-                                                when {
-                                                    dayOfWeek == Calendar.SATURDAY || dayOfWeek == Calendar.SUNDAY ->
-                                                        dateError = "Doctors aren't available on weekends — please pick a weekday."
-                                                    publicHolidays.contains(dateStr) ->
-                                                        dateError = "That date is a public holiday — please pick another day."
-                                                    else -> {
-                                                        dateError = null
-                                                        slotError = null
-                                                        selectedDate = dateStr
-                                                        selectedTime = null
-                                                    }
-                                                }
-                                            },
-                                            calendar.get(Calendar.YEAR),
-                                            calendar.get(Calendar.MONTH),
-                                            calendar.get(Calendar.DAY_OF_MONTH)
-                                        ).apply {
-                                            datePicker.minDate = System.currentTimeMillis() - 1000
-                                        }.show()
-                                    }
+                    )
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                8.dp
+                            )
+                    )
+
+                    Text(
+                        text =
+                            "No available slots on $selectedDate",
+                        fontWeight =
+                            FontWeight.Bold,
+                        textAlign =
+                            TextAlign.Center
+                    )
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                4.dp
+                            )
+                    )
+
+                    Text(
+                        text =
+                            "This doctor is not available on this date.",
+                        color =
+                            MaterialTheme
+                                .colorScheme
+                                .onSurfaceVariant,
+                        fontSize =
+                            12.sp,
+                        textAlign =
+                            TextAlign.Center
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                18.dp
+                            )
+                    )
+
+
+                    when {
+
+                        isLoadingAlternatives -> {
+
+                            CircularProgressIndicator(
+                                modifier =
+                                    Modifier.size(
+                                        26.dp
+                                    ),
+                                strokeWidth =
+                                    2.5.dp
+                            )
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(
+                                        8.dp
+                                    )
+                            )
+
+                            Text(
+                                text =
+                                    "Finding the next available appointments...",
+                                color =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                fontSize =
+                                    11.5.sp,
+                                textAlign =
+                                    TextAlign.Center
                             )
                         }
-                    }
 
-                    dateError?.let {
-                        Text(
-                            it,
-                            color = red,
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
 
-                        )
-                    }
+                        alternativeSlots.isEmpty() -> {
 
-                    // ---- SLOTS ----
-                    if (selectedDate.isNotBlank()) {
-                        SectionCard(
-                            icon = Icons.Outlined.Schedule,
-                            title = "Available Time Slots"
-                        ) {
-                            if (isLoadingSlots) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(20.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    CircularProgressIndicator(
-                                        color = teal,
-                                        modifier = Modifier.size(24.dp)
+                            Text(
+                                text =
+                                    "This doctor currently has no other published appointment slots.",
+                                color =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                fontSize =
+                                    12.sp,
+                                textAlign =
+                                    TextAlign.Center
+                            )
+                        }
+
+
+                        else -> {
+
+                            HorizontalDivider()
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(
+                                        14.dp
                                     )
-                                }
-                            } else {
+                            )
 
-                                Spacer(modifier = Modifier.height(14.dp))
-                                slotError?.let {
-                                    Text(it, color = red, fontSize = 12.sp, modifier = Modifier.padding(bottom = 6.dp))
-                                }
-                                androidx.compose.material3.TextButton(
-                                    onClick = {
-                                        val now = Calendar.getInstance()
-                                        android.app.TimePickerDialog(
-                                            context,
-                                            { _, hour, minute ->
-                                                val customTime = "%02d:%02d".format(hour, minute)
-                                                slotError = when {
-                                                    selectedDate == currentDateString() && customTime <= currentTimeString() ->
-                                                        "Please choose a time that hasn't already passed."
 
-                                                    bookedTimes.contains(customTime) ->
-                                                        "That exact time is already booked — please choose another."
+                            Text(
+                                text =
+                                    "Next available appointments",
+                                modifier =
+                                    Modifier.fillMaxWidth(),
+                                fontWeight =
+                                    FontWeight.Bold,
+                                fontSize =
+                                    13.5.sp
+                            )
 
-                                                    else -> null
-                                                }
-                                                if (slotError == null) selectedTime = customTime
-                                            },
-                                            now.get(Calendar.HOUR_OF_DAY),
-                                            now.get(Calendar.MINUTE),
-                                            true
-                                        ).show()
-                                    }
-                                ) {
-                                    Text("Need an urgent time? Pick any time →", color = teal, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                                }
-                                val visibleTimeSlots = remember(selectedDate) {
-                                    if (selectedDate == currentDateString()) {
-                                        timeSlotOptions.filter { it > currentTimeString() }
-                                    } else {
-                                        timeSlotOptions
-                                    }
-                                }
 
-                                Legend()
-                                Spacer(modifier = Modifier.height(12.dp))
-                                if (visibleTimeSlots.isEmpty()) {
-                                    Text(
-                                        "No more slots left today — pick another date, or use \"Need an urgent time?\" below.",
-                                        color = muted,
-                                        fontSize = 12.5.sp,
-                                        modifier = Modifier.padding(vertical = 8.dp)
+                            Spacer(
+                                modifier =
+                                    Modifier.height(
+                                        12.dp
                                     )
-                                } else {
-                                    LazyVerticalGrid(
-                                        columns = GridCells.Fixed(4),
-                                        modifier = Modifier.height(((visibleTimeSlots.size / 4 + 1) * 52).dp)
+                            )
+
+
+                            alternativeSlots
+                                .groupBy {
+                                    it.date
+                                }
+                                .toSortedMap()
+                                .forEach { (date, dateSlots) ->
+
+                                    Column(
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .padding(
+                                                    bottom =
+                                                        14.dp
+                                                )
                                     ) {
-                                        items(visibleTimeSlots) { slot ->
-                                            SlotButton(
-                                                label = slot,
-                                                isTaken = bookedTimes.contains(slot),
-                                                isSelected = selectedTime == slot,
-                                                onClick = { selectedTime = slot; slotError = null }
+
+                                        Row(
+                                            verticalAlignment =
+                                                Alignment.CenterVertically
+                                        ) {
+
+                                            Icon(
+                                                imageVector =
+                                                    Icons.Outlined.CalendarMonth,
+                                                contentDescription =
+                                                    null,
+                                                tint =
+                                                    MaterialTheme
+                                                        .colorScheme
+                                                        .primary,
+                                                modifier =
+                                                    Modifier.size(
+                                                        18.dp
+                                                    )
                                             )
+
+                                            Spacer(
+                                                modifier =
+                                                    Modifier.width(
+                                                        7.dp
+                                                    )
+                                            )
+
+                                            Text(
+                                                text =
+                                                    date,
+                                                fontWeight =
+                                                    FontWeight.SemiBold,
+                                                fontSize =
+                                                    12.5.sp
+                                            )
+                                        }
+
+
+                                        Spacer(
+                                            modifier =
+                                                Modifier.height(
+                                                    8.dp
+                                                )
+                                        )
+
+
+                                        Row(
+                                            modifier =
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .horizontalScroll(
+                                                        rememberScrollState()
+                                                    ),
+                                            horizontalArrangement =
+                                                Arrangement.spacedBy(
+                                                    8.dp
+                                                )
+                                        ) {
+
+                                            dateSlots
+                                                .sortedBy {
+                                                    it.time
+                                                }
+                                                .forEach { slot ->
+
+                                                    Surface(
+                                                        modifier =
+                                                            Modifier.clickable {
+
+                                                                onSelectAlternative(
+                                                                    slot
+                                                                )
+                                                            },
+                                                        shape =
+                                                            RoundedCornerShape(
+                                                                10.dp
+                                                            ),
+                                                        color =
+                                                            MaterialTheme
+                                                                .colorScheme
+                                                                .primaryContainer
+                                                    ) {
+
+                                                        Text(
+                                                            text =
+                                                                displayTime(
+                                                                    slot.time
+                                                                ),
+                                                            modifier =
+                                                                Modifier.padding(
+                                                                    horizontal =
+                                                                        14.dp,
+                                                                    vertical =
+                                                                        10.dp
+                                                                ),
+                                                            color =
+                                                                MaterialTheme
+                                                                    .colorScheme
+                                                                    .onPrimaryContainer,
+                                                            fontWeight =
+                                                                FontWeight.SemiBold,
+                                                            fontSize =
+                                                                12.sp
+                                                        )
+                                                    }
+                                                }
                                         }
                                     }
                                 }
-                                selectedTime?.let {
-                                    Spacer(modifier = Modifier.height(10.dp))
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .background(tealSoft)
-                                            .padding(12.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            Icons.Outlined.CheckCircle,
-                                            contentDescription = null,
-                                            tint = teal,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            "Selected: $it",
-                                            color = teal,
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                    }
+                        }
+                    }
+                }
+            }
+
+
+            else -> {
+
+                Column(
+                    verticalArrangement =
+                        Arrangement.spacedBy(
+                            9.dp
+                        )
+                ) {
+
+                    Text(
+                        text =
+                            "${slots.size} available time${
+                                if (slots.size == 1) {
+                                    ""
+                                } else {
+                                    "s"
                                 }
-                            }
+                            }",
+                        color =
+                            PatientColors.SuccessAccent,
+                        fontSize =
+                            10.5.sp,
+                        fontWeight =
+                            FontWeight.Bold
+                    )
+
+
+                    slots
+                        .sortedBy {
+                            it.time
                         }
-                    }
+                        .forEach { slot ->
 
-                    // ---- VISIT TYPE ----
-                    if (selectedTime != null) {
-                        SectionCard(icon = Icons.Outlined.Schedule, title = "Visit Type") {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                VisitTypeOption(
-                                    label = "In Person",
-                                    description = "Visit the doctor's practice",
-                                    selected = appointmentType == AppointmentType.IN_PERSON,
-                                    onClick = { appointmentType = AppointmentType.IN_PERSON },
-                                    modifier = Modifier.weight(1f)
-                                )
-                                VisitTypeOption(
-                                    label = "Online",
-                                    description = "Video call in the app",
-                                    selected = appointmentType == AppointmentType.ONLINE,
-                                    onClick = { appointmentType = AppointmentType.ONLINE },
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                        }
-                    }
-
-                    // ---- PAYMENT ----
-                    if (selectedTime != null && appointmentType != null) {
-                        SectionCard(icon = Icons.Outlined.CreditCard, title = "Payment Details") {
-                            CardPreview(cardName, cardNumber, cardExpiry)
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            OutlinedTextField(
-                                value = reason,
-                                onValueChange = { reason = it },
-                                label = { Text("Reason for visit") },
-                                singleLine = true,
-                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = teal),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            OutlinedTextField(
-                                value = fee,
-                                onValueChange = { fee = it },
-                                label = { Text("Consultation fee (R)") },
-                                singleLine = true,
-                                readOnly = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = teal),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            OutlinedTextField(
-                                value = cardName,
-                                onValueChange = { cardName = it },
-                                label = { Text("Cardholder name") },
-                                singleLine = true,
-                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = teal),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            OutlinedTextField(
-                                value = cardNumber,
-                                onValueChange = {
-                                    if (it.length <= 19) cardNumber = formatCardNumber(it)
-                                },
-                                label = { Text("Card number") },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = teal),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            Row {
-                                OutlinedTextField(
-                                    value = cardExpiry,
-                                    onValueChange = {
-                                        if (it.length <= 5) cardExpiry = formatExpiry(it)
-                                    },
-                                    label = { Text("MM/YY") },
-                                    singleLine = true,
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = teal),
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                OutlinedTextField(
-                                    value = cardCvv,
-                                    onValueChange = {
-                                        if (it.length <= 3) cardCvv = it.filter(Char::isDigit)
-                                    },
-                                    label = { Text("CVV") },
-                                    singleLine = true,
-                                    visualTransformation = PasswordVisualTransformation(),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = teal),
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            Box {
-                                OutlinedTextField(
-                                    value = selectedBank ?: "",
-                                    onValueChange = {},
-                                    readOnly = true,
-                                    label = { Text("Your bank") },
-                                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = teal),
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .matchParentSize()
-                                        .clickable { bankMenuExpanded = true }
-                                )
-                                DropdownMenu(
-                                    expanded = bankMenuExpanded,
-                                    onDismissRequest = { bankMenuExpanded = false }) {
-                                    banks.forEach { bank ->
-                                        DropdownMenuItem(
-                                            text = { Text(bank) },
-                                            onClick = {
-                                                selectedBank = bank; bankMenuExpanded = false
-                                            }
-                                        )
-                                    }
+                            SlotOption(
+                                slot =
+                                    slot,
+                                selected =
+                                    selectedSlot
+                                        ?.id ==
+                                            slot.id,
+                                onClick = {
+                                    onSelect(slot)
                                 }
-                            }
-
-                            Spacer(modifier = Modifier.height(14.dp))
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(tealSoft)
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.Outlined.Lock,
-                                    contentDescription = null,
-                                    tint = teal,
-                                    modifier = Modifier.size(15.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    "Funds are only transferred once the doctor confirms your appointment.",
-                                    color = teal, fontSize = 12.sp
-                                )
-                            }
+                            )
                         }
-
-                        // ---- SUMMARY + CONFIRM ----
-
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
                 }
             }
         }
@@ -679,200 +2535,578 @@ fun BookAppointmentScreen(
 }
 
 @Composable
-private fun DoctorBanner(doc: DoctorBookingInfo) {
-    val teal = MaterialTheme.colorScheme.primary
-    val navy = MaterialTheme.colorScheme.primary
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Brush.linearGradient(colors = listOf(navy, Color(0xFF1A3A5C))))
-            .padding(20.dp)
+private fun SlotOption(
+    slot: AvailableSlot,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+
+    Card(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(
+                    onClick =
+                        onClick
+                ),
+        shape =
+            RoundedCornerShape(
+                16.dp
+            ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    if (selected) {
+                        PatientColors
+                            .AppointmentCard
+                    } else {
+                        MaterialTheme
+                            .colorScheme
+                            .surface
+                    }
+            ),
+        border =
+            BorderStroke(
+                width =
+                    if (selected) {
+                        1.5.dp
+                    } else {
+                        1.dp
+                    },
+                color =
+                    if (selected) {
+                        PatientColors
+                            .AppointmentAccent
+                    } else {
+                        PatientColors
+                            .AppointmentAccent
+                            .copy(
+                                alpha = 0.10f
+                            )
+                    }
+            ),
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation =
+                    if (selected) {
+                        2.dp
+                    } else {
+                        0.dp
+                    }
+            )
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        horizontal = 14.dp,
+                        vertical = 13.dp
+                    ),
+            verticalAlignment =
+                Alignment.CenterVertically
+        ) {
+
             Box(
-                modifier = Modifier
-                    .size(52.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(teal),
-                contentAlignment = Alignment.Center
+                modifier =
+                    Modifier
+                        .size(
+                            37.dp
+                        )
+                        .clip(
+                            CircleShape
+                        )
+                        .background(
+                            if (selected) {
+                                PatientColors
+                                    .AppointmentAccent
+                            } else {
+                                PatientColors
+                                    .AppointmentAccent
+                                    .copy(
+                                        alpha = 0.10f
+                                    )
+                            }
+                        ),
+                contentAlignment =
+                    Alignment.Center
             ) {
-                Text(
-                    "${doc.name.firstOrNull() ?: ' '}${doc.surname.firstOrNull() ?: ' '}".uppercase(),
-                    color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp
+
+                Icon(
+                    imageVector =
+                        if (selected) {
+                            Icons.Filled.CheckCircle
+                        } else {
+                            Icons.Outlined.Schedule
+                        },
+                    contentDescription =
+                        null,
+                    tint =
+                        if (selected) {
+                            Color.White
+                        } else {
+                            PatientColors
+                                .AppointmentAccent
+                        },
+                    modifier =
+                        Modifier.size(
+                            18.dp
+                        )
                 )
             }
-            Spacer(modifier = Modifier.width(14.dp))
-            Column {
+
+
+            Spacer(
+                modifier =
+                    Modifier.width(
+                        11.dp
+                    )
+            )
+
+
+            Column(
+                modifier =
+                    Modifier.weight(1f)
+            ) {
+
                 Text(
-                    "Dr. ${doc.name} ${doc.surname}",
-                    color = Color.White,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
+                    text =
+                        displayTime(
+                            slot.time
+                        ),
+                    color =
+                        PatientColors
+                            .TextPrimary,
+                    fontWeight =
+                        FontWeight.ExtraBold,
+                    fontSize =
+                        14.5.sp
                 )
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            2.dp
+                        )
+                )
+
+
                 Text(
-                    "${doc.discipline ?: "General Practitioner"}${doc.operatingHours?.let { " · $it" } ?: ""}",
-                    color = Color.White.copy(alpha = 0.65f), fontSize = 12.5.sp
+                    text =
+                        "Available",
+                    color =
+                        PatientColors
+                            .SuccessAccent,
+                    fontSize =
+                        10.sp,
+                    fontWeight =
+                        FontWeight.SemiBold
                 )
+            }
+
+
+            if (selected) {
+
+                Box(
+                    modifier =
+                        Modifier
+                            .clip(
+                                RoundedCornerShape(
+                                    20.dp
+                                )
+                            )
+                            .background(
+                                PatientColors
+                                    .AppointmentAccent
+                                    .copy(
+                                        alpha = 0.11f
+                                    )
+                            )
+                            .padding(
+                                horizontal = 9.dp,
+                                vertical = 5.dp
+                            )
+                ) {
+
+                    Text(
+                        text =
+                            "Selected",
+                        color =
+                            PatientColors
+                                .AppointmentAccent,
+                        fontSize =
+                            9.5.sp,
+                        fontWeight =
+                            FontWeight.Bold
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun SectionCard(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    title: String,
-    content: @Composable () -> Unit
+private fun VisitTypeSection(
+    selected: AppointmentType?,
+    onSelect: (AppointmentType) -> Unit
 ) {
-    val teal = MaterialTheme.colorScheme.primary
-    val ink = MaterialTheme.colorScheme.onSurface
 
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 8.dp)
-            .shadow(
-                elevation = 1.dp,
-                shape = RoundedCornerShape(16.dp),
-                spotColor = Color(0x1A0B1828)
-            )
+    BookingSectionCard(
+        icon =
+            Icons.Outlined.VideoCall,
+        title =
+            "How will you attend?",
+        subtitle =
+            "Choose the consultation format that works for you."
     ) {
-        Column(modifier = Modifier.padding(18.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(icon, contentDescription = null, tint = teal, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(title, color = ink, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-            }
-            Spacer(modifier = Modifier.height(14.dp))
-            content()
+
+        Column(
+            verticalArrangement =
+                Arrangement.spacedBy(
+                    11.dp
+                )
+        ) {
+
+            VisitTypeOption(
+                icon =
+                    Icons.Outlined.LocationOn,
+
+                title =
+                    "In-person visit",
+
+                description =
+                    "Attend the doctor's practice at your selected date and time.",
+
+                badge =
+                    "AT PRACTICE",
+
+                selected =
+                    selected ==
+                            AppointmentType.IN_PERSON,
+
+                accent =
+                    PatientColors.DoctorAccent,
+
+                background =
+                    PatientColors.DoctorCard,
+
+                onClick = {
+                    onSelect(
+                        AppointmentType.IN_PERSON
+                    )
+                }
+            )
+
+
+            VisitTypeOption(
+                icon =
+                    Icons.Outlined.VideoCall,
+
+                title =
+                    "Online consultation",
+
+                description =
+                    "Join your scheduled video consultation directly from EHealthy.",
+
+                badge =
+                    "VIDEO CALL",
+
+                selected =
+                    selected ==
+                            AppointmentType.ONLINE,
+
+                accent =
+                    PatientColors.AppointmentAccent,
+
+                background =
+                    PatientColors.AppointmentCard,
+
+                onClick = {
+                    onSelect(
+                        AppointmentType.ONLINE
+                    )
+                }
+            )
         }
     }
 }
 
 @Composable
 private fun VisitTypeOption(
-    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
     description: String,
+    badge: String,
     selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    accent: Color,
+    background: Color,
+    onClick: () -> Unit
 ) {
-    val teal = MaterialTheme.colorScheme.primary
-    val tealSoft = MaterialTheme.colorScheme.primaryContainer
-    val ink = MaterialTheme.colorScheme.onSurface
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
 
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) tealSoft else MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(onClick = onClick)
-            .padding(14.dp)
+    Card(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(
+                    onClick = onClick
+                ),
+        shape =
+            RoundedCornerShape(
+                18.dp
+            ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    if (selected) {
+                        background
+                    } else {
+                        MaterialTheme
+                            .colorScheme
+                            .surface
+                    }
+            ),
+        border =
+            BorderStroke(
+                width =
+                    if (selected) {
+                        1.5.dp
+                    } else {
+                        1.dp
+                    },
+                color =
+                    if (selected) {
+                        accent
+                    } else {
+                        accent.copy(
+                            alpha = 0.10f
+                        )
+                    }
+            ),
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation =
+                    if (selected) {
+                        2.dp
+                    } else {
+                        0.dp
+                    }
+            )
     ) {
-        Column {
-            Text(label, color = if (selected) teal else ink, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(description, color = muted, fontSize = 11.sp)
-        }
-    }
-}
 
-@Composable
-private fun Legend() {
-    val teal = MaterialTheme.colorScheme.primary
-    val navy = MaterialTheme.colorScheme.primary
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        14.dp
+                    ),
+            verticalAlignment =
+                Alignment.CenterVertically
+        ) {
 
-    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        LegendItem(teal, "Available")
-        LegendItem(Color(0xFFDC2626), "Booked")
-        LegendItem(navy, "Your pick")
-    }
-}
-
-@Composable
-private fun LegendItem(color: Color, label: String) {
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
-
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .size(10.dp)
-                .clip(CircleShape)
-                .background(color)
-        )
-        Spacer(modifier = Modifier.width(6.dp))
-        Text(label, color = muted, fontSize = 12.sp)
-    }
-}
-
-@Composable
-private fun SlotButton(label: String, isTaken: Boolean, isSelected: Boolean, onClick: () -> Unit) {
-    val navy = MaterialTheme.colorScheme.primary
-    val tealSoft = MaterialTheme.colorScheme.primaryContainer
-    val teal = MaterialTheme.colorScheme.primary
-
-    val (bgColor, textColor) = when {
-        isSelected -> navy to MaterialTheme.colorScheme.onPrimary
-        isTaken -> Color(0xFFFEE2E2) to Color(0xFFDC2626)
-        else -> tealSoft to teal
-    }
-    Box(
-        modifier = Modifier
-            .padding(4.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(bgColor)
-            .then(if (!isTaken) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(vertical = 12.dp, horizontal = 4.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(label, color = textColor, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-@Composable
-private fun CardPreview(name: String, number: String, expiry: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Brush.linearGradient(colors = listOf(Color(0xFF1A6C5E), Color(0xFF26A88A))))
-            .padding(20.dp)
-    ) {
-        Column {
+            /*
+             * Consultation icon
+             */
             Box(
-                modifier = Modifier
-                    .size(34.dp, 24.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(Color.White.copy(alpha = 0.25f))
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                number.ifBlank { "•••• •••• •••• ••••" },
-                color = Color.White, fontSize = 16.sp, letterSpacing = 2.sp
-            )
-            Spacer(modifier = Modifier.height(14.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                modifier =
+                    Modifier
+                        .size(
+                            47.dp
+                        )
+                        .clip(
+                            RoundedCornerShape(
+                                14.dp
+                            )
+                        )
+                        .background(
+                            accent.copy(
+                                alpha =
+                                    if (selected) {
+                                        0.16f
+                                    } else {
+                                        0.09f
+                                    }
+                            )
+                        ),
+                contentAlignment =
+                    Alignment.Center
             ) {
-                Column {
-                    Text("CARD HOLDER", color = Color.White.copy(alpha = 0.6f), fontSize = 9.sp)
-                    Text(
-                        name.ifBlank { "YOUR NAME" }.uppercase(),
-                        color = Color.White,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium
+
+                Icon(
+                    imageVector =
+                        icon,
+                    contentDescription =
+                        null,
+                    tint =
+                        accent,
+                    modifier =
+                        Modifier.size(
+                            23.dp
+                        )
+                )
+            }
+
+
+            Spacer(
+                modifier =
+                    Modifier.width(
+                        12.dp
                     )
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text("EXPIRES", color = Color.White.copy(alpha = 0.6f), fontSize = 9.sp)
+            )
+
+
+            Column(
+                modifier =
+                    Modifier.weight(
+                        1f
+                    )
+            ) {
+
+                Row(
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+
                     Text(
-                        expiry.ifBlank { "MM/YY" },
-                        color = Color.White,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium
+                        text =
+                            title,
+                        color =
+                            PatientColors.TextPrimary,
+                        fontWeight =
+                            FontWeight.ExtraBold,
+                        fontSize =
+                            13.5.sp,
+                        modifier =
+                            Modifier.weight(
+                                1f
+                            )
+                    )
+
+
+                    Box(
+                        modifier =
+                            Modifier
+                                .clip(
+                                    RoundedCornerShape(
+                                        20.dp
+                                    )
+                                )
+                                .background(
+                                    accent.copy(
+                                        alpha = 0.10f
+                                    )
+                                )
+                                .padding(
+                                    horizontal = 7.dp,
+                                    vertical = 4.dp
+                                )
+                    ) {
+
+                        Text(
+                            text =
+                                badge,
+                            color =
+                                accent,
+                            fontSize =
+                                8.sp,
+                            fontWeight =
+                                FontWeight.ExtraBold,
+                            letterSpacing =
+                                0.4.sp
+                        )
+                    }
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            5.dp
+                        )
+                )
+
+
+                Text(
+                    text =
+                        description,
+                    color =
+                        PatientColors.TextSecondary,
+                    fontSize =
+                        11.sp,
+                    lineHeight =
+                        16.sp
+                )
+            }
+
+
+            Spacer(
+                modifier =
+                    Modifier.width(
+                        9.dp
+                    )
+            )
+
+
+            /*
+             * Selection indicator
+             */
+            Box(
+                modifier =
+                    Modifier
+                        .size(
+                            25.dp
+                        )
+                        .clip(
+                            CircleShape
+                        )
+                        .background(
+                            if (selected) {
+                                accent
+                            } else {
+                                accent.copy(
+                                    alpha = 0.08f
+                                )
+                            }
+                        ),
+                contentAlignment =
+                    Alignment.Center
+            ) {
+
+                if (selected) {
+
+                    Icon(
+                        imageVector =
+                            Icons.Filled.CheckCircle,
+                        contentDescription =
+                            "Selected",
+                        tint =
+                            Color.White,
+                        modifier =
+                            Modifier.size(
+                                17.dp
+                            )
+                    )
+
+                } else {
+
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(
+                                    8.dp
+                                )
+                                .clip(
+                                    CircleShape
+                                )
+                                .background(
+                                    accent.copy(
+                                        alpha = 0.30f
+                                    )
+                                )
                     )
                 }
             }
@@ -880,22 +3114,2389 @@ private fun CardPreview(name: String, number: String, expiry: String) {
     }
 }
 
-private fun formatCardNumber(raw: String): String {
-    val digits = raw.filter(Char::isDigit).take(16)
-    return digits.chunked(4).joinToString(" ")
+@Composable
+private fun ReasonSection(
+    reason: String,
+    onReasonChange: (String) -> Unit
+) {
+
+    BookingSectionCard(
+        icon =
+            Icons.Outlined.Info,
+        title =
+            "Reason for visit",
+        subtitle =
+            "Give the doctor a short description before the appointment."
+    ) {
+
+        val isValid =
+            reason.trim().length >= 3
+
+
+        OutlinedTextField(
+            value =
+                reason,
+
+            onValueChange =
+                onReasonChange,
+
+            modifier =
+                Modifier.fillMaxWidth(),
+
+            placeholder = {
+
+                Text(
+                    text =
+                        "Example: recurring headache for three days",
+                    color =
+                        PatientColors.TextSecondary
+                            .copy(alpha = 0.75f),
+                    fontSize =
+                        12.sp
+                )
+            },
+
+            minLines =
+                4,
+
+            maxLines =
+                6,
+
+            shape =
+                RoundedCornerShape(
+                    18.dp
+                ),
+
+            leadingIcon = {
+
+                Box(
+                    modifier =
+                        Modifier
+                            .padding(
+                                start = 4.dp
+                            )
+                            .size(
+                                36.dp
+                            )
+                            .clip(
+                                RoundedCornerShape(
+                                    11.dp
+                                )
+                            )
+                            .background(
+                                PatientColors.AppointmentAccent
+                                    .copy(
+                                        alpha = 0.09f
+                                    )
+                            ),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+
+                    Icon(
+                        imageVector =
+                            Icons.Outlined.Info,
+                        contentDescription =
+                            null,
+                        tint =
+                            PatientColors.AppointmentAccent,
+                        modifier =
+                            Modifier.size(
+                                17.dp
+                            )
+                    )
+                }
+            },
+
+            colors =
+                OutlinedTextFieldDefaults.colors(
+
+                    focusedBorderColor =
+                        if (isValid) {
+                            PatientColors.SuccessAccent
+                        } else {
+                            PatientColors.AppointmentAccent
+                        },
+
+                    unfocusedBorderColor =
+                        PatientColors.AppointmentAccent
+                            .copy(alpha = 0.15f),
+
+                    focusedContainerColor =
+                        PatientColors.AppointmentCard
+                            .copy(alpha = 0.35f),
+
+                    unfocusedContainerColor =
+                        MaterialTheme
+                            .colorScheme
+                            .surface,
+
+                    cursorColor =
+                        PatientColors.AppointmentAccent
+                ),
+
+            supportingText = {
+
+                Row(
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+
+                    if (
+                        reason.isNotBlank()
+                    ) {
+
+                        Text(
+                            text =
+                                if (isValid) {
+                                    "Looks good"
+                                } else {
+                                    "Add a little more detail"
+                                },
+                            color =
+                                if (isValid) {
+                                    PatientColors.SuccessAccent
+                                } else {
+                                    PatientColors.ReviewAccent
+                                },
+                            fontSize =
+                                10.sp,
+                            fontWeight =
+                                FontWeight.SemiBold
+                        )
+                    }
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.weight(1f)
+                    )
+
+
+                    Text(
+                        text =
+                            "${reason.length}/500",
+                        color =
+                            if (
+                                reason.length >= 450
+                            ) {
+                                PatientColors.ReviewAccent
+                            } else {
+                                PatientColors.TextSecondary
+                            },
+                        fontSize =
+                            10.sp,
+                        fontWeight =
+                            FontWeight.Medium
+                    )
+                }
+            }
+        )
+
+
+        Spacer(
+            modifier =
+                Modifier.height(
+                    10.dp
+                )
+        )
+
+
+        /*
+         * Privacy notice
+         */
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clip(
+                        RoundedCornerShape(
+                            15.dp
+                        )
+                    )
+                    .background(
+                        PatientColors.PurpleSoft
+                    )
+                    .padding(
+                        12.dp
+                    ),
+            verticalAlignment =
+                Alignment.Top
+        ) {
+
+            Box(
+                modifier =
+                    Modifier
+                        .size(
+                            30.dp
+                        )
+                        .clip(
+                            CircleShape
+                        )
+                        .background(
+                            PatientColors.Purple
+                                .copy(alpha = 0.11f)
+                        ),
+                contentAlignment =
+                    Alignment.Center
+            ) {
+
+                Icon(
+                    imageVector =
+                        Icons.Outlined.Lock,
+                    contentDescription =
+                        null,
+                    tint =
+                        PatientColors.Purple,
+                    modifier =
+                        Modifier.size(
+                            15.dp
+                        )
+                )
+            }
+
+
+            Spacer(
+                modifier =
+                    Modifier.width(
+                        9.dp
+                    )
+            )
+
+
+            Column(
+                modifier =
+                    Modifier.weight(1f)
+            ) {
+
+                Text(
+                    text =
+                        "Keep it relevant",
+                    color =
+                        PatientColors.TextPrimary,
+                    fontWeight =
+                        FontWeight.Bold,
+                    fontSize =
+                        11.5.sp
+                )
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            2.dp
+                        )
+                )
+
+
+                Text(
+                    text =
+                        "Describe only what the doctor needs for this appointment. Avoid passwords, banking details or unrelated private information.",
+                    color =
+                        PatientColors.TextSecondary,
+                    fontSize =
+                        10.5.sp,
+                    lineHeight =
+                        15.sp
+                )
+            }
+
+        }
+    }
 }
 
-private fun formatExpiry(raw: String): String {
-    val digits = raw.filter(Char::isDigit).take(4)
-    return if (digits.length >= 2) "${digits.take(2)}/${digits.drop(2)}" else digits
+@Composable
+private fun PriceInformationCard(
+    doctor: DoctorBookingInfo
+) {
+
+    Card(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 16.dp
+                ),
+        shape =
+            RoundedCornerShape(
+                20.dp
+            ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    PatientColors.AppointmentCard
+            ),
+        border =
+            BorderStroke(
+                width = 1.dp,
+                color =
+                    PatientColors.AppointmentAccent
+                        .copy(alpha = 0.12f)
+            ),
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 0.dp
+            )
+    ) {
+
+        Column(
+            modifier =
+                Modifier.padding(
+                    16.dp
+                )
+        ) {
+
+            Row(
+                modifier =
+                    Modifier.fillMaxWidth(),
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+
+                Box(
+                    modifier =
+                        Modifier
+                            .size(
+                                43.dp
+                            )
+                            .clip(
+                                RoundedCornerShape(
+                                    13.dp
+                                )
+                            )
+                            .background(
+                                PatientColors.AppointmentAccent
+                                    .copy(alpha = 0.11f)
+                            ),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+
+                    Icon(
+                        imageVector =
+                            Icons.Outlined.Payments,
+                        contentDescription =
+                            null,
+                        tint =
+                            PatientColors.AppointmentAccent,
+                        modifier =
+                            Modifier.size(
+                                21.dp
+                            )
+                    )
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.width(
+                            11.dp
+                        )
+                )
+
+
+                Column(
+                    modifier =
+                        Modifier.weight(1f)
+                ) {
+
+                    Text(
+                        text =
+                            "Consultation fee",
+                        color =
+                            PatientColors.TextPrimary,
+                        fontWeight =
+                            FontWeight.Bold,
+                        fontSize =
+                            13.5.sp
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                2.dp
+                            )
+                    )
+
+
+                    Text(
+                        text =
+                            "Estimated booking amount",
+                        color =
+                            PatientColors.TextSecondary,
+                        fontSize =
+                            10.5.sp
+                    )
+                }
+
+
+                Column(
+                    horizontalAlignment =
+                        Alignment.End
+                ) {
+
+                    Text(
+                        text =
+                            doctor.hourlyRate
+                                ?.let {
+                                    "R %.2f".format(it)
+                                }
+                                ?: "—",
+                        color =
+                            PatientColors.AppointmentAccent,
+                        fontSize =
+                            21.sp,
+                        fontWeight =
+                            FontWeight.ExtraBold
+                    )
+
+
+                    Text(
+                        text =
+                            "estimate",
+                        color =
+                            PatientColors.TextSecondary,
+                        fontSize =
+                            9.sp
+                    )
+                }
+            }
+
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        13.dp
+                    )
+            )
+
+
+            HorizontalDivider(
+                color =
+                    PatientColors.AppointmentAccent
+                        .copy(alpha = 0.10f)
+            )
+
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        12.dp
+                    )
+            )
+
+
+            Row(
+                verticalAlignment =
+                    Alignment.Top
+            ) {
+
+                Icon(
+                    imageVector =
+                        Icons.Outlined.Info,
+                    contentDescription =
+                        null,
+                    tint =
+                        PatientColors.AppointmentAccent,
+                    modifier =
+                        Modifier.size(
+                            16.dp
+                        )
+                )
+
+
+                Spacer(
+                    modifier =
+                        Modifier.width(
+                            8.dp
+                        )
+                )
+
+
+                Text(
+                    text =
+                        "The final booking price is confirmed by the server when your appointment is reserved.",
+                    modifier =
+                        Modifier.weight(1f),
+                    color =
+                        PatientColors.TextSecondary,
+                    fontSize =
+                        10.5.sp,
+                    lineHeight =
+                        15.sp
+                )
+            }
+        }
+    }
 }
 
-private fun isCardExpired(expiry: String): Boolean {
-    val match = Regex("(0[1-9]|1[0-2])/(\\d{2})").matchEntire(expiry) ?: return true
-    val month = match.groupValues[1].toInt()
-    val year = 2000 + match.groupValues[2].toInt()
-    val cal = Calendar.getInstance()
-    val currentYear = cal.get(Calendar.YEAR)
-    val currentMonth = cal.get(Calendar.MONTH) + 1
-    return year < currentYear || (year == currentYear && month < currentMonth)
+@Composable
+private fun SecureBookingNotice() {
+
+    Card(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 16.dp
+                ),
+        shape =
+            RoundedCornerShape(
+                18.dp
+            ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    PatientColors.PurpleSoft
+            ),
+        border =
+            BorderStroke(
+                width = 1.dp,
+                color =
+                    PatientColors.Purple
+                        .copy(alpha = 0.10f)
+            ),
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 0.dp
+            )
+    ) {
+
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        14.dp
+                    ),
+            verticalAlignment =
+                Alignment.Top
+        ) {
+
+            Box(
+                modifier =
+                    Modifier
+                        .size(
+                            38.dp
+                        )
+                        .clip(
+                            RoundedCornerShape(
+                                12.dp
+                            )
+                        )
+                        .background(
+                            PatientColors.Purple
+                                .copy(alpha = 0.11f)
+                        ),
+                contentAlignment =
+                    Alignment.Center
+            ) {
+
+                Icon(
+                    imageVector =
+                        Icons.Outlined.Lock,
+                    contentDescription =
+                        null,
+                    tint =
+                        PatientColors.Purple,
+                    modifier =
+                        Modifier.size(
+                            19.dp
+                        )
+                )
+            }
+
+
+            Spacer(
+                modifier =
+                    Modifier.width(
+                        11.dp
+                    )
+            )
+
+
+            Column(
+                modifier =
+                    Modifier.weight(1f)
+            ) {
+
+                Text(
+                    text =
+                        "Secure reservation",
+                    color =
+                        PatientColors.TextPrimary,
+                    fontWeight =
+                        FontWeight.Bold,
+                    fontSize =
+                        12.5.sp
+                )
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            3.dp
+                        )
+                )
+
+
+                Text(
+                    text =
+                        "When you reserve, the server locks the selected slot before creating your appointment so two patients cannot book the same time.",
+                    color =
+                        PatientColors.TextSecondary,
+                    fontSize =
+                        10.5.sp,
+                    lineHeight =
+                        15.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BookingBottomBar(
+    doctor: DoctorBookingInfo,
+    selectedSlot: AvailableSlot?,
+    appointmentType: AppointmentType?,
+    isBooking: Boolean,
+    onBook: () -> Unit
+) {
+
+    val readyToReserve =
+        selectedSlot != null &&
+                appointmentType != null
+
+
+    Surface(
+        color =
+            MaterialTheme.colorScheme.surface,
+        shadowElevation =
+            14.dp,
+        tonalElevation =
+            3.dp
+    ) {
+
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        horizontal = 16.dp,
+                        vertical = 12.dp
+                    )
+        ) {
+
+            /*
+             * Booking summary
+             */
+            Row(
+                modifier =
+                    Modifier.fillMaxWidth(),
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+
+                Box(
+                    modifier =
+                        Modifier
+                            .size(
+                                39.dp
+                            )
+                            .clip(
+                                RoundedCornerShape(
+                                    12.dp
+                                )
+                            )
+                            .background(
+                                if (readyToReserve) {
+                                    PatientColors.SuccessCard
+                                } else {
+                                    PatientColors.AppointmentCard
+                                }
+                            ),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+
+                    Icon(
+                        imageVector =
+                            if (readyToReserve) {
+                                Icons.Filled.CheckCircle
+                            } else {
+                                Icons.Outlined.Schedule
+                            },
+                        contentDescription =
+                            null,
+                        tint =
+                            if (readyToReserve) {
+                                PatientColors.SuccessAccent
+                            } else {
+                                PatientColors.AppointmentAccent
+                            },
+                        modifier =
+                            Modifier.size(
+                                19.dp
+                            )
+                    )
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.width(
+                            10.dp
+                        )
+                )
+
+
+                Column(
+                    modifier =
+                        Modifier.weight(1f)
+                ) {
+
+                    Text(
+                        text =
+                            when {
+
+                                selectedSlot == null ->
+                                    "Choose an appointment time"
+
+                                appointmentType == null ->
+                                    displayTime(
+                                        selectedSlot.time
+                                    )
+
+                                else ->
+                                    "${
+                                        displayTime(
+                                            selectedSlot.time
+                                        )
+                                    } • ${
+                                        if (
+                                            appointmentType ==
+                                            AppointmentType.ONLINE
+                                        ) {
+                                            "Online"
+                                        } else {
+                                            "In person"
+                                        }
+                                    }"
+                            },
+                        color =
+                            PatientColors.TextPrimary,
+                        fontWeight =
+                            FontWeight.Bold,
+                        fontSize =
+                            13.5.sp
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                2.dp
+                            )
+                    )
+
+
+                    Text(
+                        text =
+                            doctor.hourlyRate
+                                ?.let {
+                                    "Estimated fee • R %.2f"
+                                        .format(it)
+                                }
+                                ?: "Fee confirmed during reservation",
+                        color =
+                            PatientColors.TextSecondary,
+                        fontSize =
+                            10.sp
+                    )
+                }
+
+
+                Box(
+                    modifier =
+                        Modifier
+                            .size(
+                                31.dp
+                            )
+                            .clip(
+                                CircleShape
+                            )
+                            .background(
+                                PatientColors.PurpleSoft
+                            ),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+
+                    Icon(
+                        imageVector =
+                            Icons.Outlined.Lock,
+                        contentDescription =
+                            "Secure booking",
+                        tint =
+                            PatientColors.Purple,
+                        modifier =
+                            Modifier.size(
+                                15.dp
+                            )
+                    )
+                }
+            }
+
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        10.dp
+                    )
+            )
+
+
+            /*
+             * Main reserve button
+             */
+            Button(
+                onClick =
+                    onBook,
+
+                enabled =
+                    !isBooking &&
+                            readyToReserve,
+
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(
+                            55.dp
+                        ),
+
+                shape =
+                    RoundedCornerShape(
+                        16.dp
+                    ),
+
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor =
+                            PatientColors.AppointmentAccent,
+
+                        contentColor =
+                            Color.White,
+
+                        disabledContainerColor =
+                            PatientColors.AppointmentAccent
+                                .copy(alpha = 0.18f),
+
+                        disabledContentColor =
+                            PatientColors.TextSecondary
+                    )
+            ) {
+
+                if (isBooking) {
+
+                    CircularProgressIndicator(
+                        modifier =
+                            Modifier.size(
+                                20.dp
+                            ),
+                        strokeWidth =
+                            2.dp,
+                        color =
+                            Color.White
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(
+                                9.dp
+                            )
+                    )
+
+
+                    Text(
+                        text =
+                            "Reserving your appointment...",
+                        fontWeight =
+                            FontWeight.Bold,
+                        fontSize =
+                            12.5.sp
+                    )
+
+                } else {
+
+                    Icon(
+                        imageVector =
+                            Icons.Outlined.Lock,
+                        contentDescription =
+                            null,
+                        modifier =
+                            Modifier.size(
+                                18.dp
+                            )
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(
+                                8.dp
+                            )
+                    )
+
+
+                    Text(
+                        text =
+                            if (readyToReserve) {
+                                "Reserve appointment"
+                            } else {
+                                "Complete appointment details"
+                            },
+                        fontWeight =
+                            FontWeight.Bold,
+                        fontSize =
+                            13.sp
+                    )
+                }
+            }
+
+
+            if (readyToReserve) {
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            6.dp
+                        )
+                )
+
+
+                Text(
+                    text =
+                        "Your selected slot will be checked again when you reserve.",
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    color =
+                        PatientColors.TextSecondary,
+                    fontSize =
+                        9.5.sp,
+                    textAlign =
+                        TextAlign.Center
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BookingSuccessScreen(
+    modifier: Modifier,
+    doctor: DoctorBookingInfo,
+    result: ReserveSlotResult,
+    appointmentType: AppointmentType,
+    onDone: () -> Unit,
+    onBookAnother: () -> Unit
+) {
+
+    Box(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .padding(
+                    16.dp
+                ),
+        contentAlignment =
+            Alignment.Center
+    ) {
+
+        Card(
+            modifier =
+                Modifier.fillMaxWidth(),
+            shape =
+                RoundedCornerShape(
+                    28.dp
+                ),
+            colors =
+                CardDefaults.cardColors(
+                    containerColor =
+                        MaterialTheme.colorScheme.surface
+                ),
+            border =
+                BorderStroke(
+                    width = 1.dp,
+                    color =
+                        PatientColors.SuccessAccent
+                            .copy(alpha = 0.10f)
+                ),
+            elevation =
+                CardDefaults.cardElevation(
+                    defaultElevation = 4.dp
+                )
+        ) {
+
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            22.dp
+                        ),
+                horizontalAlignment =
+                    Alignment.CenterHorizontally
+            ) {
+
+                /*
+                 * Success illustration
+                 */
+                Box(
+                    modifier =
+                        Modifier
+                            .size(
+                                88.dp
+                            )
+                            .clip(
+                                CircleShape
+                            )
+                            .background(
+                                PatientColors.SuccessCard
+                            ),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(
+                                    64.dp
+                                )
+                                .clip(
+                                    CircleShape
+                                )
+                                .background(
+                                    PatientColors.SuccessAccent
+                                        .copy(alpha = 0.12f)
+                                ),
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+
+                        Icon(
+                            imageVector =
+                                Icons.Filled.CheckCircle,
+                            contentDescription =
+                                null,
+                            tint =
+                                PatientColors.SuccessAccent,
+                            modifier =
+                                Modifier.size(
+                                    43.dp
+                                )
+                        )
+                    }
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            15.dp
+                        )
+                )
+
+
+                Text(
+                    text =
+                        "Appointment reserved",
+                    color =
+                        PatientColors.TextPrimary,
+                    fontSize =
+                        22.sp,
+                    fontWeight =
+                        FontWeight.ExtraBold,
+                    textAlign =
+                        TextAlign.Center
+                )
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            5.dp
+                        )
+                )
+
+
+                Text(
+                    text =
+                        "Your appointment slot with ${doctor.fullName} has been secured.",
+                    color =
+                        PatientColors.TextSecondary,
+                    fontSize =
+                        12.sp,
+                    lineHeight =
+                        17.sp,
+                    textAlign =
+                        TextAlign.Center
+                )
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            18.dp
+                        )
+                )
+
+
+                /*
+                 * Doctor summary
+                 */
+                Card(
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    shape =
+                        RoundedCornerShape(
+                            18.dp
+                        ),
+                    colors =
+                        CardDefaults.cardColors(
+                            containerColor =
+                                PatientColors.DoctorCard
+                        ),
+                    elevation =
+                        CardDefaults.cardElevation(
+                            defaultElevation = 0.dp
+                        )
+                ) {
+
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    14.dp
+                                ),
+                        verticalAlignment =
+                            Alignment.CenterVertically
+                    ) {
+
+                        Box(
+                            modifier =
+                                Modifier
+                                    .size(
+                                        43.dp
+                                    )
+                                    .clip(
+                                        CircleShape
+                                    )
+                                    .background(
+                                        PatientColors.DoctorAccent
+                                    ),
+                            contentAlignment =
+                                Alignment.Center
+                        ) {
+
+                            Text(
+                                text =
+                                    doctor.name
+                                        .take(1)
+                                        .uppercase(),
+                                color =
+                                    Color.White,
+                                fontWeight =
+                                    FontWeight.ExtraBold,
+                                fontSize =
+                                    17.sp
+                            )
+                        }
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.width(
+                                    11.dp
+                                )
+                        )
+
+
+                        Column(
+                            modifier =
+                                Modifier.weight(1f)
+                        ) {
+
+                            Text(
+                                text =
+                                    doctor.fullName,
+                                color =
+                                    PatientColors.TextPrimary,
+                                fontWeight =
+                                    FontWeight.Bold,
+                                fontSize =
+                                    13.5.sp
+                            )
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(
+                                        2.dp
+                                    )
+                            )
+
+
+                            Text(
+                                text =
+                                    doctor.specialty,
+                                color =
+                                    PatientColors.TextSecondary,
+                                fontSize =
+                                    10.5.sp
+                            )
+                        }
+
+
+                        Box(
+                            modifier =
+                                Modifier
+                                    .clip(
+                                        RoundedCornerShape(
+                                            20.dp
+                                        )
+                                    )
+                                    .background(
+                                        PatientColors.SuccessCard
+                                    )
+                                    .padding(
+                                        horizontal = 9.dp,
+                                        vertical = 5.dp
+                                    )
+                        ) {
+
+                            Text(
+                                text =
+                                    result.appointment_status
+                                        .replaceFirstChar {
+                                            it.uppercase()
+                                        },
+                                color =
+                                    PatientColors.SuccessAccent,
+                                fontSize =
+                                    9.5.sp,
+                                fontWeight =
+                                    FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            12.dp
+                        )
+                )
+
+
+                /*
+                 * Appointment details
+                 */
+                Card(
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    shape =
+                        RoundedCornerShape(
+                            18.dp
+                        ),
+                    colors =
+                        CardDefaults.cardColors(
+                            containerColor =
+                                PatientColors.NeutralCard
+                        ),
+                    elevation =
+                        CardDefaults.cardElevation(
+                            defaultElevation = 0.dp
+                        )
+                ) {
+
+                    Column(
+                        modifier =
+                            Modifier.padding(
+                                14.dp
+                            )
+                    ) {
+
+                        Text(
+                            text =
+                                "Appointment details",
+                            color =
+                                PatientColors.TextPrimary,
+                            fontSize =
+                                12.5.sp,
+                            fontWeight =
+                                FontWeight.Bold
+                        )
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(
+                                    8.dp
+                                )
+                        )
+
+
+                        ConfirmationRow(
+                            label =
+                                "Date",
+                            value =
+                                result.appointment_date
+                        )
+
+
+                        ConfirmationRow(
+                            label =
+                                "Time",
+                            value =
+                                displayTime(
+                                    result.appointment_time
+                                )
+                        )
+
+
+                        ConfirmationRow(
+                            label =
+                                "Visit",
+                            value =
+                                if (
+                                    appointmentType ==
+                                    AppointmentType.ONLINE
+                                ) {
+                                    "Online consultation"
+                                } else {
+                                    "In-person appointment"
+                                }
+                        )
+
+
+                        ConfirmationRow(
+                            label =
+                                "Status",
+                            value =
+                                result.appointment_status
+                                    .replaceFirstChar {
+                                        it.uppercase()
+                                    }
+                        )
+
+
+                        ConfirmationRow(
+                            label =
+                                "Server price",
+                            value =
+                                formatMinorAmount(
+                                    result.amount_minor,
+                                    result.payment_currency
+                                )
+                        )
+                    }
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            12.dp
+                        )
+                )
+
+
+                /*
+                 * Payment information
+                 */
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(
+                                RoundedCornerShape(
+                                    16.dp
+                                )
+                            )
+                            .background(
+                                PatientColors.PurpleSoft
+                            )
+                            .padding(
+                                13.dp
+                            ),
+                    verticalAlignment =
+                        Alignment.Top
+                ) {
+
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(
+                                    31.dp
+                                )
+                                .clip(
+                                    CircleShape
+                                )
+                                .background(
+                                    PatientColors.Purple
+                                        .copy(alpha = 0.11f)
+                                ),
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+
+                        Icon(
+                            imageVector =
+                                Icons.Outlined.Info,
+                            contentDescription =
+                                null,
+                            tint =
+                                PatientColors.Purple,
+                            modifier =
+                                Modifier.size(
+                                    16.dp
+                                )
+                        )
+                    }
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(
+                                9.dp
+                            )
+                    )
+
+
+                    Column(
+                        modifier =
+                            Modifier.weight(1f)
+                    ) {
+
+                        Text(
+                            text =
+                                "Payment not processed yet",
+                            color =
+                                PatientColors.TextPrimary,
+                            fontWeight =
+                                FontWeight.Bold,
+                            fontSize =
+                                11.5.sp
+                        )
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(
+                                    2.dp
+                                )
+                        )
+
+
+                        Text(
+                            text =
+                                "This reservation does not mean a payment has been processed. Payment will be handled separately when the payment provider is connected.",
+                            color =
+                                PatientColors.TextSecondary,
+                            fontSize =
+                                10.5.sp,
+                            lineHeight =
+                                15.sp
+                        )
+                    }
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            17.dp
+                        )
+                )
+
+
+                Button(
+                    onClick =
+                        onDone,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(
+                                52.dp
+                            ),
+                    shape =
+                        RoundedCornerShape(
+                            15.dp
+                        ),
+                    colors =
+                        ButtonDefaults.buttonColors(
+                            containerColor =
+                                PatientColors.SuccessAccent,
+                            contentColor =
+                                Color.White
+                        )
+                ) {
+
+                    Icon(
+                        imageVector =
+                            Icons.Filled.CheckCircle,
+                        contentDescription =
+                            null,
+                        modifier =
+                            Modifier.size(
+                                18.dp
+                            )
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(
+                                7.dp
+                            )
+                    )
+
+
+                    Text(
+                        text =
+                            "Done",
+                        fontWeight =
+                            FontWeight.Bold
+                    )
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            5.dp
+                        )
+                )
+
+
+                TextButton(
+                    onClick =
+                        onBookAnother
+                ) {
+
+                    Icon(
+                        imageVector =
+                            Icons.Outlined.CalendarMonth,
+                        contentDescription =
+                            null,
+                        tint =
+                            PatientColors.AppointmentAccent,
+                        modifier =
+                            Modifier.size(
+                                17.dp
+                            )
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(
+                                6.dp
+                            )
+                    )
+
+
+                    Text(
+                        text =
+                            "Book another appointment",
+                        color =
+                            PatientColors.AppointmentAccent,
+                        fontWeight =
+                            FontWeight.Bold
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConfirmationRow(
+    label: String,
+    value: String
+) {
+
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    vertical = 7.dp
+                ),
+        verticalAlignment =
+            Alignment.CenterVertically
+    ) {
+
+        Text(
+            text =
+                label,
+            modifier =
+                Modifier.weight(1f),
+            color =
+                PatientColors.TextSecondary,
+            fontSize =
+                11.sp
+        )
+
+
+        Text(
+            text =
+                value,
+            color =
+                PatientColors.TextPrimary,
+            fontWeight =
+                FontWeight.Bold,
+            fontSize =
+                11.5.sp,
+            maxLines =
+                1,
+            overflow =
+                TextOverflow.Ellipsis,
+            textAlign =
+                TextAlign.End
+        )
+    }
+}
+
+@Composable
+private fun BookingSectionCard(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    content: @Composable () -> Unit
+) {
+
+    Card(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 16.dp
+                )
+                .animateContentSize(),
+        shape =
+            RoundedCornerShape(
+                21.dp
+            ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    MaterialTheme.colorScheme.surface
+            ),
+        border =
+            BorderStroke(
+                width = 1.dp,
+                color =
+                    PatientColors.AppointmentAccent
+                        .copy(alpha = 0.08f)
+            ),
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 1.dp
+            )
+    ) {
+
+        Column(
+            modifier =
+                Modifier.padding(
+                    17.dp
+                )
+        ) {
+
+            Row(
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+
+                Box(
+                    modifier =
+                        Modifier
+                            .size(
+                                42.dp
+                            )
+                            .clip(
+                                RoundedCornerShape(
+                                    13.dp
+                                )
+                            )
+                            .background(
+                                PatientColors.AppointmentAccent
+                                    .copy(alpha = 0.10f)
+                            ),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+
+                    Icon(
+                        imageVector =
+                            icon,
+                        contentDescription =
+                            null,
+                        tint =
+                            PatientColors.AppointmentAccent,
+                        modifier =
+                            Modifier.size(
+                                20.dp
+                            )
+                    )
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.width(
+                            11.dp
+                        )
+                )
+
+
+                Column(
+                    modifier =
+                        Modifier.weight(1f)
+                ) {
+
+                    Text(
+                        text =
+                            title,
+                        color =
+                            PatientColors.TextPrimary,
+                        fontWeight =
+                            FontWeight.ExtraBold,
+                        fontSize =
+                            14.5.sp
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                2.dp
+                            )
+                    )
+
+
+                    Text(
+                        text =
+                            subtitle,
+                        color =
+                            PatientColors.TextSecondary,
+                        fontSize =
+                            10.5.sp,
+                        lineHeight =
+                            15.sp
+                    )
+                }
+            }
+
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        14.dp
+                    )
+            )
+
+
+            content()
+        }
+    }
+}
+
+@Composable
+private fun BookingErrorMessage(
+    message: String
+) {
+
+    Card(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 16.dp
+                ),
+        shape =
+            RoundedCornerShape(
+                17.dp
+            ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    PatientColors.RedSoft
+            ),
+        border =
+            BorderStroke(
+                width = 1.dp,
+                color =
+                    PatientColors.Red
+                        .copy(alpha = 0.12f)
+            ),
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 0.dp
+            )
+    ) {
+
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        13.dp
+                    ),
+            verticalAlignment =
+                Alignment.Top
+        ) {
+
+            Box(
+                modifier =
+                    Modifier
+                        .size(
+                            31.dp
+                        )
+                        .clip(
+                            CircleShape
+                        )
+                        .background(
+                            PatientColors.Red
+                                .copy(alpha = 0.10f)
+                        ),
+                contentAlignment =
+                    Alignment.Center
+            ) {
+
+                Icon(
+                    imageVector =
+                        Icons.Outlined.Info,
+                    contentDescription =
+                        null,
+                    tint =
+                        PatientColors.Red,
+                    modifier =
+                        Modifier.size(
+                            16.dp
+                        )
+                )
+            }
+
+
+            Spacer(
+                modifier =
+                    Modifier.width(
+                        9.dp
+                    )
+            )
+
+
+            Column(
+                modifier =
+                    Modifier.weight(1f)
+            ) {
+
+                Text(
+                    text =
+                        "Booking issue",
+                    color =
+                        PatientColors.TextPrimary,
+                    fontWeight =
+                        FontWeight.Bold,
+                    fontSize =
+                        11.5.sp
+                )
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            2.dp
+                        )
+                )
+
+
+                Text(
+                    text =
+                        message,
+                    color =
+                        PatientColors.TextSecondary,
+                    fontSize =
+                        10.5.sp,
+                    lineHeight =
+                        15.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LoadingBookingScreen(
+    modifier: Modifier
+) {
+
+    Box(
+        modifier =
+            modifier,
+        contentAlignment =
+            Alignment.Center
+    ) {
+
+        Card(
+            shape =
+                RoundedCornerShape(
+                    24.dp
+                ),
+            colors =
+                CardDefaults.cardColors(
+                    containerColor =
+                        PatientColors.AppointmentCard
+                ),
+            elevation =
+                CardDefaults.cardElevation(
+                    defaultElevation = 0.dp
+                )
+        ) {
+
+            Column(
+                modifier =
+                    Modifier.padding(
+                        horizontal = 32.dp,
+                        vertical = 27.dp
+                    ),
+                horizontalAlignment =
+                    Alignment.CenterHorizontally
+            ) {
+
+                Box(
+                    modifier =
+                        Modifier
+                            .size(
+                                64.dp
+                            )
+                            .clip(
+                                CircleShape
+                            )
+                            .background(
+                                PatientColors.AppointmentAccent
+                                    .copy(alpha = 0.09f)
+                            ),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+
+                    CircularProgressIndicator(
+                        modifier =
+                            Modifier.size(
+                                31.dp
+                            ),
+                        strokeWidth =
+                            2.5.dp,
+                        color =
+                            PatientColors.AppointmentAccent
+                    )
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            14.dp
+                        )
+                )
+
+
+                Text(
+                    text =
+                        "Preparing your appointment",
+                    color =
+                        PatientColors.TextPrimary,
+                    fontWeight =
+                        FontWeight.Bold,
+                    fontSize =
+                        14.sp
+                )
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            4.dp
+                        )
+                )
+
+
+                Text(
+                    text =
+                        "Loading doctor information and availability...",
+                    color =
+                        PatientColors.TextSecondary,
+                    fontSize =
+                        10.5.sp,
+                    textAlign =
+                        TextAlign.Center
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BookingErrorScreen(
+    modifier: Modifier,
+    message: String,
+    onRetry: () -> Unit,
+    onBack: () -> Unit
+) {
+
+    Box(
+        modifier =
+            modifier
+                .padding(
+                    20.dp
+                ),
+        contentAlignment =
+            Alignment.Center
+    ) {
+
+        Card(
+            modifier =
+                Modifier.fillMaxWidth(),
+            shape =
+                RoundedCornerShape(
+                    25.dp
+                ),
+            colors =
+                CardDefaults.cardColors(
+                    containerColor =
+                        MaterialTheme.colorScheme.surface
+                ),
+            border =
+                BorderStroke(
+                    width = 1.dp,
+                    color =
+                        PatientColors.Red
+                            .copy(alpha = 0.10f)
+                ),
+            elevation =
+                CardDefaults.cardElevation(
+                    defaultElevation = 2.dp
+                )
+        ) {
+
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            23.dp
+                        ),
+                horizontalAlignment =
+                    Alignment.CenterHorizontally
+            ) {
+
+                Box(
+                    modifier =
+                        Modifier
+                            .size(
+                                70.dp
+                            )
+                            .clip(
+                                CircleShape
+                            )
+                            .background(
+                                PatientColors.RedSoft
+                            ),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+
+                    Icon(
+                        imageVector =
+                            Icons.Outlined.Info,
+                        contentDescription =
+                            null,
+                        tint =
+                            PatientColors.Red,
+                        modifier =
+                            Modifier.size(
+                                31.dp
+                            )
+                    )
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            15.dp
+                        )
+                )
+
+
+                Text(
+                    text =
+                        "Unable to start booking",
+                    color =
+                        PatientColors.TextPrimary,
+                    fontSize =
+                        18.sp,
+                    fontWeight =
+                        FontWeight.ExtraBold,
+                    textAlign =
+                        TextAlign.Center
+                )
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            6.dp
+                        )
+                )
+
+
+                Text(
+                    text =
+                        message,
+                    color =
+                        PatientColors.TextSecondary,
+                    fontSize =
+                        11.5.sp,
+                    lineHeight =
+                        17.sp,
+                    textAlign =
+                        TextAlign.Center
+                )
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            17.dp
+                        )
+                )
+
+
+                Button(
+                    onClick =
+                        onRetry,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(
+                                50.dp
+                            ),
+                    shape =
+                        RoundedCornerShape(
+                            15.dp
+                        ),
+                    colors =
+                        ButtonDefaults.buttonColors(
+                            containerColor =
+                                PatientColors.AppointmentAccent,
+                            contentColor =
+                                Color.White
+                        )
+                ) {
+
+                    Icon(
+                        imageVector =
+                            Icons.Filled.Refresh,
+                        contentDescription =
+                            null
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(
+                                7.dp
+                            )
+                    )
+
+
+                    Text(
+                        text =
+                            "Try again",
+                        fontWeight =
+                            FontWeight.Bold
+                    )
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            5.dp
+                        )
+                )
+
+
+                TextButton(
+                    onClick =
+                        onBack
+                ) {
+
+                    Text(
+                        text =
+                            "Go back",
+                        color =
+                            PatientColors.TextSecondary,
+                        fontWeight =
+                            FontWeight.SemiBold
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun displayTime(
+    value: String
+): String {
+
+    val clean =
+        value
+            .trim()
+            .take(
+                5
+            )
+
+    val parts =
+        clean.split(
+            ":"
+        )
+
+    if (
+        parts.size < 2
+    ) {
+        return value
+    }
+
+    val hour =
+        parts[0]
+            .toIntOrNull()
+            ?: return value
+
+    val minute =
+        parts[1]
+
+    val period =
+        if (
+            hour < 12
+        ) {
+            "AM"
+        } else {
+            "PM"
+        }
+
+    val twelveHour =
+        when {
+
+            hour == 0 ->
+                12
+
+            hour > 12 ->
+                hour - 12
+
+            else ->
+                hour
+        }
+
+    return "$twelveHour:$minute $period"
+}
+
+private fun formatMinorAmount(
+    amountMinor: Int,
+    currency: String
+): String {
+
+    val amount =
+        amountMinor / 100.0
+
+    return when (
+        currency.uppercase()
+    ) {
+
+        "ZAR" ->
+            "R %.2f".format(
+                amount
+            )
+
+        else ->
+            "$currency %.2f".format(
+                amount
+            )
+    }
+}
+
+private fun friendlyBookingError(
+    message: String?
+): String {
+
+    val original =
+        message
+            ?.trim()
+            .orEmpty()
+
+    return when {
+
+        original.contains(
+            "already been booked",
+            ignoreCase = true
+        ) ->
+
+            "Someone booked this slot just before you. Choose another available time."
+
+        original.contains(
+            "past",
+            ignoreCase = true
+        ) ->
+
+            "That appointment time is no longer available. Choose another slot."
+
+        original.contains(
+            "not approved",
+            ignoreCase = true
+        ) ->
+
+            "This doctor is temporarily unavailable for new appointments."
+
+        original.contains(
+            "consultation fee",
+            ignoreCase = true
+        ) ->
+
+            "This doctor's consultation fee is not configured correctly."
+
+        original.contains(
+            "Patient profile",
+            ignoreCase = true
+        ) ->
+
+            "Your patient profile could not be found. Sign in again and retry."
+
+        original.isNotBlank() ->
+            original
+
+        else ->
+            "We couldn't reserve your appointment. Please try again."
+    }
 }

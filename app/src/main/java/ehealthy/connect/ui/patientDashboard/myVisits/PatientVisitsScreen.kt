@@ -1,4 +1,4 @@
-package ehealthy.connect.ui.patientDashboard.MyVisits
+package ehealthy.connect.ui.patientDashboard.myVisits
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement

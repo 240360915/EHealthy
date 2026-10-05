@@ -278,7 +278,7 @@ fun DoctorLogin(
 
             Button(
                 onClick = onContinueWithGoogle,
-                enabled = !isLoading && !isGoogleLoading,
+                enabled = false,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(58.dp),
@@ -305,7 +305,7 @@ fun DoctorLogin(
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = "Continue with Google",
+                            text = "Google sign-in unavailable — use email",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.SemiBold
                         )

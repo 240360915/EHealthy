@@ -41,10 +41,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import kotlinx.serialization.Serializable
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Close
 
 @Serializable
 data class Prescription(
@@ -56,7 +60,6 @@ data class Prescription(
     val refill_status: String? = null,
     val refill_requested_at: String? = null
 )
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PatientPrescriptionsScreen(
@@ -67,89 +70,542 @@ fun PatientPrescriptionsScreen(
     doctorPhotos: Map<String, String> = emptyMap(),
     onRequestRefill: (Prescription) -> Unit = {}
 ) {
-    val sortedPrescriptions = remember(prescriptions) {
-        prescriptions.sortedByDescending { it.created_at ?: "" }
-    }
+
+    val sortedPrescriptions =
+        remember(prescriptions) {
+
+            prescriptions.sortedByDescending {
+                it.created_at ?: ""
+            }
+        }
+
 
     Scaffold(
         topBar = {
+
             TopAppBar(
                 title = {
-                    Text(
-                        "My Prescriptions",
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
+
+                    Column {
+
+                        Text(
+                            text = "My Prescriptions",
+                            color = PatientColors.TextPrimary,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 18.sp
+                        )
+
+                        Text(
+                            text =
+                                if (sortedPrescriptions.isEmpty()) {
+                                    "Your prescribed medication"
+                                } else {
+                                    "${sortedPrescriptions.size} prescription${
+                                        if (sortedPrescriptions.size == 1) "" else "s"
+                                    }"
+                                },
+                            color = PatientColors.TextSecondary,
+                            fontSize = 10.sp
+                        )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+
+                navigationIcon = {
+
+                    IconButton(
+                        onClick = onBack
+                    ) {
+
+                        Box(
+                            modifier =
+                                Modifier
+                                    .size(36.dp)
+                                    .background(
+                                        PatientColors.PurpleSoft,
+                                        CircleShape
+                                    ),
+                            contentAlignment =
+                                Alignment.Center
+                        ) {
+
+                            Icon(
+                                imageVector =
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription =
+                                    "Back",
+                                tint =
+                                    PatientColors.Purple,
+                                modifier =
+                                    Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                },
+
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor =
+                            MaterialTheme.colorScheme.surface
+                    )
             )
         },
-        containerColor = MaterialTheme.colorScheme.background
+
+        containerColor =
+            MaterialTheme.colorScheme.background
+
     ) { paddingValues ->
+
+
         when {
+
+            /*
+             * Loading
+             */
             isLoading -> {
+
                 Box(
-                    modifier = Modifier.fillMaxSize().padding(paddingValues),
-                    contentAlignment = Alignment.Center
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(paddingValues),
+
+                    contentAlignment =
+                        Alignment.Center
                 ) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+
+                    Card(
+                        shape =
+                            RoundedCornerShape(24.dp),
+
+                        colors =
+                            CardDefaults.cardColors(
+                                containerColor =
+                                    PatientColors.PurpleSoft
+                            ),
+
+                        elevation =
+                            CardDefaults.cardElevation(
+                                defaultElevation = 0.dp
+                            )
+                    ) {
+
+                        Column(
+                            modifier =
+                                Modifier.padding(
+                                    horizontal = 32.dp,
+                                    vertical = 26.dp
+                                ),
+
+                            horizontalAlignment =
+                                Alignment.CenterHorizontally
+                        ) {
+
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .size(62.dp)
+                                        .background(
+                                            PatientColors.Purple
+                                                .copy(alpha = 0.10f),
+                                            CircleShape
+                                        ),
+
+                                contentAlignment =
+                                    Alignment.Center
+                            ) {
+
+                                CircularProgressIndicator(
+                                    modifier =
+                                        Modifier.size(30.dp),
+                                    color =
+                                        PatientColors.Purple,
+                                    strokeWidth =
+                                        2.5.dp
+                                )
+                            }
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(12.dp)
+                            )
+
+
+                            Text(
+                                text =
+                                    "Loading prescriptions",
+                                color =
+                                    PatientColors.TextPrimary,
+                                fontSize =
+                                    14.sp,
+                                fontWeight =
+                                    FontWeight.Bold
+                            )
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(3.dp)
+                            )
+
+
+                            Text(
+                                text =
+                                    "Getting your medication records...",
+                                color =
+                                    PatientColors.TextSecondary,
+                                fontSize =
+                                    10.5.sp
+                            )
+                        }
+                    }
                 }
             }
 
+
+            /*
+             * Empty state
+             */
             sortedPrescriptions.isEmpty() -> {
+
                 Box(
-                    modifier = Modifier.fillMaxSize().padding(paddingValues).padding(24.dp),
-                    contentAlignment = Alignment.Center
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(paddingValues)
+                            .padding(24.dp),
+
+                    contentAlignment =
+                        Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Outlined.Medication,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.outline,
-                            modifier = Modifier.size(40.dp)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            "No prescriptions found yet.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 14.sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            "Prescriptions from your consultations will appear here.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 12.sp
-                        )
+
+                    Card(
+                        modifier =
+                            Modifier.fillMaxWidth(),
+
+                        shape =
+                            RoundedCornerShape(24.dp),
+
+                        colors =
+                            CardDefaults.cardColors(
+                                containerColor =
+                                    PatientColors.PurpleSoft
+                            ),
+
+                        elevation =
+                            CardDefaults.cardElevation(
+                                defaultElevation = 0.dp
+                            )
+                    ) {
+
+                        Column(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(24.dp),
+
+                            horizontalAlignment =
+                                Alignment.CenterHorizontally
+                        ) {
+
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .size(70.dp)
+                                        .background(
+                                            PatientColors.Purple
+                                                .copy(alpha = 0.10f),
+                                            CircleShape
+                                        ),
+
+                                contentAlignment =
+                                    Alignment.Center
+                            ) {
+
+                                Icon(
+                                    imageVector =
+                                        Icons.Outlined.Medication,
+                                    contentDescription =
+                                        null,
+                                    tint =
+                                        PatientColors.Purple,
+                                    modifier =
+                                        Modifier.size(34.dp)
+                                )
+                            }
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(14.dp)
+                            )
+
+
+                            Text(
+                                text =
+                                    "No prescriptions yet",
+                                color =
+                                    PatientColors.TextPrimary,
+                                fontSize =
+                                    15.sp,
+                                fontWeight =
+                                    FontWeight.ExtraBold
+                            )
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(5.dp)
+                            )
+
+
+                            Text(
+                                text =
+                                    "Prescriptions issued by your doctors will appear here after a consultation.",
+                                color =
+                                    PatientColors.TextSecondary,
+                                fontSize =
+                                    10.5.sp,
+                                lineHeight =
+                                    15.sp,
+                                textAlign =
+                                    TextAlign.Center
+                            )
+                        }
                     }
                 }
             }
 
+
+            /*
+             * Main content
+             */
             else -> {
+
                 LazyColumn(
-                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.padding(paddingValues)
+                    modifier =
+                        Modifier.padding(
+                            paddingValues
+                        ),
+
+                    contentPadding =
+                        PaddingValues(
+                            horizontal = 18.dp,
+                            vertical = 12.dp
+                        ),
+
+                    verticalArrangement =
+                        Arrangement.spacedBy(
+                            12.dp
+                        )
                 ) {
-                    items(sortedPrescriptions, key = { it.id }) { prescription ->
+
+                    /*
+                     * Intro card
+                     */
+                    item {
+
+                        Card(
+                            modifier =
+                                Modifier.fillMaxWidth(),
+
+                            shape =
+                                RoundedCornerShape(
+                                    22.dp
+                                ),
+
+                            colors =
+                                CardDefaults.cardColors(
+                                    containerColor =
+                                        PatientColors.PurpleSoft
+                                ),
+
+                            elevation =
+                                CardDefaults.cardElevation(
+                                    defaultElevation =
+                                        0.dp
+                                )
+                        ) {
+
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            16.dp
+                                        ),
+
+                                verticalAlignment =
+                                    Alignment.CenterVertically
+                            ) {
+
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .size(
+                                                50.dp
+                                            )
+                                            .background(
+                                                PatientColors.Purple
+                                                    .copy(
+                                                        alpha = 0.11f
+                                                    ),
+                                                RoundedCornerShape(
+                                                    15.dp
+                                                )
+                                            ),
+
+                                    contentAlignment =
+                                        Alignment.Center
+                                ) {
+
+                                    Icon(
+                                        imageVector =
+                                            Icons.Outlined.Medication,
+                                        contentDescription =
+                                            null,
+                                        tint =
+                                            PatientColors.Purple,
+                                        modifier =
+                                            Modifier.size(
+                                                24.dp
+                                            )
+                                    )
+                                }
+
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.width(
+                                            12.dp
+                                        )
+                                )
+
+
+                                Column(
+                                    modifier =
+                                        Modifier.weight(
+                                            1f
+                                        )
+                                ) {
+
+                                    Text(
+                                        text =
+                                            "Medication history",
+                                        color =
+                                            PatientColors.TextPrimary,
+                                        fontWeight =
+                                            FontWeight.ExtraBold,
+                                        fontSize =
+                                            14.sp
+                                    )
+
+
+                                    Spacer(
+                                        modifier =
+                                            Modifier.height(
+                                                2.dp
+                                            )
+                                    )
+
+
+                                    Text(
+                                        text =
+                                            "Review medications prescribed by your healthcare providers and request refills when available.",
+                                        color =
+                                            PatientColors.TextSecondary,
+                                        fontSize =
+                                            10.5.sp,
+                                        lineHeight =
+                                            15.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+
+                    /*
+                     * Section label
+                     */
+                    item {
+
+                        Column {
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(
+                                        4.dp
+                                    )
+                            )
+
+
+                            Text(
+                                text =
+                                    "YOUR PRESCRIPTIONS",
+                                color =
+                                    PatientColors.TextSecondary,
+                                fontSize =
+                                    10.sp,
+                                fontWeight =
+                                    FontWeight.ExtraBold,
+                                letterSpacing =
+                                    0.7.sp
+                            )
+                        }
+                    }
+
+
+                    /*
+                     * Prescription cards
+                     */
+                    items(
+                        sortedPrescriptions,
+                        key = {
+                            it.id
+                        }
+                    ) { prescription ->
+
                         PrescriptionCard(
-                            prescription = prescription,
-                            doctorName = prescription.doctor_id?.let { doctorNames[it] },
-                            doctorPhoto = prescription.doctor_id?.let { doctorPhotos[it] },
-                            onRequestRefill = { onRequestRefill(prescription) }
+                            prescription =
+                                prescription,
+
+                            doctorName =
+                                prescription.doctor_id
+                                    ?.let {
+                                        doctorNames[it]
+                                    },
+
+                            doctorPhoto =
+                                prescription.doctor_id
+                                    ?.let {
+                                        doctorPhotos[it]
+                                    },
+
+                            onRequestRefill = {
+                                onRequestRefill(
+                                    prescription
+                                )
+                            }
                         )
                     }
-                    item { Spacer(modifier = Modifier.height(8.dp)) }
+
+
+                    item {
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(
+                                    12.dp
+                                )
+                        )
+                    }
                 }
             }
         }
     }
 }
+
 @Composable
 private fun PrescriptionCard(
     prescription: Prescription,
@@ -157,102 +613,779 @@ private fun PrescriptionCard(
     doctorPhoto: String?,
     onRequestRefill: () -> Unit
 ) {
-    val dateLabel = remember(prescription.created_at) { formatPrescriptionDate(prescription.created_at) }
+
+    val dateLabel =
+        remember(prescription.created_at) {
+            formatPrescriptionDate(
+                prescription.created_at
+            )
+        }
+
+    val refillStatus =
+        prescription.refill_status
+            ?.lowercase()
+            ?.trim()
+
 
     Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier =
+            Modifier.fillMaxWidth(),
+
+        shape =
+            RoundedCornerShape(22.dp),
+
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    MaterialTheme.colorScheme.surface
+            ),
+
+        border =
+            BorderStroke(
+                width = 1.dp,
+                color =
+                    PatientColors.Purple
+                        .copy(alpha = 0.10f)
+            ),
+
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 2.dp
+            )
     ) {
-        Column(modifier = Modifier.padding(18.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (!doctorPhoto.isNullOrBlank()) {
-                        AsyncImage(
-                            model = doctorPhoto,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.size(44.dp).clip(CircleShape)
+
+        Column {
+
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .background(
+                            PatientColors.Purple
                         )
-                    } else {
-                        Icon(
-                            Icons.Outlined.Medication,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(22.dp)
+            )
+
+
+            Column(
+                modifier =
+                    Modifier.padding(17.dp)
+            ) {
+
+                /*
+                 * Medication + doctor
+                 */
+                Row(
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(52.dp)
+                                .clip(
+                                    RoundedCornerShape(
+                                        16.dp
+                                    )
+                                )
+                                .background(
+                                    PatientColors.PurpleSoft
+                                ),
+
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+
+                        if (
+                            !doctorPhoto
+                                .isNullOrBlank()
+                        ) {
+
+                            AsyncImage(
+                                model =
+                                    doctorPhoto,
+
+                                contentDescription =
+                                    doctorName,
+
+                                contentScale =
+                                    ContentScale.Crop,
+
+                                modifier =
+                                    Modifier
+                                        .size(52.dp)
+                                        .clip(
+                                            RoundedCornerShape(
+                                                16.dp
+                                            )
+                                        )
+                            )
+
+                        } else {
+
+                            Icon(
+                                imageVector =
+                                    Icons.Outlined.Medication,
+
+                                contentDescription =
+                                    null,
+
+                                tint =
+                                    PatientColors.Purple,
+
+                                modifier =
+                                    Modifier.size(
+                                        25.dp
+                                    )
+                            )
+                        }
+                    }
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(12.dp)
+                    )
+
+
+                    Column(
+                        modifier =
+                            Modifier.weight(1f)
+                    ) {
+
+                        Text(
+                            text =
+                                prescription.medication
+                                    ?.takeIf {
+                                        it.isNotBlank()
+                                    }
+                                    ?: "Medication not specified",
+
+                            color =
+                                PatientColors.TextPrimary,
+
+                            fontSize =
+                                15.sp,
+
+                            fontWeight =
+                                FontWeight.ExtraBold
+                        )
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(3.dp)
+                        )
+
+
+                        Text(
+                            text =
+                                doctorName
+                                    ?.takeIf {
+                                        it.isNotBlank()
+                                    }
+                                    ?: "Prescribed by your doctor",
+
+                            color =
+                                PatientColors.TextSecondary,
+
+                            fontSize =
+                                11.sp
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.width(14.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        prescription.medication ?: "Medication not specified",
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        "Prescribed by ${doctorName ?: "your doctor"}",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.5.sp
-                    )
-                }
-            }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Outlined.CalendarMonth,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(13.dp)
+                Spacer(
+                    modifier =
+                        Modifier.height(16.dp)
                 )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(dateLabel, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.5.sp)
-            }
 
-            Spacer(modifier = Modifier.height(10.dp))
 
-            if (prescription.refill_status == "requested") {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Outlined.Refresh,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(15.dp)
+                /*
+                 * Prescription date
+                 */
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(
+                                RoundedCornerShape(
+                                    14.dp
+                                )
+                            )
+                            .background(
+                                PatientColors.NeutralCard
+                            )
+                            .padding(
+                                horizontal = 12.dp,
+                                vertical = 10.dp
+                            ),
+
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(32.dp)
+                                .background(
+                                    PatientColors
+                                        .AppointmentAccent
+                                        .copy(alpha = 0.10f),
+                                    CircleShape
+                                ),
+
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+
+                        Icon(
+                            imageVector =
+                                Icons.Outlined.CalendarMonth,
+
+                            contentDescription =
+                                null,
+
+                            tint =
+                                PatientColors.AppointmentAccent,
+
+                            modifier =
+                                Modifier.size(
+                                    16.dp
+                                )
+                        )
+                    }
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(9.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        "Refill requested — awaiting your doctor",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
+
+
+                    Column {
+
+                        Text(
+                            text =
+                                "PRESCRIBED",
+
+                            color =
+                                PatientColors.TextSecondary,
+
+                            fontSize =
+                                8.5.sp,
+
+                            fontWeight =
+                                FontWeight.Bold
+                        )
+
+
+                        Text(
+                            text =
+                                dateLabel,
+
+                            color =
+                                PatientColors.TextPrimary,
+
+                            fontSize =
+                                11.sp,
+
+                            fontWeight =
+                                FontWeight.SemiBold
+                        )
+                    }
                 }
-            } else {
-                TextButton(onClick = onRequestRefill) {
-                    Icon(
-                        Icons.Outlined.Refresh,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(15.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        "Request Refill",
-                        color = MaterialTheme.colorScheme.primary,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(14.dp)
+                )
+
+
+                /*
+                 * Refill status
+                 */
+                when (refillStatus) {
+
+                    /*
+                     * Waiting for doctor
+                     */
+                    "requested" -> {
+
+                        Row(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(
+                                        RoundedCornerShape(
+                                            15.dp
+                                        )
+                                    )
+                                    .background(
+                                        PatientColors.TipsCard
+                                    )
+                                    .padding(
+                                        horizontal = 13.dp,
+                                        vertical = 12.dp
+                                    ),
+
+                            verticalAlignment =
+                                Alignment.CenterVertically
+                        ) {
+
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .size(34.dp)
+                                        .background(
+                                            PatientColors.TipsAccent
+                                                .copy(
+                                                    alpha = 0.12f
+                                                ),
+                                            CircleShape
+                                        ),
+
+                                contentAlignment =
+                                    Alignment.Center
+                            ) {
+
+                                Icon(
+                                    imageVector =
+                                        Icons.Outlined.Refresh,
+
+                                    contentDescription =
+                                        null,
+
+                                    tint =
+                                        PatientColors.TipsAccent,
+
+                                    modifier =
+                                        Modifier.size(
+                                            17.dp
+                                        )
+                                )
+                            }
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.width(10.dp)
+                            )
+
+
+                            Column {
+
+                                Text(
+                                    text =
+                                        "Refill requested",
+
+                                    color =
+                                        PatientColors.TipsAccent,
+
+                                    fontWeight =
+                                        FontWeight.Bold,
+
+                                    fontSize =
+                                        11.5.sp
+                                )
+
+
+                                Text(
+                                    text =
+                                        "Waiting for your doctor to review your request.",
+
+                                    color =
+                                        PatientColors.TextSecondary,
+
+                                    fontSize =
+                                        9.5.sp,
+
+                                    lineHeight =
+                                        13.sp
+                                )
+                            }
+                        }
+                    }
+
+
+                    /*
+                     * Doctor approved
+                     */
+                    "approved" -> {
+
+                        Column {
+
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clip(
+                                            RoundedCornerShape(
+                                                15.dp
+                                            )
+                                        )
+                                        .background(
+                                            PatientColors.SuccessCard
+                                        )
+                                        .padding(
+                                            horizontal = 13.dp,
+                                            vertical = 12.dp
+                                        ),
+
+                                verticalAlignment =
+                                    Alignment.CenterVertically
+                            ) {
+
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .size(34.dp)
+                                            .background(
+                                                PatientColors.SuccessAccent
+                                                    .copy(
+                                                        alpha = 0.12f
+                                                    ),
+                                                CircleShape
+                                            ),
+
+                                    contentAlignment =
+                                        Alignment.Center
+                                ) {
+
+                                    Icon(
+                                        imageVector =
+                                            Icons.Outlined.CheckCircle,
+
+                                        contentDescription =
+                                            null,
+
+                                        tint =
+                                            PatientColors.SuccessAccent,
+
+                                        modifier =
+                                            Modifier.size(
+                                                17.dp
+                                            )
+                                    )
+                                }
+
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.width(10.dp)
+                                )
+
+
+                                Column {
+
+                                    Text(
+                                        text =
+                                            "Refill approved",
+
+                                        color =
+                                            PatientColors.SuccessAccent,
+
+                                        fontWeight =
+                                            FontWeight.Bold,
+
+                                        fontSize =
+                                            11.5.sp
+                                    )
+
+
+                                    Text(
+                                        text =
+                                            "Your doctor approved your refill request.",
+
+                                        color =
+                                            PatientColors.TextSecondary,
+
+                                        fontSize =
+                                            9.5.sp,
+
+                                        lineHeight =
+                                            13.sp
+                                    )
+                                }
+                            }
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(8.dp)
+                            )
+
+
+                            TextButton(
+                                onClick =
+                                    onRequestRefill,
+
+                                modifier =
+                                    Modifier.fillMaxWidth()
+                            ) {
+
+                                Icon(
+                                    imageVector =
+                                        Icons.Outlined.Refresh,
+
+                                    contentDescription =
+                                        null,
+
+                                    tint =
+                                        PatientColors.SuccessAccent,
+
+                                    modifier =
+                                        Modifier.size(
+                                            16.dp
+                                        )
+                                )
+
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.width(6.dp)
+                                )
+
+
+                                Text(
+                                    text =
+                                        "Request another refill",
+
+                                    color =
+                                        PatientColors.SuccessAccent,
+
+                                    fontWeight =
+                                        FontWeight.Bold,
+
+                                    fontSize =
+                                        11.5.sp
+                                )
+                            }
+                        }
+                    }
+
+
+                    /*
+                     * Doctor declined
+                     */
+                    "declined" -> {
+
+                        Column {
+
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clip(
+                                            RoundedCornerShape(
+                                                15.dp
+                                            )
+                                        )
+                                        .background(
+                                            PatientColors.RedSoft
+                                        )
+                                        .padding(
+                                            horizontal = 13.dp,
+                                            vertical = 12.dp
+                                        ),
+
+                                verticalAlignment =
+                                    Alignment.CenterVertically
+                            ) {
+
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .size(34.dp)
+                                            .background(
+                                                PatientColors.Red
+                                                    .copy(
+                                                        alpha = 0.12f
+                                                    ),
+                                                CircleShape
+                                            ),
+
+                                    contentAlignment =
+                                        Alignment.Center
+                                ) {
+
+                                    Icon(
+                                        imageVector =
+                                            Icons.Outlined.Close,
+
+                                        contentDescription =
+                                            null,
+
+                                        tint =
+                                            PatientColors.Red,
+
+                                        modifier =
+                                            Modifier.size(
+                                                17.dp
+                                            )
+                                    )
+                                }
+
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.width(10.dp)
+                                )
+
+
+                                Column {
+
+                                    Text(
+                                        text =
+                                            "Refill declined",
+
+                                        color =
+                                            PatientColors.Red,
+
+                                        fontWeight =
+                                            FontWeight.Bold,
+
+                                        fontSize =
+                                            11.5.sp
+                                    )
+
+
+                                    Text(
+                                        text =
+                                            "Your doctor did not approve this refill request.",
+
+                                        color =
+                                            PatientColors.TextSecondary,
+
+                                        fontSize =
+                                            9.5.sp,
+
+                                        lineHeight =
+                                            13.sp
+                                    )
+                                }
+                            }
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(8.dp)
+                            )
+
+
+                            TextButton(
+                                onClick =
+                                    onRequestRefill,
+
+                                modifier =
+                                    Modifier.fillMaxWidth()
+                            ) {
+
+                                Icon(
+                                    imageVector =
+                                        Icons.Outlined.Refresh,
+
+                                    contentDescription =
+                                        null,
+
+                                    tint =
+                                        PatientColors.Purple,
+
+                                    modifier =
+                                        Modifier.size(
+                                            16.dp
+                                        )
+                                )
+
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.width(6.dp)
+                                )
+
+
+                                Text(
+                                    text =
+                                        "Request again",
+
+                                    color =
+                                        PatientColors.Purple,
+
+                                    fontWeight =
+                                        FontWeight.Bold,
+
+                                    fontSize =
+                                        11.5.sp
+                                )
+                            }
+                        }
+                    }
+
+
+                    /*
+                     * No refill request yet
+                     */
+                    else -> {
+
+                        TextButton(
+                            onClick =
+                                onRequestRefill,
+
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(
+                                        RoundedCornerShape(
+                                            14.dp
+                                        )
+                                    )
+                                    .background(
+                                        PatientColors.SuccessCard
+                                    )
+                        ) {
+
+                            Icon(
+                                imageVector =
+                                    Icons.Outlined.Refresh,
+
+                                contentDescription =
+                                    null,
+
+                                tint =
+                                    PatientColors.SuccessAccent,
+
+                                modifier =
+                                    Modifier.size(
+                                        17.dp
+                                    )
+                            )
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.width(7.dp)
+                            )
+
+
+                            Text(
+                                text =
+                                    "Request refill",
+
+                                color =
+                                    PatientColors.SuccessAccent,
+
+                                fontSize =
+                                    12.sp,
+
+                                fontWeight =
+                                    FontWeight.Bold
+                            )
+                        }
+                    }
                 }
             }
         }

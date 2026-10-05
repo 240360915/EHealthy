@@ -1,16 +1,28 @@
 package ehealthy.connect.ui.patientDashboard
-
-
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -18,19 +30,25 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.ExitToApp
+import androidx.compose.material.icons.outlined.HealthAndSafety
 import androidx.compose.material.icons.outlined.Lightbulb
-import androidx.compose.material.icons.outlined.Medication
 import androidx.compose.material.icons.outlined.NotificationsActive
-import androidx.compose.material.icons.outlined.RateReview
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.VideoCall
 import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -40,8 +58,11 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -55,25 +76,42 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import coil.compose.AsyncImage
+import ehealthy.connect.data.patient.PatientAppointment
+import ehealthy.connect.data.patient.PatientRepository
+import ehealthy.connect.data.patient.PatientReviewDisplay
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.LocalTime
 import kotlin.time.Duration.Companion.milliseconds
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.material.icons.outlined.Medication
 
+
+/**
+ * These three types are intentionally kept in this package for compatibility with
+ * the existing MainActivity and patient appointment screens. The repository uses
+ * its own DTOs and maps them into these UI models.
+ */
 @Serializable
 data class Appointment(
     val id: String,
@@ -86,25 +124,12 @@ data class Appointment(
     val amount_paid: Double? = null,
     val doctor_id: String? = null,
     val appointment_type: String? = null,
+    val slot_id: String? = null,
+    val price_minor: Int? = null,
+    val currency: String? = null,
     val completion_code: String? = null,
-    val cancelled_reason: String? = null,
-    val refund_percent: Double? = null
+    val cancelled_reason: String? = null
 )
-
-/**
- * A short, patient-facing explanation for a cancelled appointment, when the
- * backend recorded a specific reason (doctor/patient no-show). Returns null
- * for manual cancellations, which need no extra explanation.
- */
-fun cancellationExplanation(appt: Appointment): String? {
-    if (appt.status != "cancelled") return null
-    val percent = appt.refund_percent?.toInt()
-    return when (appt.cancelled_reason) {
-        "doctor_no_show" -> "The doctor didn't join within 5 minutes — you were refunded${percent?.let { " $it%" } ?: " in full"}."
-        "patient_no_show" -> "You didn't join in time, so this was cancelled${percent?.let { " with a $it% refund" } ?: ""}. A portion goes to the doctor for the missed time."
-        else -> null
-    }
-}
 
 @Serializable
 data class Review(
@@ -122,55 +147,43 @@ data class ReviewDisplay(
     val doctorName: String
 )
 
-data class PrescriptionDisplay(
-    val prescription: Prescription,
-    val doctorName: String
-)
-
-data class QuickAction(
+private data class QuickAction(
     val label: String,
     val description: String,
     val icon: ImageVector,
+    val accentColor: Color,
+    val backgroundColor: Color,
     val onClick: () -> Unit
 )
 
-@RequiresApi(Build.VERSION_CODES.O)
-fun isUpcomingAppointment(appt: Appointment): Boolean {
-    if (appt.status == "cancelled") return false
+private enum class CallWindowState { NOT_APPLICABLE, TOO_EARLY, OPEN, CLOSED }
 
-    val date = appt.date ?: return true
-    return date >= LocalDate.now().toString()
+@RequiresApi(Build.VERSION_CODES.O)
+private fun Appointment.dateTimeOrNull(): LocalDateTime? {
+    val safeDate = date ?: return null
+    val safeTime = time?.take(8)?.let {
+        when (it.length) {
+            5 -> "$it:00"
+            else -> it
+        }
+    } ?: return null
+
+    return runCatching { LocalDateTime.parse("${safeDate}T$safeTime") }.getOrNull()
 }
 
-/**
- * Parses this appointment's date + time into a LocalDateTime,
- * or null if either field is missing/unparseable.
- */
 @RequiresApi(Build.VERSION_CODES.O)
-private fun appointmentDateTime(appt: Appointment): LocalDateTime? {
-    val date = appt.date ?: return null
-    val time = appt.time?.take(5) ?: return null
-
-    return try {
-        LocalDateTime.parse("${date}T$time:00")
-    } catch (_: Exception) {
-        null
-    }
+private fun Appointment.isUpcoming(now: LocalDateTime = LocalDateTime.now()): Boolean {
+    if (status.equals("cancelled", ignoreCase = true)) return false
+    val appointmentDateTime = dateTimeOrNull() ?: return date?.let {
+        runCatching { LocalDate.parse(it) >= now.toLocalDate() }.getOrDefault(false)
+    } ?: false
+    return appointmentDateTime >= now.minusMinutes(60)
 }
 
-/**
- * Online appointment call window:
- * - Opens 5 minutes before scheduled time.
- * - Remains open until 60 minutes after scheduled time.
- */
 @RequiresApi(Build.VERSION_CODES.O)
-private fun callWindowState(appt: Appointment): CallWindowState {
-    val dateTime = appointmentDateTime(appt)
-        ?: return CallWindowState.NOT_APPLICABLE
-
-    val now = LocalDateTime.now()
-    val minutesUntilStart = Duration.between(now, dateTime).toMinutes()
-
+private fun Appointment.callWindowState(now: LocalDateTime = LocalDateTime.now()): CallWindowState {
+    val appointmentDateTime = dateTimeOrNull() ?: return CallWindowState.NOT_APPLICABLE
+    val minutesUntilStart = Duration.between(now, appointmentDateTime).toMinutes()
     return when {
         minutesUntilStart > 5 -> CallWindowState.TOO_EARLY
         minutesUntilStart >= -60 -> CallWindowState.OPEN
@@ -178,36 +191,55 @@ private fun callWindowState(appt: Appointment): CallWindowState {
     }
 }
 
-private enum class CallWindowState {
-    NOT_APPLICABLE,
-    TOO_EARLY,
-    OPEN,
-    CLOSED
-}
-
-/**
- * Finds the first non-cancelled appointment due to start within
- * the next 5 minutes.
- */
 @RequiresApi(Build.VERSION_CODES.O)
-private fun findReminderAppointment(
-    appointments: List<Appointment>,
-    now: LocalDateTime
-): Appointment? {
-    return appointments.firstOrNull { appt ->
-        if (appt.status == "cancelled") {
-            return@firstOrNull false
-        }
-
-        val dateTime = appointmentDateTime(appt)
-            ?: return@firstOrNull false
-
-        val minutesUntilStart = Duration.between(now, dateTime).toMinutes()
-
-        minutesUntilStart in 0..5
+private fun greetingForNow(): String {
+    return when (LocalTime.now().hour) {
+        in 0..11 -> "Good morning"
+        in 12..16 -> "Good afternoon"
+        else -> "Good evening"
     }
 }
 
+private fun PatientAppointment.toUiAppointment() =
+    Appointment(
+        id = id,
+        patient_name = patient_name,
+        reason = reason,
+        date = date,
+        time = time,
+        status = status,
+        payment_method = payment_method,
+        amount_paid = amount_paid,
+        doctor_id = doctor_id,
+        appointment_type = appointment_type,
+        slot_id = slot_id,
+        price_minor = price_minor,
+        currency = currency,
+        completion_code = completion_code,
+        cancelled_reason = cancelled_reason
+    )
+
+private fun PatientReviewDisplay.toUiReview() = ReviewDisplay(
+    review = Review(
+        id = review.id,
+        patient_id = review.patient_id,
+        doctor_id = review.doctor_id,
+        appointment_id = review.appointment_id,
+        rating = review.rating,
+        comment = review.comment,
+        created_at = review.created_at
+    ),
+    doctorName = doctorName
+)
+
+/**
+ * Modern patient dashboard.
+ *
+ * The function keeps the previous callback parameters so your existing MainActivity still
+ * compiles while we migrate screen-by-screen. Data is now loaded through PatientRepository,
+ * which resolves patient profile IDs correctly and uses the protected Supabase RPCs.
+ */
+@Suppress("UNUSED_PARAMETER")
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -215,137 +247,55 @@ fun PatientDashboard(
     patientName: String,
     patientAvatarUrl: String?,
     isUploadingPhoto: Boolean,
-
     onNavigateFindDoctors: () -> Unit,
-    onNavigateAppointments: (AppointmentCategory) -> Unit,
+    onNavigateConsultations: () -> Unit,
+    onNavigateAppointments: () -> Unit,
     onNavigateMedicalRecords: () -> Unit,
+    onNavigatePrescriptions: () -> Unit,
     onNavigateHealthTips: () -> Unit,
     onNavigateSettings: () -> Unit,
-    onNavigatePrescriptions: () -> Unit,
-
     onUploadPhoto: () -> Unit,
     onLogout: () -> Unit,
-
     fetchAppointments: suspend () -> Result<List<Appointment>>,
-    fetchPrescriptions: suspend () -> Result<List<PrescriptionDisplay>>,
     fetchReviews: suspend () -> Result<List<ReviewDisplay>>,
-
-    /*
-     * Used by the appointment details dialog to load the
-     * doctor belonging to the appointment.
-     */
-    fetchDoctor: suspend (doctorId: String) -> Result<DoctorProfile>,
-
-    /*
-     * Navigates from the appointment details to the existing
-     * DoctorProfileScreen.
-     */
-    onViewDoctorProfile: (doctorId: String) -> Unit,
-
     onRescheduleAppointment: (String) -> Unit,
     cancelAppointment: suspend (String) -> Result<Unit>,
-    onStartCall: (String) -> Unit = {},
-    onRequestCompletionCode: suspend (String) -> Result<String> = {
-        Result.failure(Exception("Not available"))
-    }
+    onStartCall: (String) -> Unit = {}
 ) {
-    val background = MaterialTheme.colorScheme.background
-    val navy = MaterialTheme.colorScheme.onBackground
-    val green = MaterialTheme.colorScheme.primary
-    val accent = MaterialTheme.colorScheme.primary
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
-
-    var selectedTab by remember {
-        mutableStateOf(PatientTab.HOME)
-    }
-
-    var appointments by remember {
-        mutableStateOf<List<Appointment>>(emptyList())
-    }
-
-    var isLoadingAppointments by remember {
-        mutableStateOf(true)
-    }
-
-    var loadError by remember {
-        mutableStateOf<String?>(null)
-    }
-
-    var prescriptions by remember {
-        mutableStateOf<List<PrescriptionDisplay>>(emptyList())
-    }
-
-    var isLoadingPrescriptions by remember {
-        mutableStateOf(true)
-    }
-
-    /*
-     * Keeps prescription-loading errors separate from
-     * appointment-loading errors.
-     */
-    var prescriptionError by remember {
-        mutableStateOf<String?>(null)
-    }
-
-    /*
-     * Load prescriptions.
-     *
-     * Previously, a failed fetch was silently ignored and
-     * the UI displayed "No prescriptions yet." This now
-     * records the actual error so we can see what is wrong.
-     */
-    LaunchedEffect(Unit) {
-        val result = fetchPrescriptions()
-
-        isLoadingPrescriptions = false
-
-        result
-            .onSuccess {
-                prescriptions = it
-                prescriptionError = null
-            }
-            .onFailure {
-                prescriptions = emptyList()
-                prescriptionError =
-                    it.message ?: "Failed to load prescriptions."
-            }
-    }
-
-    var reviews by remember {
-        mutableStateOf<List<ReviewDisplay>>(emptyList())
-    }
-
-    var isLoadingReviews by remember {
-        mutableStateOf(true)
-    }
-
-    /*
-     * Appointment selected from the appointment card.
-     * This opens AppointmentActionSheet.
-     */
-    var selectedAppointment by remember {
-        mutableStateOf<Appointment?>(null)
-    }
-
-    /*
-     * Appointment whose "View Details" action was selected.
-     */
-    var showDetailsForAppointment by remember {
-        mutableStateOf<Appointment?>(null)
-    }
-
-    var isCancelling by remember {
-        mutableStateOf(false)
-    }
-
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    /*
-     * Ticks every 30 seconds so appointment reminders and
-     * online call windows stay current.
-     */
-    var now by remember {
-        mutableStateOf(LocalDateTime.now())
+    var selectedTab by remember { mutableStateOf(PatientTab.HOME) }
+    var appointments by remember { mutableStateOf<List<Appointment>>(emptyList()) }
+    var reviews by remember { mutableStateOf<List<ReviewDisplay>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+    var selectedAppointment by remember { mutableStateOf<Appointment?>(null) }
+    var detailAppointment by remember { mutableStateOf<Appointment?>(null) }
+    var isCancelling by remember { mutableStateOf(false) }
+    var refreshKey by remember { mutableStateOf(0) }
+    var now by remember { mutableStateOf(LocalDateTime.now()) }
+    var dismissedReminderIds by remember { mutableStateOf(setOf<String>()) }
+
+    suspend fun refreshDashboard() {
+        isLoading = true
+        loadError = null
+
+        val appointmentsResult = PatientRepository.getMyAppointments()
+        val reviewsResult = PatientRepository.getMyReviews()
+
+        appointmentsResult
+            .onSuccess { appointments = it.map { appointment -> appointment.toUiAppointment() } }
+            .onFailure { loadError = it.message ?: "We could not load your appointments." }
+
+        reviewsResult
+            .onSuccess { reviews = it.map { review -> review.toUiReview() } }
+
+        isLoading = false
+    }
+
+    LaunchedEffect(refreshKey) {
+        refreshDashboard()
     }
 
     LaunchedEffect(Unit) {
@@ -355,287 +305,4785 @@ fun PatientDashboard(
         }
     }
 
-    /*
-     * Prevents the reminder from appearing repeatedly after
-     * the patient dismisses it.
-     */
-    var dismissedReminderIds by remember {
-        mutableStateOf(setOf<String>())
+    val upcomingAppointments = remember(appointments, now) {
+        appointments
+            .filter { it.isUpcoming(now) }
+            .sortedBy { it.dateTimeOrNull() ?: LocalDateTime.MAX }
     }
 
-    val reminderAppointment = remember(
-        appointments,
-        now,
-        dismissedReminderIds
-    ) {
-        findReminderAppointment(
-            appointments,
-            now
-        )?.takeIf {
-            it.id !in dismissedReminderIds
-        }
-    }
+    val nextAppointment = upcomingAppointments.firstOrNull()
 
-    /*
-     * Load appointments.
-     */
-    LaunchedEffect(Unit) {
-        val result = fetchAppointments()
-
-        isLoadingAppointments = false
-
-        result
-            .onSuccess {
-                appointments = it
-            }
-            .onFailure {
-                loadError =
-                    it.message ?: "Failed to load appointments."
-            }
-    }
-
-    /*
-     * Load reviews.
-     */
-    LaunchedEffect(Unit) {
-        val result = fetchReviews()
-
-        isLoadingReviews = false
-
-        result.onSuccess {
-            reviews = it
-        }
-    }
-
-    val onTabSelected: (PatientTab) -> Unit = { tab ->
-        when (tab) {
-            PatientTab.FIND_DOCTORS ->
-                onNavigateFindDoctors()
-
-            PatientTab.APPOINTMENTS ->
-                onNavigateAppointments(AppointmentCategory.ALL)
-
-            else ->
-                selectedTab = tab
+    val reminderAppointment = remember(upcomingAppointments, now, dismissedReminderIds) {
+        upcomingAppointments.firstOrNull { appointment ->
+            val dt = appointment.dateTimeOrNull() ?: return@firstOrNull false
+            val minutes = Duration.between(now, dt).toMinutes()
+            minutes in 0..5 && appointment.id !in dismissedReminderIds
         }
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            "e-Health Connect",
-                            color = navy,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
-                        )
-
-                        Text(
-                            "health-care made easier for you",
-                            color = green,
-                            fontSize = 11.sp
-                        )
-                    }
-                },
-                actions = {
-                    PatientAvatar(
-                        avatarUrl = patientAvatarUrl,
-                        name = patientName,
-                        size = 36.dp,
-                        onClick = {
-                            selectedTab = PatientTab.PROFILE
-                        }
-                    )
-
-                    Spacer(modifier = Modifier.width(12.dp))
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
+            PatientTopBar(
+                patientName = patientName,
+                patientAvatarUrl = patientAvatarUrl,
+                onAvatarClick = { selectedTab = PatientTab.PROFILE },
+                onRefresh = { refreshKey++ },
+                refreshing = isLoading
             )
         },
-
         bottomBar = {
             PatientBottomNavBar(
                 selectedTab = selectedTab,
-                onTabSelected = onTabSelected
+                onTabSelected = { tab ->
+                    when (tab) {
+                        PatientTab.FIND_DOCTORS -> onNavigateFindDoctors()
+                        PatientTab.APPOINTMENTS -> onNavigateAppointments()
+                        else -> selectedTab = tab
+                    }
+                }
             )
         }
     ) { paddingValues ->
-
         when (selectedTab) {
+            PatientTab.HOME -> ModernHomeTab(
+                modifier = Modifier.padding(paddingValues),
+                patientName = patientName,
+                appointments = appointments,
+                upcomingAppointments = upcomingAppointments,
+                nextAppointment = nextAppointment,
+                reviews = reviews,
+                isLoading = isLoading,
+                loadError = loadError,
+                onRetry = { refreshKey++ },
+                onNavigateFindDoctors = onNavigateFindDoctors,
+                onNavigateConsultations = onNavigateConsultations,
+                onNavigateAppointments = onNavigateAppointments,
+                onNavigateMedicalRecords = onNavigateMedicalRecords,
+                onNavigatePrescriptions = onNavigatePrescriptions,
+                onNavigateHealthTips = onNavigateHealthTips,
+                onAppointmentClick = { selectedAppointment = it },
+                onStartCall = onStartCall
+            )
 
-            PatientTab.HOME -> {
-                HomeTabContent(
-                    modifier = Modifier.padding(paddingValues),
-                    patientName = patientName,
-                    background = background,
-                    navy = navy,
-                    accent = accent,
-                    muted = muted,
-                    appointments = appointments,
-                    isLoadingAppointments = isLoadingAppointments,
-                    loadError = loadError,
-                    isLoadingPrescriptions = isLoadingPrescriptions,
-                    prescriptionError = prescriptionError,
-                    prescriptions = prescriptions,
-                    onNavigatePrescriptions = onNavigatePrescriptions,
-                    reviews = reviews,
-                    isLoadingReviews = isLoadingReviews,
-                    onNavigateFindDoctors = onNavigateFindDoctors,
-                    onNavigateAppointments = onNavigateAppointments,
-                    onNavigateMedicalRecords = onNavigateMedicalRecords,
-                    onNavigateHealthTips = onNavigateHealthTips,
-
-                    /*
-                     * Clicking an appointment card opens
-                     * the appointment action sheet.
-                     */
-                    onAppointmentClick = {
-                        selectedAppointment = it
-                    },
-
-                    onStartCall = onStartCall
-                )
-            }
-
-            PatientTab.PROFILE -> {
-                ProfileTabContent(
-                    modifier = Modifier.padding(paddingValues),
-                    patientName = patientName,
-                    patientAvatarUrl = patientAvatarUrl,
-                    isUploadingPhoto = isUploadingPhoto,
-                    background = background,
-                    navy = navy,
-                    muted = muted,
-                    onUploadPhoto = onUploadPhoto,
-                    onNavigateSettings = onNavigateSettings,
-                    onNavigateMedicalRecords = onNavigateMedicalRecords,
-                    onLogout = onLogout
-                )
-            }
+            PatientTab.PROFILE -> ModernProfileTab(
+                modifier = Modifier.padding(paddingValues),
+                patientName = patientName,
+                patientAvatarUrl = patientAvatarUrl,
+                isUploadingPhoto = isUploadingPhoto,
+                onUploadPhoto = onUploadPhoto,
+                onNavigateSettings = onNavigateSettings,
+                onNavigateMedicalRecords = onNavigateMedicalRecords,
+                onNavigateAppointments = onNavigateAppointments,
+                onLogout = onLogout
+            )
 
             else -> Unit
         }
     }
 
-    /*
-     * ---------------------------------------------------------
-     * APPOINTMENT ACTION SHEET
-     * ---------------------------------------------------------
-     *
-     * Appointment card
-     *      ↓
-     * selectedAppointment
-     *      ↓
-     * AppointmentActionSheet
-     */
-    selectedAppointment?.let { appt ->
+    selectedAppointment?.let { appointment ->
 
         AppointmentActionSheet(
-            appointment = appt,
+            appointment = appointment,
 
             onDismiss = {
                 selectedAppointment = null
             },
 
-            /*
-             * User chooses "View Details".
-             */
             onViewDetails = {
-                showDetailsForAppointment = appt
+                detailAppointment = appointment
                 selectedAppointment = null
             },
 
             onReschedule = {
                 selectedAppointment = null
-                onRescheduleAppointment(appt.id)
+                onRescheduleAppointment(
+                    appointment.id
+                )
             },
 
             onCancel = {
+
                 scope.launch {
+
+                    if (isCancelling) {
+                        return@launch
+                    }
+
                     isCancelling = true
 
-                    cancelAppointment(appt.id)
-                        .onSuccess {
-                            appointments = appointments.map {
-                                if (it.id == appt.id) {
-                                    it.copy(status = "cancelled")
-                                } else {
-                                    it
+                    PatientRepository.cancelAppointment(
+                        appointmentId = appointment.id,
+                        reason = "Cancelled by patient"
+                    )
+                        .onSuccess { result ->
+
+                            appointments =
+                                appointments.map {
+
+                                    if (it.id == appointment.id) {
+
+                                        it.copy(
+                                            status =
+                                                result.appointment_status
+                                        )
+
+                                    } else {
+
+                                        it
+                                    }
                                 }
-                            }
+
+                            snackbarHostState.showSnackbar(
+                                "Appointment cancelled."
+                            )
+                        }
+                        .onFailure {
+
+                            snackbarHostState.showSnackbar(
+                                it.message
+                                    ?: "Could not cancel the appointment."
+                            )
                         }
 
                     isCancelling = false
                     selectedAppointment = null
                 }
             },
+
             onRequestCompletionCode = { appointmentId ->
-                val result = onRequestCompletionCode(appointmentId)
+
+                val result =
+                    PatientRepository
+                        .requestCompletionCode(
+                            appointmentId
+                        )
+                        .map {
+                            it.completion_code
+                        }
+
+
                 result.onSuccess { code ->
-                    appointments = appointments.map {
-                        if (it.id == appointmentId) it.copy(completion_code = code) else it
-                    }
+
+                    appointments =
+                        appointments.map {
+
+                            if (it.id == appointmentId) {
+
+                                it.copy(
+                                    completion_code = code
+                                )
+
+                            } else {
+
+                                it
+                            }
+                        }
                 }
+
+
                 result
             }
         )
     }
 
-    /*
-     * ---------------------------------------------------------
-     * APPOINTMENT DETAILS
-     * ---------------------------------------------------------
-     *
-     * View Details
-     *      ↓
-     * AppointmentDetailsDialog
-     *      ↓
-     * Doctor card
-     *      ↓
-     * DoctorProfileScreen
-     */
-    showDetailsForAppointment?.let { appt ->
-
+    detailAppointment?.let { appointment ->
         AppointmentDetailsDialog(
-            appt = appt,
-
-            fetchDoctor = fetchDoctor,
-
-            onViewDoctorProfile = { doctorId ->
-                showDetailsForAppointment = null
-                onViewDoctorProfile(doctorId)
-            },
-
-            onDismiss = {
-                showDetailsForAppointment = null
-            }
+            appointment = appointment,
+            onDismiss = { detailAppointment = null }
         )
     }
 
-    /*
-     * Emergency "be ready" reminder.
-     */
-    reminderAppointment?.let { appt ->
-
+    reminderAppointment?.let { appointment ->
         AppointmentReminderPopup(
-            appointment = appt,
-
+            appointment = appointment,
             onDismiss = {
-                dismissedReminderIds =
-                    dismissedReminderIds + appt.id
+                dismissedReminderIds = dismissedReminderIds + appointment.id
             },
-
             onViewAppointment = {
-                dismissedReminderIds =
-                    dismissedReminderIds + appt.id
-
-                selectedAppointment = appt
+                dismissedReminderIds = dismissedReminderIds + appointment.id
+                selectedAppointment = appointment
             }
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PatientTopBar(
+    patientName: String,
+    patientAvatarUrl: String?,
+    onAvatarClick: () -> Unit,
+    onRefresh: () -> Unit,
+    refreshing: Boolean
+) {
+
+    val infiniteTransition =
+        rememberInfiniteTransition(
+            label = "HeaderAnimation"
+        )
+
+    val refreshRotation by
+    infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue =
+            if (refreshing) {
+                360f
+            } else {
+                0f
+            },
+        animationSpec =
+            infiniteRepeatable(
+                animation =
+                    tween(
+                        durationMillis = 900,
+                        easing =
+                            FastOutSlowInEasing
+                    ),
+                repeatMode =
+                    RepeatMode.Restart
+            ),
+        label =
+            "RefreshRotation"
+    )
+
+
+    TopAppBar(
+        title = {
+
+            Column {
+
+                Text(
+                    text =
+                        "eHealth Connect",
+                    fontSize =
+                        17.sp,
+                    fontWeight =
+                        FontWeight.ExtraBold,
+                    color =
+                        PatientColors
+                            .TextPrimary
+                )
+
+                Text(
+                    text =
+                        "Your care, connected",
+                    fontSize =
+                        10.5.sp,
+                    color =
+                        PatientColors
+                            .Primary,
+                    fontWeight =
+                        FontWeight.SemiBold
+                )
+            }
+        },
+
+        actions = {
+
+            /*
+             * Notification button
+             */
+            Box(
+                modifier =
+                    Modifier
+                        .size(
+                            42.dp
+                        )
+                        .clip(
+                            RoundedCornerShape(
+                                14.dp
+                            )
+                        )
+                        .background(
+                            PatientColors
+                                .AppointmentCard
+                        ),
+                contentAlignment =
+                    Alignment.Center
+            ) {
+
+                Icon(
+                    imageVector =
+                        Icons.Outlined.NotificationsActive,
+                    contentDescription =
+                        "Notifications",
+                    tint =
+                        PatientColors
+                            .AppointmentAccent,
+                    modifier =
+                        Modifier.size(
+                            20.dp
+                        )
+                )
+
+
+                /*
+                 * Notification indicator
+                 */
+                Box(
+                    modifier =
+                        Modifier
+                            .align(
+                                Alignment.TopEnd
+                            )
+                            .padding(
+                                top = 7.dp,
+                                end = 7.dp
+                            )
+                            .size(
+                                7.dp
+                            )
+                            .clip(
+                                CircleShape
+                            )
+                            .background(
+                                PatientColors.Red
+                            )
+                )
+            }
+
+
+            Spacer(
+                modifier =
+                    Modifier.width(
+                        8.dp
+                    )
+            )
+
+
+            /*
+             * Refresh
+             */
+            IconButton(
+                onClick =
+                    onRefresh,
+                enabled =
+                    !refreshing
+            ) {
+
+                Box(
+                    modifier =
+                        Modifier
+                            .size(
+                                38.dp
+                            )
+                            .clip(
+                                RoundedCornerShape(
+                                    13.dp
+                                )
+                            )
+                            .background(
+                                PatientColors
+                                    .DoctorCard
+                            ),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+
+                    Icon(
+                        imageVector =
+                            Icons.Outlined.Refresh,
+                        contentDescription =
+                            "Refresh dashboard",
+                        tint =
+                            PatientColors
+                                .DoctorAccent,
+                        modifier =
+                            Modifier
+                                .size(
+                                    19.dp
+                                )
+                                .rotate(
+                                    refreshRotation
+                                )
+                    )
+                }
+            }
+
+
+            Spacer(
+                modifier =
+                    Modifier.width(
+                        8.dp
+                    )
+            )
+
+
+            /*
+             * Avatar with active ring
+             */
+            PatientHeaderAvatar(
+                patientName =
+                    patientName,
+                patientAvatarUrl =
+                    patientAvatarUrl,
+                onClick =
+                    onAvatarClick
+            )
+
+
+            Spacer(
+                modifier =
+                    Modifier.width(
+                        12.dp
+                    )
+            )
+        },
+
+        colors =
+            TopAppBarDefaults
+                .topAppBarColors(
+                    containerColor =
+                        MaterialTheme
+                            .colorScheme
+                            .surface
+                )
+    )
+}
+@Composable
+private fun PatientHeaderAvatar(
+    patientName: String,
+    patientAvatarUrl: String?,
+    onClick: () -> Unit
+) {
+
+    val infiniteTransition =
+        rememberInfiniteTransition(
+            label = "AvatarStatus"
+        )
+
+    val pulse by
+    infiniteTransition.animateFloat(
+        initialValue =
+            0.55f,
+        targetValue =
+            1f,
+        animationSpec =
+            infiniteRepeatable(
+                animation =
+                    tween(
+                        durationMillis =
+                            1200,
+                        easing =
+                            FastOutSlowInEasing
+                    ),
+                repeatMode =
+                    RepeatMode.Reverse
+            ),
+        label =
+            "AvatarPulse"
+    )
+
+
+    Box(
+        modifier =
+            Modifier.size(
+                46.dp
+            ),
+        contentAlignment =
+            Alignment.Center
+    ) {
+
+        /*
+         * Soft outer ring
+         */
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .clip(
+                        CircleShape
+                    )
+                    .background(
+                        PatientColors
+                            .Primary
+                            .copy(
+                                alpha =
+                                    0.10f
+                            )
+                    )
+        )
+
+
+        PatientAvatar(
+            avatarUrl =
+                patientAvatarUrl,
+            name =
+                patientName,
+            size =
+                38.dp,
+            onClick =
+                onClick
+        )
+
+
+        /*
+         * Online indicator
+         */
+        Box(
+            modifier =
+                Modifier
+                    .align(
+                        Alignment.BottomEnd
+                    )
+                    .size(
+                        13.dp
+                    )
+                    .clip(
+                        CircleShape
+                    )
+                    .background(
+                        MaterialTheme
+                            .colorScheme
+                            .surface
+                    )
+                    .padding(
+                        2.dp
+                    )
+        ) {
+
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .alpha(
+                            pulse
+                        )
+                        .clip(
+                            CircleShape
+                        )
+                        .background(
+                            PatientColors
+                                .SuccessAccent
+                        )
+            )
+        }
+    }
+}
+@RequiresApi(Build.VERSION_CODES.O)
+@Composable
+private fun ModernHomeTab(
+    modifier: Modifier,
+    patientName: String,
+    appointments: List<Appointment>,
+    upcomingAppointments: List<Appointment>,
+    nextAppointment: Appointment?,
+    reviews: List<ReviewDisplay>,
+    isLoading: Boolean,
+    loadError: String?,
+    onRetry: () -> Unit,
+    onNavigateFindDoctors: () -> Unit,
+    onNavigateConsultations: () -> Unit,
+    onNavigateAppointments: () -> Unit,
+    onNavigateMedicalRecords: () -> Unit,
+    onNavigatePrescriptions: () -> Unit,
+    onNavigateHealthTips: () -> Unit,
+    onAppointmentClick: (Appointment) -> Unit,
+    onStartCall: (String) -> Unit
+) {
+    val firstName = patientName.trim().substringBefore(" ").ifBlank { "there" }
+
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 28.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)
+    ) {
+        item {
+            Column(
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    text = "${greetingForNow()}, $firstName",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Spacer(Modifier.height(5.dp))
+                Text(
+                    text = "What can we help you with today?",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 14.sp
+                )
+            }
+        }
+
+        item {
+            OnDemandCareHero(onClick = onNavigateConsultations)
+        }
+
+        item {
+            DashboardStatsRow(
+                upcomingCount = upcomingAppointments.size,
+                completedCount = appointments.count {
+                    it.status.equals("completed", ignoreCase = true)
+                },
+                reviewCount = reviews.size
+            )
+        }
+
+        item {
+            SectionHeader(
+                title = "Quick actions",
+                subtitle = "Everything you need, one tap away"
+            )
+        }
+
+        item {
+            val actions = listOf(
+
+                QuickAction(
+                    label = "Find a doctor",
+                    description = "Search approved doctors",
+                    icon = Icons.Outlined.Search,
+                    accentColor = PatientColors.DoctorAccent,
+                    backgroundColor = PatientColors.DoctorCard,
+                    onClick = onNavigateFindDoctors
+                ),
+
+                QuickAction(
+                    label = "Appointments",
+                    description = "Manage your visits",
+                    icon = Icons.Outlined.CalendarMonth,
+                    accentColor = PatientColors.AppointmentAccent,
+                    backgroundColor = PatientColors.AppointmentCard,
+                    onClick = onNavigateAppointments
+                ),
+
+                QuickAction(
+                    label = "Medical records",
+                    description = "Your care history",
+                    icon = Icons.Outlined.Description,
+                    accentColor = PatientColors.RecordsAccent,
+                    backgroundColor = PatientColors.RecordsCard,
+                    onClick = onNavigateMedicalRecords
+                ),
+
+                QuickAction(
+                    label = "Prescriptions",
+                    description = "Medication & refills",
+                    icon = Icons.Outlined.Medication,
+                    accentColor = PatientColors.SuccessAccent,
+                    backgroundColor = PatientColors.SuccessCard,
+                    onClick = onNavigatePrescriptions
+                ),
+
+                QuickAction(
+                    label = "Health tips",
+                    description = "Helpful wellness guidance",
+                    icon = Icons.Outlined.Lightbulb,
+                    accentColor = PatientColors.TipsAccent,
+                    backgroundColor = PatientColors.TipsCard,
+                    onClick = onNavigateHealthTips
+                )
+            )
+
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 18.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(actions) { action ->
+                    QuickActionCard(action)
+                }
+            }
+        }
+
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "Next appointment",
+                        fontSize = 19.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Your upcoming care",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp
+                    )
+                }
+                TextButton(onClick = onNavigateAppointments) {
+                    Text("See all")
+                }
+            }
+        }
+
+        when {
+            isLoading -> item { DashboardLoadingCard() }
+            loadError != null -> item {
+                DashboardErrorCard(message = loadError, onRetry = onRetry)
+            }
+            nextAppointment == null -> item {
+                EmptyNextAppointmentCard(onFindDoctor = onNavigateFindDoctors)
+            }
+            else -> item {
+                Box(Modifier.padding(horizontal = 18.dp)) {
+                    NextAppointmentCard(
+                        appointment = nextAppointment,
+                        onClick = { onAppointmentClick(nextAppointment) },
+                        onStartCall = { onStartCall(nextAppointment.id) }
+                    )
+                }
+            }
+        }
+
+        if (upcomingAppointments.size > 1) {
+            item {
+                SectionHeader(
+                    title = "Coming up",
+                    subtitle = "Your next ${minOf(3, upcomingAppointments.size - 1)} visits"
+                )
+            }
+
+            items(upcomingAppointments.drop(1).take(3), key = { it.id }) { appointment ->
+                Box(Modifier.padding(horizontal = 18.dp)) {
+                    CompactAppointmentCard(
+                        appointment = appointment,
+                        onClick = { onAppointmentClick(appointment) }
+                    )
+                }
+            }
+        }
+
+        item {
+            HealthTrustCard(onHealthTips = onNavigateHealthTips)
+        }
+
+        if (reviews.isNotEmpty()) {
+            item {
+                SectionHeader(
+                    title = "Your feedback",
+                    subtitle = "Recent doctor reviews"
+                )
+            }
+
+            items(reviews.take(2), key = { it.review.id }) { review ->
+                Box(Modifier.padding(horizontal = 18.dp)) {
+                    ReviewCard(review)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OnDemandCareHero(
+    onClick: () -> Unit
+) {
+
+    val infiniteTransition =
+        rememberInfiniteTransition(
+            label = "ConsultationHeroAnimation"
+        )
+
+    val pulse by
+    infiniteTransition.animateFloat(
+        initialValue = 0.45f,
+        targetValue = 1f,
+        animationSpec =
+            infiniteRepeatable(
+                animation =
+                    tween(
+                        durationMillis = 1100,
+                        easing = FastOutSlowInEasing
+                    ),
+                repeatMode =
+                    RepeatMode.Reverse
+            ),
+        label = "AvailabilityPulse"
+    )
+
+    val artworkMovement by
+    infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec =
+            infiniteRepeatable(
+                animation =
+                    tween(
+                        durationMillis = 2500,
+                        easing = FastOutSlowInEasing
+                    ),
+                repeatMode =
+                    RepeatMode.Reverse
+            ),
+        label = "ArtworkMovement"
+    )
+
+    PatientAnimatedClickableContainer(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 18.dp
+                )
+    ) { interactionSource ->
+
+        Card(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        interactionSource =
+                            interactionSource,
+                        indication =
+                            null,
+                        onClick =
+                            onClick
+                    ),
+            shape =
+                RoundedCornerShape(
+                    30.dp
+                ),
+            colors =
+                CardDefaults.cardColors(
+                    containerColor =
+                        Color.Transparent
+                ),
+            elevation =
+                CardDefaults.cardElevation(
+                    defaultElevation =
+                        8.dp
+                )
+        ) {
+
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .background(
+                            PatientColors
+                                .ConsultationGradient
+                        )
+                        .padding(
+                            horizontal = 22.dp,
+                            vertical = 22.dp
+                        )
+            ) {
+
+                /*
+                 * Decorative artwork on right side
+                 */
+                HeroMedicalArtwork(
+                    movement =
+                        artworkMovement,
+                    modifier =
+                        Modifier
+                            .align(
+                                Alignment.CenterEnd
+                            )
+                            .size(
+                                135.dp
+                            )
+                            .alpha(
+                                0.85f
+                            )
+                )
+
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth(
+                                0.73f
+                            )
+                ) {
+
+                    Row(
+                        verticalAlignment =
+                            Alignment.CenterVertically
+                    ) {
+
+                        Box(
+                            modifier =
+                                Modifier
+                                    .size(
+                                        10.dp
+                                    )
+                                    .alpha(
+                                        pulse
+                                    )
+                                    .clip(
+                                        CircleShape
+                                    )
+                                    .background(
+                                        Color(
+                                            0xFF86EFAC
+                                        )
+                                    )
+                        )
+
+                        Spacer(
+                            modifier =
+                                Modifier.width(
+                                    8.dp
+                                )
+                        )
+
+                        Text(
+                            text =
+                                "DOCTORS AVAILABLE",
+                            color =
+                                Color.White
+                                    .copy(
+                                        alpha =
+                                            0.92f
+                                    ),
+                            fontSize =
+                                10.5.sp,
+                            fontWeight =
+                                FontWeight.Bold,
+                            letterSpacing =
+                                0.8.sp
+                        )
+                    }
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                16.dp
+                            )
+                    )
+
+                    Text(
+                        text =
+                            "Need medical\nadvice now?",
+                        color =
+                            Color.White,
+                        fontSize =
+                            25.sp,
+                        fontWeight =
+                            FontWeight.ExtraBold,
+                        lineHeight =
+                            29.sp
+                    )
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                8.dp
+                            )
+                    )
+
+                    Text(
+                        text =
+                            "Connect with an available healthcare professional for an online consultation.",
+                        color =
+                            Color.White
+                                .copy(
+                                    alpha =
+                                        0.84f
+                                ),
+                        fontSize =
+                            12.5.sp,
+                        lineHeight =
+                            18.sp
+                    )
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                20.dp
+                            )
+                    )
+
+                    Row(
+                        verticalAlignment =
+                            Alignment.CenterVertically
+                    ) {
+
+                        Box(
+                            modifier =
+                                Modifier
+                                    .clip(
+                                        RoundedCornerShape(
+                                            15.dp
+                                        )
+                                    )
+                                    .background(
+                                        Color.White
+                                    )
+                                    .padding(
+                                        horizontal =
+                                            15.dp,
+                                        vertical =
+                                            11.dp
+                                    )
+                        ) {
+
+                            Row(
+                                verticalAlignment =
+                                    Alignment.CenterVertically
+                            ) {
+
+                                Icon(
+                                    imageVector =
+                                        Icons.Outlined.VideoCall,
+                                    contentDescription =
+                                        null,
+                                    tint =
+                                        PatientColors.Teal,
+                                    modifier =
+                                        Modifier.size(
+                                            19.dp
+                                        )
+                                )
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.width(
+                                            8.dp
+                                        )
+                                )
+
+                                Text(
+                                    text =
+                                        "Consult a doctor",
+                                    color =
+                                        PatientColors
+                                            .TextPrimary,
+                                    fontWeight =
+                                        FontWeight.Bold,
+                                    fontSize =
+                                        12.5.sp
+                                )
+                            }
+                        }
+
+                        Spacer(
+                            modifier =
+                                Modifier.width(
+                                    12.dp
+                                )
+                        )
+
+                        Box(
+                            modifier =
+                                Modifier
+                                    .size(
+                                        39.dp
+                                    )
+                                    .clip(
+                                        CircleShape
+                                    )
+                                    .background(
+                                        Color.White
+                                            .copy(
+                                                alpha =
+                                                    0.16f
+                                            )
+                                    ),
+                            contentAlignment =
+                                Alignment.Center
+                        ) {
+
+                            Icon(
+                                imageVector =
+                                    Icons.Filled.ArrowForward,
+                                contentDescription =
+                                    null,
+                                tint =
+                                    Color.White,
+                                modifier =
+                                    Modifier.size(
+                                        19.dp
+                                    )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+@Composable
+private fun HeroMedicalArtwork(
+    movement: Float,
+    modifier: Modifier = Modifier
+) {
+
+    Canvas(
+        modifier =
+            modifier
+    ) {
+
+        val centerX =
+            size.width / 2f
+
+        val centerY =
+            size.height / 2f
+
+        /*
+         * Large soft circle
+         */
+        drawCircle(
+            color =
+                Color.White.copy(
+                    alpha = 0.10f
+                ),
+            radius =
+                size.minDimension *
+                        0.43f,
+            center =
+                Offset(
+                    x =
+                        centerX,
+                    y =
+                        centerY +
+                                (
+                                        movement *
+                                                5f
+                                        )
+                )
+        )
+
+        /*
+         * Inner circle
+         */
+        drawCircle(
+            color =
+                Color.White.copy(
+                    alpha = 0.10f
+                ),
+            radius =
+                size.minDimension *
+                        0.31f,
+            center =
+                Offset(
+                    centerX,
+                    centerY
+                ),
+            style =
+                Stroke(
+                    width =
+                        3.dp.toPx()
+                )
+        )
+
+        /*
+         * Medical cross
+         */
+        val crossSize =
+            size.minDimension *
+                    0.16f
+
+        drawLine(
+            color =
+                Color.White.copy(
+                    alpha = 0.90f
+                ),
+            start =
+                Offset(
+                    centerX,
+                    centerY -
+                            crossSize
+                ),
+            end =
+                Offset(
+                    centerX,
+                    centerY +
+                            crossSize
+                ),
+            strokeWidth =
+                7.dp.toPx(),
+            cap =
+                StrokeCap.Round
+        )
+
+        drawLine(
+            color =
+                Color.White.copy(
+                    alpha = 0.90f
+                ),
+            start =
+                Offset(
+                    centerX -
+                            crossSize,
+                    centerY
+                ),
+            end =
+                Offset(
+                    centerX +
+                            crossSize,
+                    centerY
+                ),
+            strokeWidth =
+                7.dp.toPx(),
+            cap =
+                StrokeCap.Round
+        )
+
+        /*
+         * Heartbeat line
+         */
+        val startX =
+            size.width *
+                    0.12f
+
+        val baseY =
+            size.height *
+                    0.78f
+
+        val heartbeatColor =
+            Color.White.copy(
+                alpha = 0.76f
+            )
+
+        val stroke =
+            2.5.dp.toPx()
+
+        drawLine(
+            heartbeatColor,
+            Offset(
+                startX,
+                baseY
+            ),
+            Offset(
+                size.width *
+                        0.31f,
+                baseY
+            ),
+            stroke,
+            StrokeCap.Round
+        )
+
+        drawLine(
+            heartbeatColor,
+            Offset(
+                size.width *
+                        0.31f,
+                baseY
+            ),
+            Offset(
+                size.width *
+                        0.40f,
+                baseY -
+                        13.dp.toPx()
+            ),
+            stroke,
+            StrokeCap.Round
+        )
+
+        drawLine(
+            heartbeatColor,
+            Offset(
+                size.width *
+                        0.40f,
+                baseY -
+                        13.dp.toPx()
+            ),
+            Offset(
+                size.width *
+                        0.49f,
+                baseY +
+                        16.dp.toPx()
+            ),
+            stroke,
+            StrokeCap.Round
+        )
+
+        drawLine(
+            heartbeatColor,
+            Offset(
+                size.width *
+                        0.49f,
+                baseY +
+                        16.dp.toPx()
+            ),
+            Offset(
+                size.width *
+                        0.58f,
+                baseY -
+                        7.dp.toPx()
+            ),
+            stroke,
+            StrokeCap.Round
+        )
+
+        drawLine(
+            heartbeatColor,
+            Offset(
+                size.width *
+                        0.58f,
+                baseY -
+                        7.dp.toPx()
+            ),
+            Offset(
+                size.width *
+                        0.68f,
+                baseY
+            ),
+            stroke,
+            StrokeCap.Round
+        )
+
+        drawLine(
+            heartbeatColor,
+            Offset(
+                size.width *
+                        0.68f,
+                baseY
+            ),
+            Offset(
+                size.width *
+                        0.88f,
+                baseY
+            ),
+            stroke,
+            StrokeCap.Round
+        )
+    }
+}
+@Composable
+private fun DashboardStatsRow(
+    upcomingCount: Int,
+    completedCount: Int,
+    reviewCount: Int
+) {
+
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 18.dp
+                ),
+        horizontalArrangement =
+            Arrangement.spacedBy(
+                10.dp
+            )
+    ) {
+
+        MiniStat(
+            modifier =
+                Modifier.weight(1f),
+            value =
+                upcomingCount.toString(),
+            label =
+                "Upcoming",
+            icon =
+                Icons.Outlined.Schedule,
+            tint =
+                PatientColors.AppointmentAccent,
+            background =
+                PatientColors.AppointmentCard
+        )
+
+        MiniStat(
+            modifier =
+                Modifier.weight(1f),
+            value =
+                completedCount.toString(),
+            label =
+                "Completed",
+            icon =
+                Icons.Outlined.HealthAndSafety,
+            tint =
+                PatientColors.SuccessAccent,
+            background =
+                PatientColors.SuccessCard
+        )
+
+        MiniStat(
+            modifier =
+                Modifier.weight(1f),
+            value =
+                reviewCount.toString(),
+            label =
+                "Reviews",
+            icon =
+                Icons.Filled.Star,
+            tint =
+                PatientColors.ReviewAccent,
+            background =
+                PatientColors.ReviewCard
+        )
+    }
+}
+
+@Composable
+private fun MiniStat(
+    modifier: Modifier,
+    value: String,
+    label: String,
+    icon: ImageVector,
+    tint: Color,
+    background: Color
+) {
+
+    Card(
+        modifier =
+            modifier,
+        shape =
+            RoundedCornerShape(
+                20.dp
+            ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    background
+            ),
+        border =
+            BorderStroke(
+                1.dp,
+                tint.copy(
+                    alpha = 0.10f
+                )
+            ),
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 1.dp
+            )
+    ) {
+
+        Column(
+            modifier =
+                Modifier.padding(
+                    14.dp
+                )
+        ) {
+
+            Box(
+                modifier =
+                    Modifier
+                        .size(
+                            36.dp
+                        )
+                        .clip(
+                            RoundedCornerShape(
+                                11.dp
+                            )
+                        )
+                        .background(
+                            tint.copy(
+                                alpha = 0.12f
+                            )
+                        ),
+                contentAlignment =
+                    Alignment.Center
+            ) {
+
+                Icon(
+                    imageVector =
+                        icon,
+                    contentDescription =
+                        null,
+                    tint =
+                        tint,
+                    modifier =
+                        Modifier.size(
+                            19.dp
+                        )
+                )
+            }
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        10.dp
+                    )
+            )
+
+            Text(
+                text =
+                    value,
+                fontSize =
+                    21.sp,
+                fontWeight =
+                    FontWeight.ExtraBold,
+                color =
+                    PatientColors.TextPrimary
+            )
+
+            Text(
+                text =
+                    label,
+                color =
+                    PatientColors.TextSecondary,
+                fontSize =
+                    10.5.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun SectionHeader(title: String, subtitle: String) {
+    Column(Modifier.padding(horizontal = 18.dp)) {
+        Text(title, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(2.dp))
+        Text(
+            subtitle,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 12.sp
+        )
+    }
+}
+
+@Composable
+private fun QuickActionCard(
+    action: QuickAction
+) {
+
+    val interactionSource =
+        remember {
+            MutableInteractionSource()
+        }
+
+    Card(
+        modifier =
+            Modifier
+                .width(170.dp)
+                .patientPressAnimation(
+                    interactionSource
+                )
+                .clickable(
+                    interactionSource =
+                        interactionSource,
+                    indication =
+                        null,
+                    onClick =
+                        action.onClick
+                ),
+        shape =
+            RoundedCornerShape(
+                22.dp
+            ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    action.backgroundColor
+            ),
+        border =
+            BorderStroke(
+                width = 1.dp,
+                color =
+                    action.accentColor
+                        .copy(
+                            alpha = 0.12f
+                        )
+            ),
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 2.dp,
+                pressedElevation = 5.dp
+            )
+    ) {
+
+        Column(
+            modifier =
+                Modifier.padding(
+                    17.dp
+                )
+        ) {
+
+            Box(
+                modifier =
+                    Modifier
+                        .size(
+                            46.dp
+                        )
+                        .clip(
+                            RoundedCornerShape(
+                                15.dp
+                            )
+                        )
+                        .background(
+                            action.accentColor
+                                .copy(
+                                    alpha = 0.12f
+                                )
+                        ),
+                contentAlignment =
+                    Alignment.Center
+            ) {
+
+                Icon(
+                    imageVector =
+                        action.icon,
+                    contentDescription =
+                        null,
+                    tint =
+                        action.accentColor,
+                    modifier =
+                        Modifier.size(
+                            23.dp
+                        )
+                )
+            }
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        15.dp
+                    )
+            )
+
+            Text(
+                text =
+                    action.label,
+                color =
+                    PatientColors.TextPrimary,
+                fontSize =
+                    14.sp,
+                fontWeight =
+                    FontWeight.Bold
+            )
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        5.dp
+                    )
+            )
+
+            Text(
+                text =
+                    action.description,
+                color =
+                    PatientColors.TextSecondary,
+                fontSize =
+                    11.5.sp,
+                lineHeight =
+                    16.sp
+            )
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        12.dp
+                    )
+            )
+
+            Row(
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+
+                Text(
+                    text = "Open",
+                    color =
+                        action.accentColor,
+                    fontSize =
+                        11.sp,
+                    fontWeight =
+                        FontWeight.SemiBold
+                )
+
+                Spacer(
+                    modifier =
+                        Modifier.width(
+                            4.dp
+                        )
+                )
+
+                Icon(
+                    imageVector =
+                        Icons.Filled.ArrowForward,
+                    contentDescription =
+                        null,
+                    tint =
+                        action.accentColor,
+                    modifier =
+                        Modifier.size(
+                            14.dp
+                        )
+                )
+            }
+        }
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+@Composable
+private fun NextAppointmentCard(
+    appointment: Appointment,
+    onClick: () -> Unit,
+    onStartCall: () -> Unit
+) {
+
+    val isOnline =
+        appointment.appointment_type
+            .equals(
+                "online",
+                ignoreCase = true
+            )
+
+    val callState =
+        appointment.callWindowState()
+
+    val confirmed =
+        appointment.status
+            .equals(
+                "confirmed",
+                ignoreCase = true
+            )
+
+    val canCall =
+        isOnline &&
+                confirmed &&
+                callState == CallWindowState.OPEN
+
+    val interactionSource =
+        remember {
+            MutableInteractionSource()
+        }
+
+    val infiniteTransition =
+        rememberInfiniteTransition(
+            label = "CallButtonPulse"
+        )
+
+    val callPulse by
+    infiniteTransition.animateFloat(
+        initialValue = 0.96f,
+        targetValue = 1f,
+        animationSpec =
+            infiniteRepeatable(
+                animation =
+                    tween(
+                        durationMillis = 900,
+                        easing =
+                            FastOutSlowInEasing
+                    ),
+                repeatMode =
+                    RepeatMode.Reverse
+            ),
+        label =
+            "CallPulseScale"
+    )
+
+
+    Card(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .patientPressAnimation(
+                    interactionSource
+                )
+                .clickable(
+                    interactionSource =
+                        interactionSource,
+                    indication =
+                        null,
+                    onClick =
+                        onClick
+                ),
+        shape =
+            RoundedCornerShape(
+                26.dp
+            ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    if (isOnline) {
+                        PatientColors
+                            .AppointmentCard
+                    } else {
+                        PatientColors
+                            .DoctorCard
+                    }
+            ),
+        border =
+            BorderStroke(
+                width = 1.dp,
+                color =
+                    if (isOnline) {
+                        PatientColors
+                            .AppointmentAccent
+                            .copy(
+                                alpha = 0.12f
+                            )
+                    } else {
+                        PatientColors
+                            .DoctorAccent
+                            .copy(
+                                alpha = 0.12f
+                            )
+                    }
+            ),
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation =
+                    3.dp,
+                pressedElevation =
+                    6.dp
+            )
+    ) {
+
+        Column {
+
+            /*
+             * Accent strip
+             */
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(
+                            5.dp
+                        )
+                        .background(
+                            if (isOnline) {
+                                Brush.horizontalGradient(
+                                    listOf(
+                                        PatientColors
+                                            .AppointmentAccent,
+                                        PatientColors
+                                            .Primary
+                                    )
+                                )
+                            } else {
+                                Brush.horizontalGradient(
+                                    listOf(
+                                        PatientColors
+                                            .DoctorAccent,
+                                        PatientColors
+                                            .Green
+                                    )
+                                )
+                            }
+                        )
+            )
+
+
+            Column(
+                modifier =
+                    Modifier.padding(
+                        18.dp
+                    )
+            ) {
+
+                /*
+                 * Header
+                 */
+                Row(
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(
+                                    52.dp
+                                )
+                                .clip(
+                                    RoundedCornerShape(
+                                        17.dp
+                                    )
+                                )
+                                .background(
+                                    if (isOnline) {
+                                        PatientColors
+                                            .AppointmentAccent
+                                            .copy(
+                                                alpha =
+                                                    0.12f
+                                            )
+                                    } else {
+                                        PatientColors
+                                            .DoctorAccent
+                                            .copy(
+                                                alpha =
+                                                    0.12f
+                                            )
+                                    }
+                                ),
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+
+                        Icon(
+                            imageVector =
+                                if (isOnline) {
+                                    Icons.Outlined.Videocam
+                                } else {
+                                    Icons.Outlined.CalendarMonth
+                                },
+                            contentDescription =
+                                null,
+                            tint =
+                                if (isOnline) {
+                                    PatientColors
+                                        .AppointmentAccent
+                                } else {
+                                    PatientColors
+                                        .DoctorAccent
+                                },
+                            modifier =
+                                Modifier.size(
+                                    25.dp
+                                )
+                        )
+                    }
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(
+                                13.dp
+                            )
+                    )
+
+
+                    Column(
+                        modifier =
+                            Modifier.weight(
+                                1f
+                            )
+                    ) {
+
+                        Text(
+                            text =
+                                appointment.reason
+                                    ?.takeIf {
+                                        it.isNotBlank()
+                                    }
+                                    ?: "General consultation",
+                            color =
+                                PatientColors
+                                    .TextPrimary,
+                            fontSize =
+                                16.sp,
+                            fontWeight =
+                                FontWeight.Bold
+                        )
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(
+                                    4.dp
+                                )
+                        )
+
+                        Text(
+                            text =
+                                if (isOnline) {
+                                    "Online consultation"
+                                } else {
+                                    "In-person consultation"
+                                },
+                            color =
+                                if (isOnline) {
+                                    PatientColors
+                                        .AppointmentAccent
+                                } else {
+                                    PatientColors
+                                        .DoctorAccent
+                                },
+                            fontSize =
+                                11.5.sp,
+                            fontWeight =
+                                FontWeight.SemiBold
+                        )
+                    }
+
+
+                    AppointmentStatusChip(
+                        appointment.status
+                    )
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            18.dp
+                        )
+                )
+
+
+                /*
+                 * Date and time boxes
+                 */
+                Row(
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    horizontalArrangement =
+                        Arrangement.spacedBy(
+                            10.dp
+                        )
+                ) {
+
+                    AppointmentDetailBox(
+                        modifier =
+                            Modifier.weight(
+                                1f
+                            ),
+                        icon =
+                            Icons.Outlined.CalendarMonth,
+                        label =
+                            "DATE",
+                        value =
+                            appointment.date
+                                ?: "Pending",
+                        accentColor =
+                            PatientColors
+                                .AppointmentAccent
+                    )
+
+
+                    AppointmentDetailBox(
+                        modifier =
+                            Modifier.weight(
+                                1f
+                            ),
+                        icon =
+                            Icons.Outlined.Schedule,
+                        label =
+                            "TIME",
+                        value =
+                            appointment.time
+                                ?.take(
+                                    5
+                                )
+                                ?: "Pending",
+                        accentColor =
+                            PatientColors
+                                .DoctorAccent
+                    )
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            14.dp
+                        )
+                )
+
+
+                /*
+                 * Security status
+                 */
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(
+                                RoundedCornerShape(
+                                    15.dp
+                                )
+                            )
+                            .background(
+                                PatientColors
+                                    .SuccessCard
+                            )
+                            .padding(
+                                horizontal =
+                                    12.dp,
+                                vertical =
+                                    11.dp
+                            ),
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(
+                                    32.dp
+                                )
+                                .clip(
+                                    CircleShape
+                                )
+                                .background(
+                                    PatientColors
+                                        .SuccessAccent
+                                        .copy(
+                                            alpha =
+                                                0.12f
+                                        )
+                                ),
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+
+                        Icon(
+                            imageVector =
+                                Icons.Outlined.Shield,
+                            contentDescription =
+                                null,
+                            tint =
+                                PatientColors
+                                    .SuccessAccent,
+                            modifier =
+                                Modifier.size(
+                                    17.dp
+                                )
+                        )
+                    }
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(
+                                10.dp
+                            )
+                    )
+
+
+                    Column(
+                        modifier =
+                            Modifier.weight(
+                                1f
+                            )
+                    ) {
+
+                        Text(
+                            text =
+                                "Secure appointment",
+                            color =
+                                PatientColors
+                                    .SuccessAccent,
+                            fontSize =
+                                11.5.sp,
+                            fontWeight =
+                                FontWeight.Bold
+                        )
+
+                        Text(
+                            text =
+                                if (
+                                    appointment.slot_id != null
+                                ) {
+                                    "Reserved from the doctor's published availability"
+                                } else {
+                                    "Appointment details verified"
+                                },
+                            color =
+                                PatientColors
+                                    .TextSecondary,
+                            fontSize =
+                                10.5.sp,
+                            lineHeight =
+                                14.sp
+                        )
+                    }
+                }
+
+
+                /*
+                 * Video consultation button
+                 */
+                AnimatedVisibility(
+                    visible =
+                        isOnline
+                ) {
+
+                    Column {
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(
+                                    16.dp
+                                )
+                        )
+
+
+                        Button(
+                            onClick =
+                                onStartCall,
+                            enabled =
+                                canCall,
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(
+                                        50.dp
+                                    )
+                                    .scale(
+                                        if (canCall) {
+                                            callPulse
+                                        } else {
+                                            1f
+                                        }
+                                    ),
+                            shape =
+                                RoundedCornerShape(
+                                    16.dp
+                                ),
+                            colors =
+                                ButtonDefaults
+                                    .buttonColors(
+                                        containerColor =
+                                            PatientColors
+                                                .DoctorAccent,
+
+                                        contentColor =
+                                            Color.White,
+
+                                        disabledContainerColor =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .surfaceVariant,
+
+                                        disabledContentColor =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onSurfaceVariant
+                                    )
+                        ) {
+
+                            Icon(
+                                imageVector =
+                                    Icons.Outlined.VideoCall,
+                                contentDescription =
+                                    null,
+                                modifier =
+                                    Modifier.size(
+                                        20.dp
+                                    )
+                            )
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.width(
+                                        8.dp
+                                    )
+                            )
+
+
+                            Text(
+                                text =
+                                    when {
+                                        !confirmed ->
+                                            "Waiting for doctor confirmation"
+
+                                        callState == CallWindowState.TOO_EARLY ->
+                                            "Opens 5 minutes before"
+
+                                        callState == CallWindowState.OPEN ->
+                                            "Join consultation"
+
+                                        callState == CallWindowState.CLOSED ->
+                                            "Consultation window closed"
+
+                                        else ->
+                                            "Video consultation"
+                                    },
+                                fontWeight =
+                                    FontWeight.Bold,
+                                fontSize =
+                                    13.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppointmentDetailBox(
+    modifier: Modifier = Modifier,
+    icon: ImageVector,
+    label: String,
+    value: String,
+    accentColor: Color
+) {
+
+    Row(
+        modifier =
+            modifier
+                .clip(
+                    RoundedCornerShape(
+                        15.dp
+                    )
+                )
+                .background(
+                    Color.White.copy(
+                        alpha = 0.65f
+                    )
+                )
+                .padding(
+                    horizontal = 11.dp,
+                    vertical = 11.dp
+                ),
+        verticalAlignment =
+            Alignment.CenterVertically
+    ) {
+
+        Box(
+            modifier =
+                Modifier
+                    .size(
+                        34.dp
+                    )
+                    .clip(
+                        RoundedCornerShape(
+                            10.dp
+                        )
+                    )
+                    .background(
+                        accentColor.copy(
+                            alpha = 0.10f
+                        )
+                    ),
+            contentAlignment =
+                Alignment.Center
+        ) {
+
+            Icon(
+                imageVector =
+                    icon,
+                contentDescription =
+                    null,
+                tint =
+                    accentColor,
+                modifier =
+                    Modifier.size(
+                        17.dp
+                    )
+            )
+        }
+
+
+        Spacer(
+            modifier =
+                Modifier.width(
+                    9.dp
+                )
+        )
+
+
+        Column {
+
+            Text(
+                text =
+                    label,
+                color =
+                    PatientColors
+                        .TextSecondary,
+                fontSize =
+                    8.5.sp,
+                fontWeight =
+                    FontWeight.Bold,
+                letterSpacing =
+                    0.5.sp
+            )
+
+            Text(
+                text =
+                    value,
+                color =
+                    PatientColors
+                        .TextPrimary,
+                fontSize =
+                    11.5.sp,
+                fontWeight =
+                    FontWeight.Bold
+            )
+        }
+    }
+}
+@Composable
+private fun AppointmentStatusChip(status: String?) {
+    val normalized = status?.lowercase().orEmpty()
+    val (background, foreground, label) = when (normalized) {
+        "confirmed" -> Triple(Color(0xFFDCFCE7), Color(0xFF15803D), "Confirmed")
+        "completed" -> Triple(Color(0xFFE0E7FF), Color(0xFF4338CA), "Completed")
+        "cancelled" -> Triple(Color(0xFFFEE2E2), Color(0xFFB91C1C), "Cancelled")
+        "pending" -> Triple(Color(0xFFFEF3C7), Color(0xFFB45309), "Pending")
+        else -> Triple(Color(0xFFE2E8F0), Color(0xFF475569), status ?: "Unknown")
+    }
+
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50.dp))
+            .background(background)
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+    ) {
+        Text(label, color = foreground, fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun CompactAppointmentCard(
+    appointment: Appointment,
+    onClick: () -> Unit
+) {
+
+    val isOnline =
+        appointment.appointment_type
+            .equals(
+                "online",
+                ignoreCase = true
+            )
+
+    val accentColor =
+        if (isOnline) {
+            PatientColors.AppointmentAccent
+        } else {
+            PatientColors.DoctorAccent
+        }
+
+    val backgroundColor =
+        if (isOnline) {
+            PatientColors.AppointmentCard
+        } else {
+            PatientColors.DoctorCard
+        }
+
+    val interactionSource =
+        remember {
+            MutableInteractionSource()
+        }
+
+
+    Card(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .patientPressAnimation(
+                    interactionSource
+                )
+                .clickable(
+                    interactionSource =
+                        interactionSource,
+                    indication = null,
+                    onClick =
+                        onClick
+                ),
+        shape =
+            RoundedCornerShape(22.dp),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    backgroundColor
+            ),
+        border =
+            BorderStroke(
+                width = 1.dp,
+                color =
+                    accentColor.copy(
+                        alpha = 0.10f
+                    )
+            ),
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 1.dp,
+                pressedElevation = 4.dp
+            )
+    ) {
+
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+            verticalAlignment =
+                Alignment.CenterVertically
+        ) {
+
+            /*
+             * Consultation icon
+             */
+            Box(
+                modifier =
+                    Modifier
+                        .size(48.dp)
+                        .clip(
+                            RoundedCornerShape(
+                                15.dp
+                            )
+                        )
+                        .background(
+                            accentColor.copy(
+                                alpha = 0.12f
+                            )
+                        ),
+                contentAlignment =
+                    Alignment.Center
+            ) {
+
+                Icon(
+                    imageVector =
+                        if (isOnline) {
+                            Icons.Outlined.Videocam
+                        } else {
+                            Icons.Outlined.CalendarMonth
+                        },
+                    contentDescription =
+                        null,
+                    tint =
+                        accentColor,
+                    modifier =
+                        Modifier.size(23.dp)
+                )
+            }
+
+
+            Spacer(
+                modifier =
+                    Modifier.width(12.dp)
+            )
+
+
+            /*
+             * Appointment information
+             */
+            Column(
+                modifier =
+                    Modifier.weight(1f)
+            ) {
+
+                Text(
+                    text =
+                        appointment.reason
+                            ?.takeIf {
+                                it.isNotBlank()
+                            }
+                            ?: "General consultation",
+                    color =
+                        PatientColors.TextPrimary,
+                    fontSize =
+                        14.sp,
+                    fontWeight =
+                        FontWeight.Bold,
+                    maxLines = 1
+                )
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(5.dp)
+                )
+
+
+                Row(
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+
+                    Icon(
+                        imageVector =
+                            Icons.Outlined.CalendarMonth,
+                        contentDescription =
+                            null,
+                        tint =
+                            PatientColors.TextSecondary,
+                        modifier =
+                            Modifier.size(14.dp)
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(4.dp)
+                    )
+
+
+                    Text(
+                        text =
+                            appointment.date
+                                ?: "Date pending",
+                        color =
+                            PatientColors.TextSecondary,
+                        fontSize =
+                            10.5.sp
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(10.dp)
+                    )
+
+
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(3.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    PatientColors.TextSecondary
+                                        .copy(
+                                            alpha = 0.45f
+                                        )
+                                )
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(10.dp)
+                    )
+
+
+                    Icon(
+                        imageVector =
+                            Icons.Outlined.Schedule,
+                        contentDescription =
+                            null,
+                        tint =
+                            PatientColors.TextSecondary,
+                        modifier =
+                            Modifier.size(14.dp)
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(4.dp)
+                    )
+
+
+                    Text(
+                        text =
+                            appointment.time
+                                ?.take(5)
+                                ?: "Pending",
+                        color =
+                            PatientColors.TextSecondary,
+                        fontSize =
+                            10.5.sp
+                    )
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(8.dp)
+                )
+
+
+                /*
+                 * Consultation type
+                 */
+                Row(
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+
+                    Box(
+                        modifier =
+                            Modifier
+                                .clip(
+                                    RoundedCornerShape(
+                                        20.dp
+                                    )
+                                )
+                                .background(
+                                    accentColor.copy(
+                                        alpha = 0.11f
+                                    )
+                                )
+                                .padding(
+                                    horizontal = 8.dp,
+                                    vertical = 4.dp
+                                )
+                    ) {
+
+                        Text(
+                            text =
+                                if (isOnline) {
+                                    "Online"
+                                } else {
+                                    "In person"
+                                },
+                            color =
+                                accentColor,
+                            fontSize =
+                                9.5.sp,
+                            fontWeight =
+                                FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+
+            Spacer(
+                modifier =
+                    Modifier.width(10.dp)
+            )
+
+
+            /*
+             * Right side
+             */
+            Column(
+                horizontalAlignment =
+                    Alignment.End
+            ) {
+
+                AppointmentStatusChip(
+                    appointment.status
+                )
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(11.dp)
+                )
+
+
+                Box(
+                    modifier =
+                        Modifier
+                            .size(31.dp)
+                            .clip(CircleShape)
+                            .background(
+                                accentColor.copy(
+                                    alpha = 0.10f
+                                )
+                            ),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+
+                    Icon(
+                        imageVector =
+                            Icons.Filled.ArrowForward,
+                        contentDescription =
+                            "Open appointment",
+                        tint =
+                            accentColor,
+                        modifier =
+                            Modifier.size(16.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DashboardLoadingCard() {
+
+    val infiniteTransition =
+        rememberInfiniteTransition(
+            label = "DashboardShimmer"
+        )
+
+    val shimmerPosition by
+    infiniteTransition.animateFloat(
+        initialValue = -300f,
+        targetValue = 1100f,
+        animationSpec =
+            infiniteRepeatable(
+                animation =
+                    tween(
+                        durationMillis = 1300,
+                        easing =
+                            FastOutSlowInEasing
+                    ),
+                repeatMode =
+                    RepeatMode.Restart
+            ),
+        label =
+            "ShimmerPosition"
+    )
+
+    val baseColor =
+        MaterialTheme
+            .colorScheme
+            .surfaceVariant
+            .copy(alpha = 0.45f)
+
+    val highlightColor =
+        MaterialTheme
+            .colorScheme
+            .surface
+            .copy(alpha = 0.95f)
+
+    val shimmerBrush =
+        Brush.linearGradient(
+            colors =
+                listOf(
+                    baseColor,
+                    highlightColor,
+                    baseColor
+                ),
+            start =
+                Offset(
+                    shimmerPosition - 220f,
+                    0f
+                ),
+            end =
+                Offset(
+                    shimmerPosition,
+                    0f
+                )
+        )
+
+
+    Card(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 18.dp
+                ),
+        shape =
+            RoundedCornerShape(
+                26.dp
+            ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    MaterialTheme
+                        .colorScheme
+                        .surface
+            ),
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 2.dp
+            )
+    ) {
+
+        Column(
+            modifier =
+                Modifier.padding(
+                    18.dp
+                )
+        ) {
+
+            /*
+             * Top section
+             */
+            Row(
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+
+                ShimmerBox(
+                    modifier =
+                        Modifier.size(
+                            52.dp
+                        ),
+                    brush =
+                        shimmerBrush,
+                    shape =
+                        RoundedCornerShape(
+                            17.dp
+                        )
+                )
+
+
+                Spacer(
+                    modifier =
+                        Modifier.width(
+                            13.dp
+                        )
+                )
+
+
+                Column(
+                    modifier =
+                        Modifier.weight(
+                            1f
+                        )
+                ) {
+
+                    ShimmerBox(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth(
+                                    0.70f
+                                )
+                                .height(
+                                    16.dp
+                                ),
+                        brush =
+                            shimmerBrush
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                8.dp
+                            )
+                    )
+
+
+                    ShimmerBox(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth(
+                                    0.42f
+                                )
+                                .height(
+                                    11.dp
+                                ),
+                        brush =
+                            shimmerBrush
+                    )
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.width(
+                            12.dp
+                        )
+                )
+
+
+                ShimmerBox(
+                    modifier =
+                        Modifier
+                            .width(
+                                65.dp
+                            )
+                            .height(
+                                26.dp
+                            ),
+                    brush =
+                        shimmerBrush,
+                    shape =
+                        RoundedCornerShape(
+                            20.dp
+                        )
+                )
+            }
+
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        20.dp
+                    )
+            )
+
+
+            /*
+             * Date and time placeholders
+             */
+            Row(
+                modifier =
+                    Modifier.fillMaxWidth(),
+                horizontalArrangement =
+                    Arrangement.spacedBy(
+                        10.dp
+                    )
+            ) {
+
+                ShimmerBox(
+                    modifier =
+                        Modifier
+                            .weight(
+                                1f
+                            )
+                            .height(
+                                58.dp
+                            ),
+                    brush =
+                        shimmerBrush,
+                    shape =
+                        RoundedCornerShape(
+                            15.dp
+                        )
+                )
+
+
+                ShimmerBox(
+                    modifier =
+                        Modifier
+                            .weight(
+                                1f
+                            )
+                            .height(
+                                58.dp
+                            ),
+                    brush =
+                        shimmerBrush,
+                    shape =
+                        RoundedCornerShape(
+                            15.dp
+                        )
+                )
+            }
+
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        14.dp
+                    )
+            )
+
+
+            /*
+             * Bottom information placeholder
+             */
+            ShimmerBox(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(
+                            52.dp
+                        ),
+                brush =
+                    shimmerBrush,
+                shape =
+                    RoundedCornerShape(
+                        15.dp
+                    )
+            )
+        }
+    }
+}
+@Composable
+private fun ShimmerBox(
+    modifier: Modifier,
+    brush: Brush,
+    shape: RoundedCornerShape =
+        RoundedCornerShape(
+            8.dp
+        )
+) {
+
+    Box(
+        modifier =
+            modifier
+                .clip(
+                    shape
+                )
+                .background(
+                    brush
+                )
+    )
+}
+
+@Composable
+private fun DashboardErrorCard(
+    message: String,
+    onRetry: () -> Unit
+) {
+
+    val friendlyMessage =
+        when {
+            message.contains(
+                "network",
+                ignoreCase = true
+            ) ||
+                    message.contains(
+                        "internet",
+                        ignoreCase = true
+                    ) ->
+                "We couldn't connect. Check your internet connection and try again."
+
+            message.contains(
+                "timeout",
+                ignoreCase = true
+            ) ->
+                "The connection is taking longer than expected. Please try again."
+
+            else ->
+                "We couldn't load your healthcare information right now. Your data is safe — please try again."
+        }
+
+
+    val infiniteTransition =
+        rememberInfiniteTransition(
+            label = "ErrorAnimation"
+        )
+
+    val pulse by
+    infiniteTransition.animateFloat(
+        initialValue = 0.94f,
+        targetValue = 1f,
+        animationSpec =
+            infiniteRepeatable(
+                animation =
+                    tween(
+                        durationMillis = 1400,
+                        easing =
+                            FastOutSlowInEasing
+                    ),
+                repeatMode =
+                    RepeatMode.Reverse
+            ),
+        label = "ErrorPulse"
+    )
+
+
+    Card(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp),
+        shape =
+            RoundedCornerShape(26.dp),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    PatientColors.RedSoft
+            ),
+        border =
+            BorderStroke(
+                width = 1.dp,
+                color =
+                    PatientColors.Red
+                        .copy(alpha = 0.12f)
+            ),
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 2.dp
+            )
+    ) {
+
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(22.dp),
+            horizontalAlignment =
+                Alignment.CenterHorizontally
+        ) {
+
+            DashboardErrorIllustration(
+                pulse = pulse
+            )
+
+
+            Spacer(
+                modifier =
+                    Modifier.height(16.dp)
+            )
+
+
+            Text(
+                text =
+                    "Something went wrong",
+                color =
+                    PatientColors.TextPrimary,
+                fontSize =
+                    17.sp,
+                fontWeight =
+                    FontWeight.ExtraBold,
+                textAlign =
+                    TextAlign.Center
+            )
+
+
+            Spacer(
+                modifier =
+                    Modifier.height(6.dp)
+            )
+
+
+            Text(
+                text =
+                    friendlyMessage,
+                color =
+                    PatientColors.TextSecondary,
+                fontSize =
+                    12.5.sp,
+                lineHeight =
+                    18.sp,
+                textAlign =
+                    TextAlign.Center
+            )
+
+
+            Spacer(
+                modifier =
+                    Modifier.height(20.dp)
+            )
+
+
+            Button(
+                onClick =
+                    onRetry,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(49.dp),
+                shape =
+                    RoundedCornerShape(16.dp),
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor =
+                            PatientColors.Red,
+                        contentColor =
+                            Color.White
+                    )
+            ) {
+
+                Icon(
+                    imageVector =
+                        Icons.Outlined.Refresh,
+                    contentDescription =
+                        null,
+                    modifier =
+                        Modifier.size(19.dp)
+                )
+
+
+                Spacer(
+                    modifier =
+                        Modifier.width(8.dp)
+                )
+
+
+                Text(
+                    text = "Try again",
+                    fontWeight =
+                        FontWeight.Bold,
+                    fontSize = 13.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DashboardErrorIllustration(
+    pulse: Float
+) {
+
+    Box(
+        modifier =
+            Modifier
+                .size(105.dp)
+                .scale(pulse),
+        contentAlignment =
+            Alignment.Center
+    ) {
+
+        /*
+         * Soft outer background
+         */
+        Box(
+            modifier =
+                Modifier
+                    .size(94.dp)
+                    .clip(CircleShape)
+                    .background(
+                        PatientColors.Red
+                            .copy(alpha = 0.08f)
+                    )
+        )
+
+
+        Canvas(
+            modifier =
+                Modifier.size(76.dp)
+        ) {
+
+            val center =
+                Offset(
+                    x = size.width / 2f,
+                    y = size.height / 2f
+                )
+
+
+            /*
+             * Outer warning circle
+             */
+            drawCircle(
+                color =
+                    PatientColors.Red,
+                radius =
+                    size.minDimension * 0.36f,
+                center =
+                    center,
+                style =
+                    Stroke(
+                        width =
+                            4.dp.toPx()
+                    )
+            )
+
+
+            /*
+             * Exclamation line
+             */
+            drawLine(
+                color =
+                    PatientColors.Red,
+                start =
+                    Offset(
+                        x = center.x,
+                        y =
+                            center.y -
+                                    15.dp.toPx()
+                    ),
+                end =
+                    Offset(
+                        x = center.x,
+                        y =
+                            center.y +
+                                    5.dp.toPx()
+                    ),
+                strokeWidth =
+                    5.dp.toPx(),
+                cap =
+                    StrokeCap.Round
+            )
+
+
+            /*
+             * Exclamation dot
+             */
+            drawCircle(
+                color =
+                    PatientColors.Red,
+                radius =
+                    3.dp.toPx(),
+                center =
+                    Offset(
+                        x = center.x,
+                        y =
+                            center.y +
+                                    16.dp.toPx()
+                    )
+            )
+        }
+    }
+}
+@Composable
+private fun EmptyNextAppointmentCard(
+    onFindDoctor: () -> Unit
+) {
+
+    val infiniteTransition =
+        rememberInfiniteTransition(
+            label = "EmptyAppointmentAnimation"
+        )
+
+    val pulse by
+    infiniteTransition.animateFloat(
+        initialValue = 0.92f,
+        targetValue = 1f,
+        animationSpec =
+            infiniteRepeatable(
+                animation =
+                    tween(
+                        durationMillis = 1400,
+                        easing = FastOutSlowInEasing
+                    ),
+                repeatMode = RepeatMode.Reverse
+            ),
+        label = "EmptyAppointmentPulse"
+    )
+
+    Card(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp),
+        shape =
+            RoundedCornerShape(26.dp),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    PatientColors.DoctorCard
+            ),
+        border =
+            BorderStroke(
+                width = 1.dp,
+                color =
+                    PatientColors.DoctorAccent
+                        .copy(alpha = 0.10f)
+            ),
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 2.dp
+            )
+    ) {
+
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        horizontal = 22.dp,
+                        vertical = 24.dp
+                    ),
+            horizontalAlignment =
+                Alignment.CenterHorizontally
+        ) {
+
+            EmptyAppointmentIllustration(
+                pulse = pulse
+            )
+
+            Spacer(
+                modifier =
+                    Modifier.height(18.dp)
+            )
+
+            Text(
+                text = "No upcoming appointments",
+                color =
+                    PatientColors.TextPrimary,
+                fontSize = 18.sp,
+                fontWeight =
+                    FontWeight.ExtraBold,
+                textAlign =
+                    TextAlign.Center
+            )
+
+            Spacer(
+                modifier =
+                    Modifier.height(6.dp)
+            )
+
+            Text(
+                text =
+                    "When you book a consultation, your next appointment will appear here.",
+                color =
+                    PatientColors.TextSecondary,
+                fontSize = 12.5.sp,
+                lineHeight = 18.sp,
+                textAlign =
+                    TextAlign.Center
+            )
+
+            Spacer(
+                modifier =
+                    Modifier.height(20.dp)
+            )
+
+            Button(
+                onClick =
+                    onFindDoctor,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                        .scale(pulse),
+                shape =
+                    RoundedCornerShape(16.dp),
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor =
+                            PatientColors.DoctorAccent,
+                        contentColor =
+                            Color.White
+                    )
+            ) {
+
+                Icon(
+                    imageVector =
+                        Icons.Outlined.Search,
+                    contentDescription =
+                        null,
+                    modifier =
+                        Modifier.size(19.dp)
+                )
+
+                Spacer(
+                    modifier =
+                        Modifier.width(8.dp)
+                )
+
+                Text(
+                    text = "Find a doctor",
+                    fontWeight =
+                        FontWeight.Bold,
+                    fontSize = 13.sp
+                )
+            }
+        }
+    }
+}
+@Composable
+private fun EmptyAppointmentIllustration(
+    pulse: Float
+) {
+
+    Box(
+        modifier =
+            Modifier
+                .size(130.dp)
+                .scale(pulse),
+        contentAlignment =
+            Alignment.Center
+    ) {
+
+        /*
+         * Soft background circle
+         */
+        Box(
+            modifier =
+                Modifier
+                    .size(116.dp)
+                    .clip(CircleShape)
+                    .background(
+                        PatientColors.DoctorAccent
+                            .copy(alpha = 0.08f)
+                    )
+        )
+
+        Canvas(
+            modifier =
+                Modifier.size(100.dp)
+        ) {
+
+            val centerX =
+                size.width / 2f
+
+            val centerY =
+                size.height / 2f
+
+            /*
+             * Calendar body
+             */
+            drawRoundRect(
+                color =
+                    PatientColors.DoctorAccent,
+                topLeft =
+                    Offset(
+                        x = size.width * 0.18f,
+                        y = size.height * 0.24f
+                    ),
+                size =
+                    androidx.compose.ui.geometry.Size(
+                        width = size.width * 0.64f,
+                        height = size.height * 0.55f
+                    ),
+                cornerRadius =
+                    androidx.compose.ui.geometry.CornerRadius(
+                        x = 12.dp.toPx(),
+                        y = 12.dp.toPx()
+                    ),
+                style =
+                    Stroke(
+                        width = 3.dp.toPx()
+                    )
+            )
+
+            /*
+             * Calendar top divider
+             */
+            drawLine(
+                color =
+                    PatientColors.DoctorAccent,
+                start =
+                    Offset(
+                        x = size.width * 0.18f,
+                        y = size.height * 0.39f
+                    ),
+                end =
+                    Offset(
+                        x = size.width * 0.82f,
+                        y = size.height * 0.39f
+                    ),
+                strokeWidth =
+                    3.dp.toPx(),
+                cap =
+                    StrokeCap.Round
+            )
+
+            /*
+             * Calendar hooks
+             */
+            drawLine(
+                color =
+                    PatientColors.DoctorAccent,
+                start =
+                    Offset(
+                        x = size.width * 0.34f,
+                        y = size.height * 0.17f
+                    ),
+                end =
+                    Offset(
+                        x = size.width * 0.34f,
+                        y = size.height * 0.30f
+                    ),
+                strokeWidth =
+                    4.dp.toPx(),
+                cap =
+                    StrokeCap.Round
+            )
+
+            drawLine(
+                color =
+                    PatientColors.DoctorAccent,
+                start =
+                    Offset(
+                        x = size.width * 0.66f,
+                        y = size.height * 0.17f
+                    ),
+                end =
+                    Offset(
+                        x = size.width * 0.66f,
+                        y = size.height * 0.30f
+                    ),
+                strokeWidth =
+                    4.dp.toPx(),
+                cap =
+                    StrokeCap.Round
+            )
+
+            /*
+             * Medical cross
+             */
+            drawLine(
+                color =
+                    PatientColors.AppointmentAccent,
+                start =
+                    Offset(
+                        x = centerX,
+                        y = centerY
+                    ),
+                end =
+                    Offset(
+                        x = centerX,
+                        y = centerY +
+                                18.dp.toPx()
+                    ),
+                strokeWidth =
+                    5.dp.toPx(),
+                cap =
+                    StrokeCap.Round
+            )
+
+            drawLine(
+                color =
+                    PatientColors.AppointmentAccent,
+                start =
+                    Offset(
+                        x = centerX -
+                                9.dp.toPx(),
+                        y = centerY +
+                                9.dp.toPx()
+                    ),
+                end =
+                    Offset(
+                        x = centerX +
+                                9.dp.toPx(),
+                        y = centerY +
+                                9.dp.toPx()
+                    ),
+                strokeWidth =
+                    5.dp.toPx(),
+                cap =
+                    StrokeCap.Round
+            )
+        }
+    }
+}
+
+@Composable
+private fun HealthTrustCard(
+    onHealthTips: () -> Unit
+) {
+
+    val healthTips =
+        remember {
+            listOf(
+                "Drink enough water throughout the day.",
+                "A short daily walk can support your physical and mental wellbeing.",
+                "Try to maintain a consistent sleep schedule.",
+                "Regular health check-ups can help identify problems early."
+            )
+        }
+
+    var currentTipIndex by
+    remember {
+        mutableStateOf(0)
+    }
+
+    LaunchedEffect(Unit) {
+
+        while (true) {
+
+            delay(5000)
+
+            currentTipIndex =
+                (currentTipIndex + 1) %
+                        healthTips.size
+        }
+    }
+
+
+    val infiniteTransition =
+        rememberInfiniteTransition(
+            label = "HealthTipAnimation"
+        )
+
+    val heartbeatProgress by
+    infiniteTransition.animateFloat(
+        initialValue = 0.82f,
+        targetValue = 1f,
+        animationSpec =
+            infiniteRepeatable(
+                animation =
+                    tween(
+                        durationMillis = 850,
+                        easing =
+                            FastOutSlowInEasing
+                    ),
+                repeatMode =
+                    RepeatMode.Reverse
+            ),
+        label =
+            "HealthHeartbeat"
+    )
+
+
+    val interactionSource =
+        remember {
+            MutableInteractionSource()
+        }
+
+
+    Card(
+        modifier =
+            Modifier
+                .padding(
+                    horizontal = 18.dp
+                )
+                .fillMaxWidth()
+                .patientPressAnimation(
+                    interactionSource
+                )
+                .clickable(
+                    interactionSource =
+                        interactionSource,
+                    indication = null,
+                    onClick =
+                        onHealthTips
+                ),
+        shape =
+            RoundedCornerShape(
+                26.dp
+            ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    PatientColors.TipsCard
+            ),
+        border =
+            BorderStroke(
+                width = 1.dp,
+                color =
+                    PatientColors.TipsAccent
+                        .copy(
+                            alpha = 0.13f
+                        )
+            ),
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 2.dp,
+                pressedElevation = 5.dp
+            )
+    ) {
+
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        19.dp
+                    ),
+            verticalAlignment =
+                Alignment.CenterVertically
+        ) {
+
+            /*
+             * Animated health illustration
+             */
+            WellnessIllustration(
+                progress =
+                    heartbeatProgress
+            )
+
+
+            Spacer(
+                modifier =
+                    Modifier.width(
+                        16.dp
+                    )
+            )
+
+
+            Column(
+                modifier =
+                    Modifier.weight(
+                        1f
+                    )
+            ) {
+
+                Row(
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+
+                    Box(
+                        modifier =
+                            Modifier
+                                .clip(
+                                    RoundedCornerShape(
+                                        20.dp
+                                    )
+                                )
+                                .background(
+                                    PatientColors
+                                        .TipsAccent
+                                        .copy(
+                                            alpha =
+                                                0.12f
+                                        )
+                                )
+                                .padding(
+                                    horizontal =
+                                        9.dp,
+                                    vertical =
+                                        5.dp
+                                )
+                    ) {
+
+                        Text(
+                            text =
+                                "HEALTH TIP",
+                            color =
+                                PatientColors
+                                    .TipsAccent,
+                            fontSize =
+                                9.sp,
+                            fontWeight =
+                                FontWeight.Bold,
+                            letterSpacing =
+                                0.6.sp
+                        )
+                    }
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            9.dp
+                        )
+                )
+
+
+                Text(
+                    text =
+                        "Stay healthy every day",
+                    color =
+                        PatientColors
+                            .TextPrimary,
+                    fontSize =
+                        16.sp,
+                    fontWeight =
+                        FontWeight.ExtraBold
+                )
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            6.dp
+                        )
+                )
+
+
+                AnimatedContent(
+                    targetState =
+                        healthTips[
+                            currentTipIndex
+                        ],
+                    transitionSpec = {
+                        fadeIn(
+                            animationSpec =
+                                tween(400)
+                        ) togetherWith
+                                fadeOut(
+                                    animationSpec =
+                                        tween(250)
+                                )
+                    },
+                    label =
+                        "HealthTipChange"
+                ) { tip ->
+
+                    Text(
+                        text =
+                            tip,
+                        color =
+                            PatientColors
+                                .TextSecondary,
+                        fontSize =
+                            11.5.sp,
+                        lineHeight =
+                            16.sp
+                    )
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            11.dp
+                        )
+                )
+
+
+                Row(
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+
+                    Text(
+                        text =
+                            "Explore health tips",
+                        color =
+                            PatientColors
+                                .TipsAccent,
+                        fontSize =
+                            11.5.sp,
+                        fontWeight =
+                            FontWeight.Bold
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(
+                                5.dp
+                            )
+                    )
+
+
+                    Icon(
+                        imageVector =
+                            Icons.Filled.ArrowForward,
+                        contentDescription =
+                            null,
+                        tint =
+                            PatientColors
+                                .TipsAccent,
+                        modifier =
+                            Modifier.size(
+                                15.dp
+                            )
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WellnessIllustration(
+    progress: Float
+) {
+
+    Box(
+        modifier =
+            Modifier
+                .size(
+                    82.dp
+                )
+                .scale(
+                    progress
+                ),
+        contentAlignment =
+            Alignment.Center
+    ) {
+
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .clip(
+                        RoundedCornerShape(
+                            24.dp
+                        )
+                    )
+                    .background(
+                        PatientColors
+                            .TipsAccent
+                            .copy(
+                                alpha =
+                                    0.09f
+                            )
+                    )
+        )
+
+
+        Canvas(
+            modifier =
+                Modifier.size(
+                    62.dp
+                )
+        ) {
+
+            val centerY =
+                size.height / 2f
+
+
+            /*
+             * Heartbeat background line
+             */
+            drawLine(
+                color =
+                    PatientColors
+                        .TipsAccent
+                        .copy(
+                            alpha = 0.22f
+                        ),
+                start =
+                    Offset(
+                        0f,
+                        centerY
+                    ),
+                end =
+                    Offset(
+                        size.width,
+                        centerY
+                    ),
+                strokeWidth =
+                    2.dp.toPx(),
+                cap =
+                    StrokeCap.Round
+            )
+
+
+            /*
+             * ECG line
+             */
+            val color =
+                PatientColors
+                    .TipsAccent
+
+            val width =
+                3.dp.toPx()
+
+
+            drawLine(
+                color,
+                Offset(
+                    size.width * 0.05f,
+                    centerY
+                ),
+                Offset(
+                    size.width * 0.25f,
+                    centerY
+                ),
+                width,
+                StrokeCap.Round
+            )
+
+
+            drawLine(
+                color,
+                Offset(
+                    size.width * 0.25f,
+                    centerY
+                ),
+                Offset(
+                    size.width * 0.35f,
+                    centerY -
+                            8.dp.toPx()
+                ),
+                width,
+                StrokeCap.Round
+            )
+
+
+            drawLine(
+                color,
+                Offset(
+                    size.width * 0.35f,
+                    centerY -
+                            8.dp.toPx()
+                ),
+                Offset(
+                    size.width * 0.46f,
+                    centerY +
+                            15.dp.toPx()
+                ),
+                width,
+                StrokeCap.Round
+            )
+
+
+            drawLine(
+                color,
+                Offset(
+                    size.width * 0.46f,
+                    centerY +
+                            15.dp.toPx()
+                ),
+                Offset(
+                    size.width * 0.57f,
+                    centerY -
+                            16.dp.toPx()
+                ),
+                width,
+                StrokeCap.Round
+            )
+
+
+            drawLine(
+                color,
+                Offset(
+                    size.width * 0.57f,
+                    centerY -
+                            16.dp.toPx()
+                ),
+                Offset(
+                    size.width * 0.68f,
+                    centerY
+                ),
+                width,
+                StrokeCap.Round
+            )
+
+
+            drawLine(
+                color,
+                Offset(
+                    size.width * 0.68f,
+                    centerY
+                ),
+                Offset(
+                    size.width * 0.95f,
+                    centerY
+                ),
+                width,
+                StrokeCap.Round
+            )
+        }
+
+
+        /*
+         * Small medical badge
+         */
+        Box(
+            modifier =
+                Modifier
+                    .align(
+                        Alignment.BottomEnd
+                    )
+                    .size(
+                        25.dp
+                    )
+                    .clip(
+                        CircleShape
+                    )
+                    .background(
+                        PatientColors
+                            .DoctorAccent
+                    ),
+            contentAlignment =
+                Alignment.Center
+        ) {
+
+            Icon(
+                imageVector =
+                    Icons.Outlined.HealthAndSafety,
+                contentDescription =
+                    null,
+                tint =
+                    Color.White,
+                modifier =
+                    Modifier.size(
+                        14.dp
+                    )
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReviewCard(
+    reviewDisplay: ReviewDisplay
+) {
+
+    val review =
+        reviewDisplay.review
+
+    val rating =
+        review.rating.coerceIn(
+            0,
+            5
+        )
+
+    val doctorName =
+        reviewDisplay.doctorName
+            .ifBlank {
+                "Healthcare professional"
+            }
+
+    val initials =
+        doctorName
+            .trim()
+            .split(" ")
+            .filter {
+                it.isNotBlank()
+            }
+            .take(2)
+            .joinToString("") {
+                it.first()
+                    .uppercase()
+            }
+            .ifBlank {
+                "DR"
+            }
+
+
+    Card(
+        modifier =
+            Modifier.fillMaxWidth(),
+        shape =
+            RoundedCornerShape(
+                24.dp
+            ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    PatientColors.ReviewCard
+            ),
+        border =
+            BorderStroke(
+                width = 1.dp,
+                color =
+                    PatientColors.ReviewAccent
+                        .copy(
+                            alpha = 0.13f
+                        )
+            ),
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 2.dp
+            )
+    ) {
+
+        Column {
+
+            /*
+             * Gold top accent
+             */
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(
+                            4.dp
+                        )
+                        .background(
+                            Brush.horizontalGradient(
+                                colors =
+                                    listOf(
+                                        PatientColors
+                                            .ReviewAccent,
+                                        PatientColors
+                                            .TipsAccent
+                                    )
+                            )
+                        )
+            )
+
+
+            Column(
+                modifier =
+                    Modifier.padding(
+                        17.dp
+                    )
+            ) {
+
+                /*
+                 * Doctor information
+                 */
+                Row(
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(
+                                    46.dp
+                                )
+                                .clip(
+                                    CircleShape
+                                )
+                                .background(
+                                    PatientColors
+                                        .ReviewAccent
+                                        .copy(
+                                            alpha = 0.13f
+                                        )
+                                ),
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+
+                        Text(
+                            text =
+                                initials,
+                            color =
+                                PatientColors
+                                    .ReviewAccent,
+                            fontWeight =
+                                FontWeight.ExtraBold,
+                            fontSize =
+                                14.sp
+                        )
+                    }
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(
+                                12.dp
+                            )
+                    )
+
+
+                    Column(
+                        modifier =
+                            Modifier.weight(
+                                1f
+                            )
+                    ) {
+
+                        Text(
+                            text =
+                                doctorName,
+                            color =
+                                PatientColors
+                                    .TextPrimary,
+                            fontSize =
+                                14.5.sp,
+                            fontWeight =
+                                FontWeight.Bold
+                        )
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(
+                                    3.dp
+                                )
+                        )
+
+
+                        Row(
+                            verticalAlignment =
+                                Alignment.CenterVertically
+                        ) {
+
+                            Icon(
+                                imageVector =
+                                    Icons.Outlined.HealthAndSafety,
+                                contentDescription =
+                                    null,
+                                tint =
+                                    PatientColors
+                                        .DoctorAccent,
+                                modifier =
+                                    Modifier.size(
+                                        14.dp
+                                    )
+                            )
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.width(
+                                        4.dp
+                                    )
+                            )
+
+
+                            Text(
+                                text =
+                                    "Your consultation",
+                                color =
+                                    PatientColors
+                                        .TextSecondary,
+                                fontSize =
+                                    10.5.sp
+                            )
+                        }
+                    }
+
+
+                    /*
+                     * Rating badge
+                     */
+                    Row(
+                        modifier =
+                            Modifier
+                                .clip(
+                                    RoundedCornerShape(
+                                        20.dp
+                                    )
+                                )
+                                .background(
+                                    PatientColors
+                                        .ReviewAccent
+                                        .copy(
+                                            alpha = 0.12f
+                                        )
+                                )
+                                .padding(
+                                    horizontal =
+                                        10.dp,
+                                    vertical =
+                                        7.dp
+                                ),
+                        verticalAlignment =
+                            Alignment.CenterVertically
+                    ) {
+
+                        Icon(
+                            imageVector =
+                                Icons.Filled.Star,
+                            contentDescription =
+                                null,
+                            tint =
+                                PatientColors
+                                    .ReviewAccent,
+                            modifier =
+                                Modifier.size(
+                                    15.dp
+                                )
+                        )
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.width(
+                                    4.dp
+                                )
+                        )
+
+
+                        Text(
+                            text =
+                                "$rating.0",
+                            color =
+                                PatientColors
+                                    .ReviewAccent,
+                            fontSize =
+                                11.5.sp,
+                            fontWeight =
+                                FontWeight.Bold
+                        )
+                    }
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            15.dp
+                        )
+                )
+
+
+                /*
+                 * Stars
+                 */
+                Row {
+
+                    repeat(5) { index ->
+
+                        Icon(
+                            imageVector =
+                                Icons.Filled.Star,
+                            contentDescription =
+                                null,
+                            tint =
+                                if (
+                                    index < rating
+                                ) {
+                                    PatientColors
+                                        .ReviewAccent
+                                } else {
+                                    PatientColors
+                                        .ReviewAccent
+                                        .copy(
+                                            alpha =
+                                                0.18f
+                                        )
+                                },
+                            modifier =
+                                Modifier.size(
+                                    18.dp
+                                )
+                        )
+
+
+                        if (
+                            index < 4
+                        ) {
+
+                            Spacer(
+                                modifier =
+                                    Modifier.width(
+                                        2.dp
+                                    )
+                            )
+                        }
+                    }
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            13.dp
+                        )
+                )
+
+
+                /*
+                 * Comment area
+                 */
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(
+                                RoundedCornerShape(
+                                    16.dp
+                                )
+                            )
+                            .background(
+                                Color.White
+                                    .copy(
+                                        alpha =
+                                            0.58f
+                                    )
+                            )
+                            .padding(
+                                13.dp
+                            )
+                ) {
+
+                    Column {
+
+                        Text(
+                            text = "“",
+                            color =
+                                PatientColors
+                                    .ReviewAccent,
+                            fontSize =
+                                29.sp,
+                            fontWeight =
+                                FontWeight.ExtraBold,
+                            lineHeight =
+                                20.sp
+                        )
+
+
+                        Text(
+                            text =
+                                review.comment
+                                    ?.takeIf {
+                                        it.isNotBlank()
+                                    }
+                                    ?: "No written comment was added.",
+                            color =
+                                PatientColors
+                                    .TextSecondary,
+                            fontSize =
+                                12.sp,
+                            lineHeight =
+                                17.sp
+                        )
+                    }
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            12.dp
+                        )
+                )
+
+
+                /*
+                 * Review date
+                 */
+                Text(
+                    text =
+                        review.created_at
+                            .takeIf {
+                                it.length >= 10
+                            }
+                            ?.take(10)
+                            ?.let {
+                                "Reviewed on $it"
+                            }
+                            ?: "Previous review",
+                    color =
+                        PatientColors
+                            .TextSecondary
+                            .copy(
+                                alpha = 0.75f
+                            ),
+                    fontSize =
+                        10.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModernProfileTab(
+    modifier: Modifier,
+    patientName: String,
+    patientAvatarUrl: String?,
+    isUploadingPhoto: Boolean,
+    onUploadPhoto: () -> Unit,
+    onNavigateSettings: () -> Unit,
+    onNavigateMedicalRecords: () -> Unit,
+    onNavigateAppointments: () -> Unit,
+    onLogout: () -> Unit
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(18.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(26.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    PatientAvatar(
+                        avatarUrl = patientAvatarUrl,
+                        name = patientName,
+                        size = 84.dp,
+                        onClick = onUploadPhoto
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(patientName, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(
+                        "Patient account",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Button(
+                        onClick = onUploadPhoto,
+                        enabled = !isUploadingPhoto,
+                        shape = RoundedCornerShape(13.dp)
+                    ) {
+                        if (isUploadingPhoto) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(17.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text("Change profile photo")
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            ProfileActionCard(
+                icon = Icons.Outlined.CalendarMonth,
+                title = "My appointments",
+                subtitle = "Upcoming, completed and cancelled visits",
+                onClick = onNavigateAppointments
+            )
+        }
+        item {
+            ProfileActionCard(
+                icon = Icons.Outlined.Description,
+                title = "Medical records",
+                subtitle = "View your care history",
+                onClick = onNavigateMedicalRecords
+            )
+        }
+        item {
+            ProfileActionCard(
+                icon = Icons.Outlined.Settings,
+                title = "Settings & privacy",
+                subtitle = "Theme, account and privacy controls",
+                onClick = onNavigateSettings
+            )
+        }
+        item {
+            ProfileActionCard(
+                icon = Icons.Outlined.ExitToApp,
+                title = "Sign out",
+                subtitle = "Sign out of this device",
+                destructive = true,
+                onClick = onLogout
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProfileActionCard(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    destructive: Boolean = false,
+    onClick: () -> Unit
+) {
+    val tint = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(tint.copy(alpha = 0.10f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+            }
+            Spacer(Modifier.width(13.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    title,
+                    fontWeight = FontWeight.Bold,
+                    color = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    subtitle,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.5.sp
+                )
+            }
+            Icon(
+                Icons.Filled.ArrowForward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
+        }
     }
 }
 
@@ -646,54 +5094,29 @@ private fun AppointmentReminderPopup(
     onDismiss: () -> Unit,
     onViewAppointment: () -> Unit
 ) {
-    val dateTime = remember(appointment) {
-        appointmentDateTime(appointment)
+    val minutesLeft = remember(appointment) {
+        appointment.dateTimeOrNull()?.let {
+            Duration.between(LocalDateTime.now(), it).toMinutes().coerceAtLeast(0)
+        } ?: 0
     }
-
-    val minutesLeft = remember(
-        appointment,
-        dateTime
-    ) {
-        dateTime
-            ?.let {
-                Duration
-                    .between(LocalDateTime.now(), it)
-                    .toMinutes()
-                    .coerceAtLeast(0)
-            }
-            ?: 0
-    }
-
-    val visitLabel =
-        if (appointment.appointment_type == "online") {
-            "video call"
-        } else {
-            "in-person visit"
-        }
 
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            dismissOnClickOutside = false
-        )
+        properties = DialogProperties(dismissOnClickOutside = false)
     ) {
         Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            ),
-            shape = RoundedCornerShape(20.dp),
-            modifier = Modifier.fillMaxWidth()
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(
                 modifier = Modifier.padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-
                 Box(
                     modifier = Modifier
-                        .size(56.dp)
+                        .size(58.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFFFFFBEB)),
+                        .background(Color(0xFFFFF7ED)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -703,1262 +5126,92 @@ private fun AppointmentReminderPopup(
                         modifier = Modifier.size(28.dp)
                     )
                 }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
+                Spacer(Modifier.height(14.dp))
                 Text(
-                    if (minutesLeft <= 0)
-                        "Your appointment is starting"
-                    else
-                        "Appointment in $minutesLeft min",
-                    color = MaterialTheme.colorScheme.onSurface,
+                    if (minutesLeft <= 0) "Your appointment is starting" else "Appointment in $minutesLeft min",
                     fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Text(
-                    "You have a $visitLabel scheduled at " +
-                            "${appointment.time?.take(5) ?: "-"}. " +
-                            "Please be ready.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 13.sp,
+                    fontWeight = FontWeight.ExtraBold,
                     textAlign = TextAlign.Center
                 )
-
-                appointment.reason
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let {
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        Text(
-                            "Reason: $it",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 12.sp,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Scheduled for ${appointment.time?.take(5) ?: "now"}. Please be ready.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.5.sp,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(18.dp))
                 Button(
                     onClick = onViewAppointment,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF0F1F3D)
-                    ),
-                    shape = RoundedCornerShape(12.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(13.dp)
                 ) {
-                    Text(
-                        "View Appointment",
-                        color = Color.White,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Text("View appointment")
                 }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                TextButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        "I'm ready, dismiss",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 13.sp
-                    )
+                TextButton(onClick = onDismiss) {
+                    Text("Dismiss")
                 }
             }
         }
     }
 }
 
-@RequiresApi(Build.VERSION_CODES.O)
-@Composable
-private fun HomeTabContent(
-    modifier: Modifier,
-    patientName: String,
-    background: Color,
-    navy: Color,
-    accent: Color,
-    muted: Color,
-    appointments: List<Appointment>,
-    isLoadingAppointments: Boolean,
-    loadError: String?,
-    isLoadingPrescriptions: Boolean,
-    prescriptionError: String?,
-    reviews: List<ReviewDisplay>,
-    isLoadingReviews: Boolean,
-    onNavigateFindDoctors: () -> Unit,
-    onNavigateAppointments: (AppointmentCategory) -> Unit,
-    prescriptions: List<PrescriptionDisplay>,
-    onNavigatePrescriptions: () -> Unit,
-    onNavigateMedicalRecords: () -> Unit,
-    onNavigateHealthTips: () -> Unit,
-    onAppointmentClick: (Appointment) -> Unit,
-    onStartCall: (String) -> Unit
-) {
-    val upcoming = remember(appointments) {
-        appointments.filter {
-            isUpcomingAppointment(it)
-        }
-    }
-
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .background(background)
-            .padding(horizontal = 20.dp),
-        contentPadding = PaddingValues(vertical = 20.dp)
-    ) {
-
-        item {
-            Text(
-                "Welcome back, $patientName 👋",
-                color = navy,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text(
-                "Everything you need, one tap away.",
-                color = muted,
-                fontSize = 13.sp
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
-        }
-
-        item {
-            val actions = listOf(
-                QuickAction(
-                    "Medical Records",
-                    "View your health history",
-                    Icons.Outlined.Description,
-                    onNavigateMedicalRecords
-                ),
-                QuickAction(
-                    "Health Tips",
-                    "Wellness advice & guidance",
-                    Icons.Outlined.Lightbulb,
-                    onNavigateHealthTips
-                )
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                actions.forEachIndexed { index, action ->
-
-                    QuickActionCard(
-                        action = action,
-                        accent = accent,
-                        navy = navy,
-                        muted = muted,
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    if (index < actions.lastIndex) {
-                        Spacer(modifier = Modifier.width(12.dp))
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-        }
-
-        item {
-            Text(
-                "UPCOMING APPOINTMENTS",
-                color = navy,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
-        }
-
-        if (isLoadingAppointments) {
-
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = accent)
-                }
-            }
-
-        } else if (loadError != null) {
-
-            item {
-                Text(
-                    loadError,
-                    color = MaterialTheme.colorScheme.error,
-                    fontSize = 13.sp
-                )
-            }
-
-        } else if (upcoming.isEmpty()) {
-
-            item {
-                EmptyAppointmentsCard(
-                    onFindDoctor = onNavigateFindDoctors
-                )
-            }
-
-        } else {
-
-            items(upcoming.take(3)) { appt ->
-
-                AppointmentCard(
-                    appt = appt,
-                    onClick = {
-                        onAppointmentClick(appt)
-                    },
-                    onStartCall = {
-                        onStartCall(appt.id)
-                    }
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-            }
-
-            if (upcoming.size > 3) {
-                item {
-                    TextButton(
-                        onClick = { onNavigateAppointments(AppointmentCategory.UPCOMING) }
-                    ) {
-                        Text(
-                            "View all appointments →",
-                            color = accent,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-            }
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(20.dp))
-            Text(
-                "PRESCRIPTIONS",
-                color = navy, fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
-        }
-
-        if (isLoadingPrescriptions) {
-            item {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = accent)
-                }
-            }
-        } else if (prescriptions.isEmpty()) {
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(28.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            Icons.Outlined.Medication,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.outline,
-                            modifier = Modifier.size(32.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("No prescriptions yet.", color = muted, fontSize = 14.sp)
-                    }
-                }
-            }
-        } else {
-            items(prescriptions.take(3), key = { it.prescription.id }) { pd ->
-                PrescriptionCard(pd)
-                Spacer(modifier = Modifier.height(12.dp))
-            }
-            item {
-                TextButton(onClick = onNavigatePrescriptions) {
-                    Text("View all prescriptions →", color = accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                }
-            }
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Text(
-                "REVIEWS",
-                color = navy,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
-        }
-
-        if (isLoadingReviews) {
-
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = accent)
-                }
-            }
-
-        } else if (reviews.isEmpty()) {
-            item {
-                EmptyReviewsCard(
-                    onGoRate = { onNavigateAppointments(AppointmentCategory.COMPLETED) }
-                )
-            }
-        } else {
-            items(reviews.take(3)) { rd ->
-                ReviewCard(rd)
-                Spacer(modifier = Modifier.height(12.dp))
-            }
-            item {
-                TextButton(
-                    onClick = { onNavigateAppointments(AppointmentCategory.COMPLETED) }
-                ) {
-                    Text(
-                        "Rate another visit →",
-                        color = accent,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(24.dp))
-        }
-    }
-}
-
-@Composable
-private fun ProfileTabContent(
-    modifier: Modifier,
-    patientName: String,
-    patientAvatarUrl: String?,
-    isUploadingPhoto: Boolean,
-    background: Color,
-    navy: Color,
-    muted: Color,
-    onUploadPhoto: () -> Unit,
-    onNavigateSettings: () -> Unit,
-    onNavigateMedicalRecords: () -> Unit,
-    onLogout: () -> Unit
-) {
-    var showPhotoViewer by remember {
-        mutableStateOf(false)
-    }
-
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(background)
-            .padding(24.dp)
-    ) {
-
-        EditablePatientAvatar(
-            avatarUrl = patientAvatarUrl,
-            name = patientName,
-            size = 96.dp,
-            isUploading = isUploadingPhoto,
-            onViewPhoto = {
-                showPhotoViewer = true
-            },
-            onChangePhoto = onUploadPhoto
-        )
-
-        if (
-            showPhotoViewer &&
-            !patientAvatarUrl.isNullOrBlank()
-        ) {
-            PhotoViewerDialog(
-                photoUrl = patientAvatarUrl,
-                onDismiss = {
-                    showPhotoViewer = false
-                }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Text(
-            patientName,
-            color = navy,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold
-        )
-
-        if (patientAvatarUrl.isNullOrBlank()) {
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFFEFF6FF)
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Text(
-                        "Add a profile picture",
-                        color = navy,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Text(
-                        "Upload a photo, or we'll keep showing your initial.",
-                        color = muted,
-                        fontSize = 12.sp
-                    )
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    TextButton(
-                        onClick = onUploadPhoto,
-                        contentPadding = PaddingValues(0.dp),
-                        enabled = !isUploadingPhoto
-                    ) {
-                        Text(
-                            if (isUploadingPhoto)
-                                "Uploading…"
-                            else
-                                "Upload photo →",
-                            color = MaterialTheme.colorScheme.primary,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(28.dp))
-
-        ProfileMenuItem(
-            Icons.Outlined.Description,
-            "Medical Records",
-            navy,
-            onClick = onNavigateMedicalRecords
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        ProfileMenuItem(
-            Icons.Outlined.Settings,
-            "Settings",
-            navy,
-            onClick = onNavigateSettings
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-        ProfileMenuItem(
-            Icons.Outlined.ExitToApp,
-            "Logout",
-            MaterialTheme.colorScheme.error,
-            onClick = onLogout
-        )
-    }
-}
-
-@Composable
-private fun ProfileMenuItem(
-    icon: ImageVector,
-    label: String,
-    tint: Color,
-    onClick: () -> Unit
-) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = tint,
-                modifier = Modifier.size(20.dp)
-            )
-
-            Spacer(modifier = Modifier.width(14.dp))
-
-            Text(
-                label,
-                color = tint,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium
-            )
-        }
-    }
-}
-
-@Composable
-private fun QuickActionCard(
-    action: QuickAction,
-    accent: Color,
-    navy: Color,
-    muted: Color,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .clickable(onClick = action.onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 2.dp
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .padding(18.dp)
-                .fillMaxWidth()
-        ) {
-
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(accent.copy(alpha = 0.12f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    action.icon,
-                    contentDescription = null,
-                    tint = accent,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Text(
-                action.label,
-                color = navy,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text(
-                action.description,
-                color = muted,
-                fontSize = 11.5.sp
-            )
-        }
-    }
-}
-
-@Composable
-private fun EmptyAppointmentsCard(
-    onFindDoctor: () -> Unit
-) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(28.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-
-            Icon(
-                Icons.Outlined.CalendarMonth,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.size(32.dp)
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                "No upcoming appointments.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 14.sp
-            )
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            TextButton(onClick = onFindDoctor) {
-                Text(
-                    "Find a doctor to book one",
-                    color = MaterialTheme.colorScheme.primary,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun PrescriptionCard(pd: PrescriptionDisplay) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                pd.prescription.medication ?: "Medication not specified",
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                "👨‍⚕️ ${pd.doctorName}",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                "📅 ${pd.prescription.created_at?.take(10) ?: "Unknown date"}",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp
-            )
-        }
-    }
-}
-
-@Composable
-private fun EmptyReviewsCard(
-    onGoRate: () -> Unit
-) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(28.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-
-            Icon(
-                Icons.Outlined.RateReview,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.size(32.dp)
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                "You haven't left any reviews yet.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 14.sp
-            )
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            TextButton(onClick = onGoRate) {
-                Text(
-                    "Rate a completed visit",
-                    color = MaterialTheme.colorScheme.primary,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ReviewCard(
-    rd: ReviewDisplay
-) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    rd.doctorName,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                Row {
-                    repeat(5) { i ->
-                        Icon(
-                            Icons.Filled.Star,
-                            contentDescription = null,
-                            tint =
-                                if (i < rd.review.rating)
-                                    Color(0xFFF59E0B)
-                                else
-                                    Color(0xFFE2E8F0),
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                }
-            }
-
-            rd.review.comment
-                ?.takeIf { it.isNotBlank() }
-                ?.let {
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    Text(
-                        it,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp
-                    )
-                }
-        }
-    }
-}
-
-@RequiresApi(Build.VERSION_CODES.O)
-@Composable
-private fun AppointmentCard(
-    appt: Appointment,
-    onClick: () -> Unit,
-    onStartCall: () -> Unit
-) {
-    val statusColor = when (appt.status) {
-        "confirmed" -> Color(0xFF10B981)
-        "pending" -> Color(0xFFF59E0B)
-        "rescheduled" -> MaterialTheme.colorScheme.primary
-        "cancelled" -> MaterialTheme.colorScheme.error
-        else -> MaterialTheme.colorScheme.outline
-    }
-
-    val statusBg = when (appt.status) {
-        "confirmed" -> Color(0xFFF0FDF4)
-        "pending" -> Color(0xFFFFFBEB)
-        "rescheduled" -> Color(0xFFEFF6FF)
-        "cancelled" -> Color(0xFFFEF2F2)
-        else -> Color(0xFFF8FAFF)
-    }
-
-    val statusLabel = when (appt.status) {
-        "confirmed" -> "Accepted & Paid"
-        "cancelled" -> "Cancelled"
-        else ->
-            appt.status?.replaceFirstChar {
-                it.uppercase()
-            } ?: "Unknown"
-    }
-
-    val isOnline =
-        appt.appointment_type == "online"
-
-    val isCancelled =
-        appt.status == "cancelled"
-
-    val isConfirmed =
-        appt.status == "confirmed"
-
-    val windowState =
-        if (isOnline && !isCancelled)
-            callWindowState(appt)
-        else
-            CallWindowState.NOT_APPLICABLE
-
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-    ) {
-
-        Row(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .fillMaxHeight()
-                    .background(statusColor)
-            )
-
-            Column(
-                modifier = Modifier
-                    .padding(18.dp)
-                    .fillMaxWidth()
-            ) {
-
-                Text(
-                    "📅 ${appt.date ?: "-"}   🕐 ${appt.time ?: "-"}",
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 14.sp
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    "📝 ${appt.reason ?: "General consultation"}",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 13.sp
-                )
-
-                appt.payment_method?.let {
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Text(
-                        "💳 Paid via $it",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 13.sp
-                    )
-                }
-
-                appt.amount_paid?.let {
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Text(
-                        "💰 R %.2f".format(it),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 13.sp
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(statusBg)
-                        .padding(
-                            horizontal = 10.dp,
-                            vertical = 4.dp
-                        )
-                ) {
-                    Text(
-                        statusLabel,
-                        color = statusColor,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                cancellationExplanation(appt)?.let { explanation ->
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        explanation,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp
-                    )
-                }
-
-                if (isOnline && !isCancelled) {
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    val isActive =
-                        isConfirmed &&
-                                windowState == CallWindowState.OPEN
-
-                    Button(
-                        onClick = {
-                            if (isActive) {
-                                onStartCall()
-                            }
-                        },
-                        enabled = isActive,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(44.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF0F1F3D),
-                            disabledContainerColor = Color(0xFFE2E8F0)
-                        ),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-
-                        Icon(
-                            Icons.Outlined.Videocam,
-                            contentDescription = null,
-                            tint =
-                                if (isActive)
-                                    Color.White
-                                else
-                                    Color(0xFF94A3B8),
-                            modifier = Modifier.size(16.dp)
-                        )
-
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        Text(
-                            when {
-                                !isConfirmed ->
-                                    "Waiting for doctor to accept"
-
-                                windowState == CallWindowState.TOO_EARLY ->
-                                    "Start Call (available 5 min before)"
-
-                                windowState == CallWindowState.OPEN ->
-                                    "Start Call Now"
-
-                                windowState == CallWindowState.CLOSED ->
-                                    "Call window closed"
-
-                                else ->
-                                    "Start Call Now"
-                            },
-                            color =
-                                if (isActive)
-                                    Color.White
-                                else
-                                    Color(0xFF94A3B8),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * Appointment details dialog.
- *
- * The doctor information is loaded using the appointment's
- * doctor_id. The doctor card itself is clickable and opens
- * the existing DoctorProfileScreen.
- */
 @Composable
 private fun AppointmentDetailsDialog(
-    appt: Appointment,
-    fetchDoctor: suspend (doctorId: String) -> Result<DoctorProfile>,
-    onViewDoctorProfile: (doctorId: String) -> Unit,
+    appointment: Appointment,
     onDismiss: () -> Unit
 ) {
-    var doctor by remember(appt.doctor_id) {
-        mutableStateOf<DoctorProfile?>(null)
-    }
-
-    var isLoadingDoctor by remember(appt.doctor_id) {
-        mutableStateOf(false)
-    }
-
-    var doctorError by remember(appt.doctor_id) {
-        mutableStateOf<String?>(null)
-    }
-
-    /*
-     * Load the doctor when the details dialog opens.
-     */
-    LaunchedEffect(appt.doctor_id) {
-
-        val doctorId = appt.doctor_id
-
-        if (doctorId.isNullOrBlank()) {
-            doctorError = "Doctor profile is unavailable."
-            return@LaunchedEffect
-        }
-
-        isLoadingDoctor = true
-        doctorError = null
-
-        fetchDoctor(doctorId)
-            .onSuccess {
-                doctor = it
-            }
-            .onFailure {
-                doctorError =
-                    it.message ?: "Could not load doctor profile."
-            }
-
-        isLoadingDoctor = false
-    }
-
     AlertDialog(
         onDismissRequest = onDismiss,
-
-        title = {
-            Text(
-                "Appointment Details",
-                fontWeight = FontWeight.Bold
-            )
-        },
-
+        title = { Text("Appointment details") },
         text = {
-
-
-            Column(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-
-                /*
-                 * -------------------------------------------------
-                 * DOCTOR PROFILE CARD
-                 * -------------------------------------------------
-                 */
-                if (isLoadingDoctor) {
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-
-                } else if (doctor != null) {
-
-                    val doc = doctor!!
-
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        ),
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                onViewDoctorProfile(doc.id)
-                            }
-                    ) {
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-
-                            /*
-                             * Circular doctor profile image.
-                             */
-                            Box(
-                                modifier = Modifier
-                                    .size(58.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        MaterialTheme.colorScheme.primary
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-
-                                if (!doc.profile_image_url.isNullOrBlank()) {
-
-                                    AsyncImage(
-                                        model = doc.profile_image_url,
-                                        contentDescription =
-                                            "Doctor profile picture",
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier
-                                            .size(58.dp)
-                                            .clip(CircleShape)
-                                    )
-
-                                } else {
-
-                                    Text(
-                                        "${doc.name?.firstOrNull() ?: ' '}" +
-                                                "${doc.surname?.firstOrNull() ?: ' '}",
-                                        color = Color.White,
-                                        fontSize = 18.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.width(12.dp))
-
-                            Column(
-                                modifier = Modifier.weight(1f)
-                            ) {
-
-                                Text(
-                                    "Doctor",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 11.sp
-                                )
-
-                                Text(
-                                    "Dr. ${doc.name ?: ""} ${doc.surname ?: ""}".trim(),
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-
-                                Spacer(modifier = Modifier.height(2.dp))
-
-                                Text(
-                                    doc.discipline
-                                        ?: "General Practitioner",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 12.sp
-                                )
-
-                                Spacer(modifier = Modifier.height(4.dp))
-
-                                Text(
-                                    "View doctor profile →",
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontSize = 11.5.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                        }
-                    }
-
-                } else if (doctorError != null) {
-
-                    Text(
-                        doctorError!!,
-                        color = MaterialTheme.colorScheme.error,
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(
-                            vertical = 8.dp
-                        )
-                    )
+            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                DetailRow("Date", appointment.date ?: "-")
+                DetailRow("Time", appointment.time?.take(5) ?: "-")
+                DetailRow("Reason", appointment.reason ?: "General consultation")
+                DetailRow("Status", appointment.status?.replaceFirstChar { it.uppercase() } ?: "Unknown")
+                DetailRow(
+                    "Visit type",
+                    if (appointment.appointment_type == "online") "Online" else "In person"
+                )
+                appointment.price_minor?.let {
+                    DetailRow("Reserved fee", "R %.2f".format(it / 100.0))
                 }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                /*
-                 * -------------------------------------------------
-                 * APPOINTMENT INFORMATION
-                 * -------------------------------------------------
-                 */
-
-                Text(
-                    "Appointment",
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    "Date: ${appt.date ?: "-"}",
-                    fontSize = 13.sp
-                )
-
-                Text(
-                    "Time: ${appt.time ?: "-"}",
-                    fontSize = 13.sp
-                )
-
-                Text(
-                    "Reason: ${appt.reason ?: "General consultation"}",
-                    fontSize = 13.sp
-                )
-
-                Text(
-                    "Status: ${
-                        appt.status
-                            ?.replaceFirstChar { it.uppercase() }
-                            ?: "Unknown"
-                    }",
-                    fontSize = 13.sp
-                )
-
-                Text(
-                    "Visit type: ${
-                        if (appt.appointment_type == "online")
-                            "Online"
-                        else
-                            "In Person"
-                    }",
-                    fontSize = 13.sp
-                )
-
-                appt.payment_method?.let {
-                    Text(
-                        "Payment method: $it",
-                        fontSize = 13.sp
-                    )
-                }
-
-                appt.amount_paid?.let {
-                    Text(
-                        "Amount paid: R %.2f".format(it),
-                        fontSize = 13.sp
-                    )
-                }
-
-                cancellationExplanation(appt)?.let { explanation ->
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        explanation,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp
-                    )
+                appointment.amount_paid?.let {
+                    DetailRow("Amount paid", "R %.2f".format(it))
                 }
             }
         },
-
         confirmButton = {
-            TextButton(
-                onClick = onDismiss
-            ) {
-                Text("Close")
-            }
+            TextButton(onClick = onDismiss) { Text("Close") }
         }
     )
+}
+
+@Composable
+private fun DetailRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth()) {
+        Text(
+            label,
+            modifier = Modifier.weight(0.38f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 12.sp
+        )
+        Text(
+            value,
+            modifier = Modifier.weight(0.62f),
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 12.sp
+        )
+    }
+}
+
+// Cancellation status is not proof that a payment refund was processed.
+fun cancellationExplanation(appointment: Appointment): String? {
+    if (appointment.status != "cancelled") return null
+    return when (appointment.cancelled_reason) {
+        "doctor_no_show" -> "Cancelled because the doctor did not join in time."
+        "patient_no_show" -> "Cancelled because the patient did not join in time."
+        else -> null
+    }
 }

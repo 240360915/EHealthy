@@ -22,14 +22,17 @@ class EHealthyMessagingService : FirebaseMessagingService() {
         super.onNewToken(token)
         // Save immediately when Firebase issues/rotates a token — don't wait
         // for the person to open the app again.
-        CoroutineScope(Dispatchers.IO).launch {
-            saveFcmToken(token)
-        }
+        ehealthy.connect.consultation.ConsultationDevices.sync()
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
 
+        if (message.data["type"] in setOf("consultation_invite", "consultation_closed")) {
+            ehealthy.connect.consultation.ConsultationNotifications.receive(this, message.data,
+                message.priority == RemoteMessage.PRIORITY_HIGH)
+            return
+        }
         if (message.data["type"] == "incoming_call") {
             showIncomingCall(message.data)
             return
@@ -151,7 +154,7 @@ suspend fun saveFcmToken(token: String) {
                 }
         }
     } catch (e: Exception) {
-        android.util.Log.e("FCM", "Failed to save token", e)
+        android.util.Log.e("FCM", "Failed to save token")
     }
 }
 

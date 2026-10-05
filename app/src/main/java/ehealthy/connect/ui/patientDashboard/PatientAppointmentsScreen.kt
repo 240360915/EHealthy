@@ -3,13 +3,13 @@ package ehealthy.connect.ui.patientDashboard
 import android.annotation.SuppressLint
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,8 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,7 +25,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.Payments
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.VideoCall
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -35,7 +41,9 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -53,12 +61,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import java.time.LocalDate
-import androidx.compose.material3.MaterialTheme
-
 
 enum class AppointmentCategory(val label: String) {
     ALL("All"),
@@ -140,83 +147,743 @@ fun PatientAppointmentsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("My Appointments", color = ink, fontWeight = FontWeight.Bold, fontSize = 18.sp) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = ink)
+                title = {
+
+                    Column {
+
+                        Text(
+                            text = "My Appointments",
+                            color = PatientColors.TextPrimary,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 18.sp
+                        )
+
+                        Text(
+                            text =
+                                if (appointments.isEmpty()) {
+                                    "Manage your visits"
+                                } else {
+                                    "${appointments.size} appointment${
+                                        if (appointments.size == 1) "" else "s"
+                                    }"
+                                },
+                            color = PatientColors.TextSecondary,
+                            fontSize = 10.5.sp
+                        )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+
+                navigationIcon = {
+
+                    IconButton(
+                        onClick = onBack
+                    ) {
+
+                        Box(
+                            modifier =
+                                Modifier
+                                    .size(36.dp)
+                                    .background(
+                                        PatientColors.AppointmentCard,
+                                        CircleShape
+                                    ),
+                            contentAlignment =
+                                Alignment.Center
+                        ) {
+
+                            Icon(
+                                imageVector =
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription =
+                                    "Back",
+                                tint =
+                                    PatientColors.AppointmentAccent,
+                                modifier =
+                                    Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                },
+
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor =
+                            MaterialTheme.colorScheme.surface
+                    )
             )
         },
         containerColor = bg
     ) { paddingValues ->
         Column(modifier = Modifier.padding(paddingValues)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            top = 6.dp,
+                            bottom = 6.dp
+                        )
             ) {
-                AppointmentCategory.entries.forEach { cat ->
-                    FilterChip(
-                        selected = selectedCategory == cat,
-                        onClick = { selectedCategory = cat },
-                        label = { Text(cat.label, fontSize = 13.sp) },
-                        shape = RoundedCornerShape(20.dp),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = navy,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                            containerColor = MaterialTheme.colorScheme.surface,
-                            labelColor = muted
+
+                Text(
+                    text = "Your visits",
+                    modifier =
+                        Modifier.padding(
+                            horizontal = 20.dp
                         ),
-                        border = null
-                    )
+                    color =
+                        PatientColors.TextPrimary,
+                    fontWeight =
+                        FontWeight.Bold,
+                    fontSize =
+                        13.5.sp
+                )
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(8.dp)
+                )
+
+
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(
+                                rememberScrollState()
+                            )
+                            .padding(
+                                horizontal = 20.dp
+                            ),
+                    horizontalArrangement =
+                        Arrangement.spacedBy(
+                            8.dp
+                        )
+                ) {
+
+                    AppointmentCategory.entries
+                        .forEach { cat ->
+
+                            val count =
+                                if (
+                                    cat ==
+                                    AppointmentCategory.ALL
+                                ) {
+                                    appointments.size
+                                } else {
+                                    appointments.count {
+                                        categorize(it) == cat
+                                    }
+                                }
+
+
+                            val accent =
+                                when (cat) {
+
+                                    AppointmentCategory.ALL ->
+                                        PatientColors.AppointmentAccent
+
+                                    AppointmentCategory.UPCOMING ->
+                                        PatientColors.DoctorAccent
+
+                                    AppointmentCategory.COMPLETED ->
+                                        PatientColors.SuccessAccent
+
+                                    AppointmentCategory.CANCELLED ->
+                                        PatientColors.Red
+                                }
+
+
+                            val background =
+                                when (cat) {
+
+                                    AppointmentCategory.ALL ->
+                                        PatientColors.AppointmentCard
+
+                                    AppointmentCategory.UPCOMING ->
+                                        PatientColors.DoctorCard
+
+                                    AppointmentCategory.COMPLETED ->
+                                        PatientColors.SuccessCard
+
+                                    AppointmentCategory.CANCELLED ->
+                                        PatientColors.RedSoft
+                                }
+
+
+                            FilterChip(
+                                selected =
+                                    selectedCategory == cat,
+
+                                onClick = {
+                                    selectedCategory = cat
+                                },
+
+                                label = {
+
+                                    Row(
+                                        verticalAlignment =
+                                            Alignment.CenterVertically
+                                    ) {
+
+                                        Text(
+                                            text =
+                                                cat.label,
+                                            fontSize =
+                                                11.5.sp,
+                                            fontWeight =
+                                                if (
+                                                    selectedCategory == cat
+                                                ) {
+                                                    FontWeight.Bold
+                                                } else {
+                                                    FontWeight.Medium
+                                                }
+                                        )
+
+
+                                        if (
+                                            count > 0
+                                        ) {
+
+                                            Spacer(
+                                                modifier =
+                                                    Modifier.width(
+                                                        6.dp
+                                                    )
+                                            )
+
+
+                                            Box(
+                                                modifier =
+                                                    Modifier
+                                                        .background(
+                                                            if (
+                                                                selectedCategory == cat
+                                                            ) {
+                                                                Color.White.copy(
+                                                                    alpha = 0.18f
+                                                                )
+                                                            } else {
+                                                                accent.copy(
+                                                                    alpha = 0.10f
+                                                                )
+                                                            },
+                                                            CircleShape
+                                                        )
+                                                        .padding(
+                                                            horizontal = 6.dp,
+                                                            vertical = 2.dp
+                                                        )
+                                            ) {
+
+                                                Text(
+                                                    text =
+                                                        count.toString(),
+                                                    color =
+                                                        if (
+                                                            selectedCategory == cat
+                                                        ) {
+                                                            Color.White
+                                                        } else {
+                                                            accent
+                                                        },
+                                                    fontSize =
+                                                        9.sp,
+                                                    fontWeight =
+                                                        FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
+                                },
+
+                                shape =
+                                    RoundedCornerShape(
+                                        22.dp
+                                    ),
+
+                                colors =
+                                    FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor =
+                                            accent,
+                                        selectedLabelColor =
+                                            Color.White,
+                                        containerColor =
+                                            background,
+                                        labelColor =
+                                            accent
+                                    ),
+
+                                border =
+                                    null
+                            )
+                        }
                 }
             }
 
-            when {
+            when{
                 isLoading -> {
-                    Box(modifier = Modifier.fillMaxSize().padding(40.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = teal)
-                    }
-                }
-                loadError != null -> {
-                    Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                        Text(loadError ?: "", color = Color(0xFFEF4444), fontSize = 13.sp)
-                    }
-                }
-                filtered.isEmpty() -> {
-                    Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Outlined.CalendarMonth, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(40.dp))
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text("No appointments in this category.", color = muted, fontSize = 14.sp)
-                            Spacer(modifier = Modifier.height(6.dp))
-                            TextButton(onClick = onFindDoctors) {
-                                Text("Find a doctor to book one", color = teal, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .padding(
+                                    24.dp
+                                ),
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+
+                        Card(
+                            shape =
+                                RoundedCornerShape(
+                                    24.dp
+                                ),
+                            colors =
+                                CardDefaults.cardColors(
+                                    containerColor =
+                                        PatientColors.AppointmentCard
+                                ),
+                            elevation =
+                                CardDefaults.cardElevation(
+                                    defaultElevation = 0.dp
+                                )
+                        ) {
+
+                            Column(
+                                modifier =
+                                    Modifier.padding(
+                                        horizontal = 34.dp,
+                                        vertical = 28.dp
+                                    ),
+                                horizontalAlignment =
+                                    Alignment.CenterHorizontally
+                            ) {
+
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .size(
+                                                64.dp
+                                            )
+                                            .background(
+                                                PatientColors.AppointmentAccent
+                                                    .copy(alpha = 0.09f),
+                                                CircleShape
+                                            ),
+                                    contentAlignment =
+                                        Alignment.Center
+                                ) {
+
+                                    CircularProgressIndicator(
+                                        modifier =
+                                            Modifier.size(
+                                                30.dp
+                                            ),
+                                        strokeWidth =
+                                            2.5.dp,
+                                        color =
+                                            PatientColors.AppointmentAccent
+                                    )
+                                }
+
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.height(
+                                            14.dp
+                                        )
+                                )
+
+
+                                Text(
+                                    text =
+                                        "Loading your appointments",
+                                    color =
+                                        PatientColors.TextPrimary,
+                                    fontWeight =
+                                        FontWeight.Bold,
+                                    fontSize =
+                                        14.sp
+                                )
+
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.height(
+                                            4.dp
+                                        )
+                                )
+
+
+                                Text(
+                                    text =
+                                        "Getting your latest visits...",
+                                    color =
+                                        PatientColors.TextSecondary,
+                                    fontSize =
+                                        10.5.sp
+                                )
                             }
                         }
                     }
                 }
-                else -> {
-                    LazyColumn(
-                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+
+
+                loadError != null -> {
+
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .padding(
+                                    24.dp
+                                ),
+                        contentAlignment =
+                            Alignment.Center
                     ) {
-                        items(filtered, key = { it.id }) { appt ->
-                            val category = categorize(appt)
-                            AppointmentDetailCard(
-                                appt = appt,
-                                fetchDoctor = fetchDoctor,
-                                onViewDoctorProfile = onViewDoctorProfile,
-                                showLeaveReview = category == AppointmentCategory.COMPLETED && appt.id !in reviewedIds,
-                                onLeaveReview = { reviewTargetAppointmentId = appt.id },
-                                onClick = { selectedAppointment = appt }
-                            )
+
+                        Card(
+                            modifier =
+                                Modifier.fillMaxWidth(),
+                            shape =
+                                RoundedCornerShape(
+                                    23.dp
+                                ),
+                            colors =
+                                CardDefaults.cardColors(
+                                    containerColor =
+                                        PatientColors.RedSoft
+                                ),
+                            border =
+                                BorderStroke(
+                                    width = 1.dp,
+                                    color =
+                                        PatientColors.Red
+                                            .copy(alpha = 0.12f)
+                                ),
+                            elevation =
+                                CardDefaults.cardElevation(
+                                    defaultElevation = 0.dp
+                                )
+                        ) {
+
+                            Column(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            22.dp
+                                        ),
+                                horizontalAlignment =
+                                    Alignment.CenterHorizontally
+                            ) {
+
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .size(
+                                                62.dp
+                                            )
+                                            .background(
+                                                PatientColors.Red
+                                                    .copy(alpha = 0.09f),
+                                                CircleShape
+                                            ),
+                                    contentAlignment =
+                                        Alignment.Center
+                                ) {
+
+                                    Icon(
+                                        imageVector =
+                                            Icons.Outlined.CalendarMonth,
+                                        contentDescription =
+                                            null,
+                                        tint =
+                                            PatientColors.Red,
+                                        modifier =
+                                            Modifier.size(
+                                                29.dp
+                                            )
+                                    )
+                                }
+
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.height(
+                                            13.dp
+                                        )
+                                )
+
+
+                                Text(
+                                    text =
+                                        "Couldn't load appointments",
+                                    color =
+                                        PatientColors.TextPrimary,
+                                    fontWeight =
+                                        FontWeight.ExtraBold,
+                                    fontSize =
+                                        15.sp
+                                )
+
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.height(
+                                            5.dp
+                                        )
+                                )
+
+
+                                Text(
+                                    text =
+                                        loadError
+                                            ?: "Something went wrong while loading your appointments.",
+                                    color =
+                                        PatientColors.TextSecondary,
+                                    fontSize =
+                                        11.sp,
+                                    lineHeight =
+                                        16.sp,
+                                    textAlign =
+                                        TextAlign.Center
+                                )
+
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.height(
+                                            10.dp
+                                        )
+                                )
+
+
+                                TextButton(
+                                    onClick =
+                                        onBack
+                                ) {
+
+                                    Text(
+                                        text =
+                                            "Go back",
+                                        color =
+                                            PatientColors.Red,
+                                        fontWeight =
+                                            FontWeight.Bold
+                                    )
+                                }
+                            }
                         }
-                        item { Spacer(modifier = Modifier.height(24.dp)) }
+                    }
+                }
+
+
+                filtered.isEmpty() -> {
+
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .padding(
+                                    24.dp
+                                ),
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+
+                        Column(
+                            horizontalAlignment =
+                                Alignment.CenterHorizontally
+                        ) {
+
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .size(
+                                            78.dp
+                                        )
+                                        .background(
+                                            when (
+                                                selectedCategory
+                                            ) {
+
+                                                AppointmentCategory.CANCELLED ->
+                                                    PatientColors.RedSoft
+
+                                                AppointmentCategory.COMPLETED ->
+                                                    PatientColors.SuccessCard
+
+                                                AppointmentCategory.UPCOMING ->
+                                                    PatientColors.DoctorCard
+
+                                                AppointmentCategory.ALL ->
+                                                    PatientColors.AppointmentCard
+                                            },
+                                            CircleShape
+                                        ),
+                                contentAlignment =
+                                    Alignment.Center
+                            ) {
+
+                                Icon(
+                                    imageVector =
+                                        Icons.Outlined.CalendarMonth,
+                                    contentDescription =
+                                        null,
+                                    tint =
+                                        when (
+                                            selectedCategory
+                                        ) {
+
+                                            AppointmentCategory.CANCELLED ->
+                                                PatientColors.Red
+
+                                            AppointmentCategory.COMPLETED ->
+                                                PatientColors.SuccessAccent
+
+                                            AppointmentCategory.UPCOMING ->
+                                                PatientColors.DoctorAccent
+
+                                            AppointmentCategory.ALL ->
+                                                PatientColors.AppointmentAccent
+                                        },
+                                    modifier =
+                                        Modifier.size(
+                                            35.dp
+                                        )
+                                )
+                            }
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(
+                                        14.dp
+                                    )
+                            )
+
+
+                            Text(
+                                text =
+                                    when (
+                                        selectedCategory
+                                    ) {
+
+                                        AppointmentCategory.ALL ->
+                                            "No appointments yet"
+
+                                        AppointmentCategory.UPCOMING ->
+                                            "No upcoming appointments"
+
+                                        AppointmentCategory.COMPLETED ->
+                                            "No completed appointments"
+
+                                        AppointmentCategory.CANCELLED ->
+                                            "No cancelled appointments"
+                                    },
+                                color =
+                                    PatientColors.TextPrimary,
+                                fontWeight =
+                                    FontWeight.ExtraBold,
+                                fontSize =
+                                    15.sp,
+                                textAlign =
+                                    TextAlign.Center
+                            )
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(
+                                        5.dp
+                                    )
+                            )
+
+
+                            Text(
+                                text =
+                                    when (
+                                        selectedCategory
+                                    ) {
+
+                                        AppointmentCategory.ALL ->
+                                            "When you book a doctor, your appointment will appear here."
+
+                                        AppointmentCategory.UPCOMING ->
+                                            "You don't currently have any upcoming visits."
+
+                                        AppointmentCategory.COMPLETED ->
+                                            "Completed consultations will appear here."
+
+                                        AppointmentCategory.CANCELLED ->
+                                            "Cancelled appointments will appear here."
+                                    },
+                                color =
+                                    PatientColors.TextSecondary,
+                                fontSize =
+                                    11.sp,
+                                lineHeight =
+                                    16.sp,
+                                textAlign =
+                                    TextAlign.Center
+                            )
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(
+                                        12.dp
+                                    )
+                            )
+
+
+                            if (
+                                selectedCategory ==
+                                AppointmentCategory.ALL ||
+                                selectedCategory ==
+                                AppointmentCategory.UPCOMING
+                            ) {
+
+                                TextButton(
+                                    onClick =
+                                        onFindDoctors
+                                ) {
+
+                                    Text(
+                                        text =
+                                            "Find a doctor",
+                                        color =
+                                            PatientColors.DoctorAccent,
+                                        fontWeight =
+                                            FontWeight.Bold
+                                    )
+                                }
+
+                            } else {
+
+                                TextButton(
+                                    onClick = {
+                                        selectedCategory =
+                                            AppointmentCategory.ALL
+                                    }
+                                ) {
+
+                                    Text(
+                                        text =
+                                            "View all appointments",
+                                        color =
+                                            PatientColors.AppointmentAccent,
+                                        fontWeight =
+                                            FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -276,86 +943,1148 @@ fun PatientAppointmentsScreen(
 }
 
 @Composable
-private fun AppointmentListDetailsDialog(appt: Appointment, onDismiss: () -> Unit) {
+private fun AppointmentListDetailsDialog(
+    appt: Appointment,
+    onDismiss: () -> Unit
+) {
+
+    val isOnline =
+        appt.appointment_type
+            .equals(
+                "online",
+                ignoreCase = true
+            )
+
+
+    val statusColor =
+        when (appt.status) {
+
+            "confirmed" ->
+                PatientColors.SuccessAccent
+
+            "pending" ->
+                PatientColors.ReviewAccent
+
+            "rescheduled" ->
+                PatientColors.AppointmentAccent
+
+            "cancelled" ->
+                PatientColors.Red
+
+            else ->
+                PatientColors.TextSecondary
+        }
+
+
+    val statusBackground =
+        when (appt.status) {
+
+            "confirmed" ->
+                PatientColors.SuccessCard
+
+            "pending" ->
+                PatientColors.ReviewCard
+
+            "rescheduled" ->
+                PatientColors.AppointmentCard
+
+            "cancelled" ->
+                PatientColors.RedSoft
+
+            else ->
+                PatientColors.NeutralCard
+        }
+
+
+    val statusLabel =
+        when (appt.status) {
+
+            "confirmed" ->
+                "Accepted & Paid"
+
+            "cancelled" ->
+                "Rejected & Refunded"
+
+            else ->
+                appt.status
+                    ?.replaceFirstChar {
+                        it.uppercase()
+                    }
+                    ?: "Unknown"
+        }
+
+
     AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Appointment Details") },
-        text = {
-            Column {
-                Text("Date: ${appt.date ?: "-"}")
-                Text("Time: ${appt.time ?: "-"}")
-                Text("Reason: ${appt.reason ?: "General consultation"}")
-                Text("Status: ${appt.status?.replaceFirstChar { it.uppercase() } ?: "Unknown"}")
-                Text("Visit type: ${if (appt.appointment_type == "online") "Online" else "In Person"}")
-                appt.payment_method?.let { Text("Payment method: $it") }
-                appt.amount_paid?.let { Text("Amount paid: R %.2f".format(it)) }
-                cancellationExplanation(appt)?.let {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(it)
+        onDismissRequest =
+            onDismiss,
+
+        shape =
+            RoundedCornerShape(
+                25.dp
+            ),
+
+        containerColor =
+            MaterialTheme.colorScheme.surface,
+
+        title = {
+
+            Column(
+                modifier =
+                    Modifier.fillMaxWidth()
+            ) {
+
+                Row(
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(
+                                    42.dp
+                                )
+                                .background(
+                                    PatientColors.AppointmentCard,
+                                    RoundedCornerShape(
+                                        13.dp
+                                    )
+                                ),
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+
+                        Icon(
+                            imageVector =
+                                Icons.Outlined.CalendarMonth,
+                            contentDescription =
+                                null,
+                            tint =
+                                PatientColors.AppointmentAccent,
+                            modifier =
+                                Modifier.size(
+                                    21.dp
+                                )
+                        )
+                    }
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(
+                                10.dp
+                            )
+                    )
+
+
+                    Column(
+                        modifier =
+                            Modifier.weight(1f)
+                    ) {
+
+                        Text(
+                            text =
+                                "Appointment details",
+                            color =
+                                PatientColors.TextPrimary,
+                            fontWeight =
+                                FontWeight.ExtraBold,
+                            fontSize =
+                                17.sp
+                        )
+
+
+                        Text(
+                            text =
+                                "Your visit information",
+                            color =
+                                PatientColors.TextSecondary,
+                            fontSize =
+                                10.5.sp
+                        )
+                    }
                 }
             }
         },
+
+        text = {
+
+            Column(
+                verticalArrangement =
+                    Arrangement.spacedBy(
+                        10.dp
+                    )
+            ) {
+
+                /*
+                 * Status
+                 */
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .background(
+                                statusBackground,
+                                RoundedCornerShape(
+                                    15.dp
+                                )
+                            )
+                            .padding(
+                                12.dp
+                            ),
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(
+                                    9.dp
+                                )
+                                .background(
+                                    statusColor,
+                                    CircleShape
+                                )
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(
+                                8.dp
+                            )
+                    )
+
+
+                    Text(
+                        text =
+                            "Status",
+                        modifier =
+                            Modifier.weight(1f),
+                        color =
+                            PatientColors.TextSecondary,
+                        fontSize =
+                            10.5.sp
+                    )
+
+
+                    Text(
+                        text =
+                            statusLabel,
+                        color =
+                            statusColor,
+                        fontSize =
+                            11.sp,
+                        fontWeight =
+                            FontWeight.Bold
+                    )
+                }
+
+
+                /*
+                 * Date and time
+                 */
+                Row(
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    horizontalArrangement =
+                        Arrangement.spacedBy(
+                            8.dp
+                        )
+                ) {
+
+                    AppointmentDetailMiniCard(
+                        modifier =
+                            Modifier.weight(1f),
+                        icon =
+                            Icons.Outlined.CalendarMonth,
+                        label =
+                            "Date",
+                        value =
+                            appt.date ?: "-",
+                        accent =
+                            PatientColors.AppointmentAccent,
+                        background =
+                            PatientColors.AppointmentCard
+                    )
+
+
+                    AppointmentDetailMiniCard(
+                        modifier =
+                            Modifier.weight(1f),
+                        icon =
+                            Icons.Outlined.Schedule,
+                        label =
+                            "Time",
+                        value =
+                            appt.time ?: "-",
+                        accent =
+                            PatientColors.DoctorAccent,
+                        background =
+                            PatientColors.DoctorCard
+                    )
+                }
+
+
+                /*
+                 * Visit type
+                 */
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .background(
+                                if (isOnline) {
+                                    PatientColors.AppointmentCard
+                                } else {
+                                    PatientColors.DoctorCard
+                                },
+                                RoundedCornerShape(
+                                    15.dp
+                                )
+                            )
+                            .padding(
+                                12.dp
+                            ),
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+
+                    Icon(
+                        imageVector =
+                            if (isOnline) {
+                                Icons.Outlined.VideoCall
+                            } else {
+                                Icons.Outlined.LocationOn
+                            },
+                        contentDescription =
+                            null,
+                        tint =
+                            if (isOnline) {
+                                PatientColors.AppointmentAccent
+                            } else {
+                                PatientColors.DoctorAccent
+                            },
+                        modifier =
+                            Modifier.size(
+                                19.dp
+                            )
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(
+                                8.dp
+                            )
+                    )
+
+
+                    Column {
+
+                        Text(
+                            text =
+                                "Visit type",
+                            color =
+                                PatientColors.TextSecondary,
+                            fontSize =
+                                9.5.sp
+                        )
+
+
+                        Text(
+                            text =
+                                if (isOnline) {
+                                    "Online consultation"
+                                } else {
+                                    "In-person appointment"
+                                },
+                            color =
+                                if (isOnline) {
+                                    PatientColors.AppointmentAccent
+                                } else {
+                                    PatientColors.DoctorAccent
+                                },
+                            fontSize =
+                                11.5.sp,
+                            fontWeight =
+                                FontWeight.Bold
+                        )
+                    }
+                }
+
+
+                /*
+                 * Reason for visit
+                 */
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .background(
+                                PatientColors.NeutralCard,
+                                RoundedCornerShape(
+                                    15.dp
+                                )
+                            )
+                            .padding(
+                                12.dp
+                            )
+                ) {
+
+                    Text(
+                        text =
+                            "Reason for visit",
+                        color =
+                            PatientColors.TextSecondary,
+                        fontSize =
+                            9.5.sp,
+                        fontWeight =
+                            FontWeight.SemiBold
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                3.dp
+                            )
+                    )
+
+
+                    Text(
+                        text =
+                            appt.reason
+                                ?: "General consultation",
+                        color =
+                            PatientColors.TextPrimary,
+                        fontSize =
+                            11.5.sp,
+                        lineHeight =
+                            16.sp
+                    )
+                }
+
+
+                /*
+                 * Payment information
+                 */
+                if (
+                    appt.payment_method != null ||
+                    appt.amount_paid != null
+                ) {
+
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    PatientColors.SuccessCard,
+                                    RoundedCornerShape(
+                                        15.dp
+                                    )
+                                )
+                                .padding(
+                                    12.dp
+                                ),
+                        verticalAlignment =
+                            Alignment.CenterVertically
+                    ) {
+
+                        Icon(
+                            imageVector =
+                                Icons.Outlined.Payments,
+                            contentDescription =
+                                null,
+                            tint =
+                                PatientColors.SuccessAccent,
+                            modifier =
+                                Modifier.size(
+                                    19.dp
+                                )
+                        )
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.width(
+                                    8.dp
+                                )
+                        )
+
+
+                        Column(
+                            modifier =
+                                Modifier.weight(1f)
+                        ) {
+
+                            Text(
+                                text =
+                                    appt.payment_method
+                                        ?.let {
+                                            "Paid via $it"
+                                        }
+                                        ?: "Payment",
+                                color =
+                                    PatientColors.TextSecondary,
+                                fontSize =
+                                    9.5.sp
+                            )
+
+
+                            appt.amount_paid
+                                ?.let { amount ->
+
+                                    Text(
+                                        text =
+                                            "R %.2f"
+                                                .format(
+                                                    amount
+                                                ),
+                                        color =
+                                            PatientColors.SuccessAccent,
+                                        fontSize =
+                                            12.5.sp,
+                                        fontWeight =
+                                            FontWeight.ExtraBold
+                                    )
+                                }
+                        }
+                    }
+                }
+
+
+                cancellationExplanation(appt)
+                    ?.let { explanation ->
+
+                        Box(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        PatientColors.RedSoft,
+                                        RoundedCornerShape(
+                                            15.dp
+                                        )
+                                    )
+                                    .padding(
+                                        12.dp
+                                    )
+                        ) {
+
+                            Text(
+                                text =
+                                    explanation,
+                                color =
+                                    PatientColors.TextSecondary,
+                                fontSize =
+                                    10.5.sp,
+                                lineHeight =
+                                    15.sp
+                            )
+                        }
+                    }
+            }
+        },
+
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
+
+            TextButton(
+                onClick =
+                    onDismiss
+            ) {
+
+                Text(
+                    text =
+                        "Close",
+                    color =
+                        PatientColors.AppointmentAccent,
+                    fontWeight =
+                        FontWeight.Bold
+                )
+            }
         }
     )
 }
 
+@Composable
+private fun AppointmentDetailMiniCard(
+    modifier: Modifier,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String,
+    accent: Color,
+    background: Color
+) {
+
+    Row(
+        modifier =
+            modifier
+                .background(
+                    background,
+                    RoundedCornerShape(
+                        14.dp
+                    )
+                )
+                .padding(
+                    11.dp
+                ),
+        verticalAlignment =
+            Alignment.CenterVertically
+    ) {
+
+        Box(
+            modifier =
+                Modifier
+                    .size(
+                        31.dp
+                    )
+                    .background(
+                        accent.copy(
+                            alpha = 0.10f
+                        ),
+                        RoundedCornerShape(
+                            9.dp
+                        )
+                    ),
+            contentAlignment =
+                Alignment.Center
+        ) {
+
+            Icon(
+                imageVector =
+                    icon,
+                contentDescription =
+                    null,
+                tint =
+                    accent,
+                modifier =
+                    Modifier.size(
+                        16.dp
+                    )
+            )
+        }
+
+
+        Spacer(
+            modifier =
+                Modifier.width(
+                    7.dp
+                )
+        )
+
+
+        Column {
+
+            Text(
+                text =
+                    label,
+                color =
+                    PatientColors.TextSecondary,
+                fontSize =
+                    8.5.sp
+            )
+
+
+            Text(
+                text =
+                    value,
+                color =
+                    PatientColors.TextPrimary,
+                fontSize =
+                    10.5.sp,
+                fontWeight =
+                    FontWeight.Bold
+            )
+        }
+    }
+}
 @Composable
 private fun ReviewDialog(
     isSubmitting: Boolean,
     onDismiss: () -> Unit,
     onSubmit: (rating: Int, comment: String) -> Unit
 ) {
-    val teal = MaterialTheme.colorScheme.primary
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    var rating by remember { mutableIntStateOf(5) }
-    var comment by remember { mutableStateOf("") }
+
+    var rating by remember {
+        mutableIntStateOf(5)
+    }
+
+    var comment by remember {
+        mutableStateOf("")
+    }
+
+
+    val ratingText =
+        when (rating) {
+            1 -> "Poor"
+            2 -> "Fair"
+            3 -> "Good"
+            4 -> "Very good"
+            else -> "Excellent"
+        }
+
 
     AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Rate your visit", fontWeight = FontWeight.Bold) },
-        text = {
-            Column {
-                Row {
-                    repeat(5) { i ->
-                        Icon(
+        onDismissRequest = {
+            if (!isSubmitting) {
+                onDismiss()
+            }
+        },
+
+        shape =
+            RoundedCornerShape(
+                26.dp
+            ),
+
+        containerColor =
+            MaterialTheme.colorScheme.surface,
+
+        title = {
+
+            Column(
+                modifier =
+                    Modifier.fillMaxWidth(),
+                horizontalAlignment =
+                    Alignment.CenterHorizontally
+            ) {
+
+                Box(
+                    modifier =
+                        Modifier
+                            .size(
+                                58.dp
+                            )
+                            .background(
+                                PatientColors.ReviewCard,
+                                CircleShape
+                            ),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+
+                    Icon(
+                        imageVector =
                             Icons.Filled.Star,
-                            contentDescription = null,
-                            tint = if (i < rating) Color(0xFFF59E0B) else Color(0xFFE2E8F0),
-                            modifier = Modifier
-                                .size(32.dp)
-                                .padding(2.dp)
-                                .then(
-                                    Modifier.background(Color.Transparent)
-                                )
-                                .clickableStar { rating = i + 1 }
-                        )
-                    }
+                        contentDescription =
+                            null,
+                        tint =
+                            PatientColors.ReviewAccent,
+                        modifier =
+                            Modifier.size(
+                                29.dp
+                            )
+                    )
                 }
-                Spacer(modifier = Modifier.height(16.dp))
-                OutlinedTextField(
-                    value = comment,
-                    onValueChange = { comment = it },
-                    label = { Text("Comment (optional)") },
-                    modifier = Modifier.fillMaxWidth()
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            11.dp
+                        )
+                )
+
+
+                Text(
+                    text =
+                        "Rate your visit",
+                    color =
+                        PatientColors.TextPrimary,
+                    fontWeight =
+                        FontWeight.ExtraBold,
+                    fontSize =
+                        18.sp
+                )
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            3.dp
+                        )
+                )
+
+
+                Text(
+                    text =
+                        "How was your consultation?",
+                    color =
+                        PatientColors.TextSecondary,
+                    fontSize =
+                        10.5.sp
                 )
             }
         },
-        confirmButton = {
-            TextButton(onClick = { onSubmit(rating, comment) }, enabled = !isSubmitting) {
-                Text(if (isSubmitting) "Submitting…" else "Submit Review", color = teal, fontWeight = FontWeight.Bold)
+
+        text = {
+
+            Column(
+                modifier =
+                    Modifier.fillMaxWidth(),
+                horizontalAlignment =
+                    Alignment.CenterHorizontally
+            ) {
+
+                /*
+                 * Rating card
+                 */
+                Card(
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    shape =
+                        RoundedCornerShape(
+                            18.dp
+                        ),
+                    colors =
+                        CardDefaults.cardColors(
+                            containerColor =
+                                PatientColors.ReviewCard
+                        ),
+                    elevation =
+                        CardDefaults.cardElevation(
+                            defaultElevation = 0.dp
+                        )
+                ) {
+
+                    Column(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    15.dp
+                                ),
+                        horizontalAlignment =
+                            Alignment.CenterHorizontally
+                    ) {
+
+                        Row(
+                            horizontalArrangement =
+                                Arrangement.Center,
+                            verticalAlignment =
+                                Alignment.CenterVertically
+                        ) {
+
+                            repeat(5) { index ->
+
+                                Icon(
+                                    imageVector =
+                                        Icons.Filled.Star,
+                                    contentDescription =
+                                        "Rate ${index + 1} stars",
+                                    tint =
+                                        if (
+                                            index < rating
+                                        ) {
+                                            PatientColors.ReviewAccent
+                                        } else {
+                                            Color(0xFFE2E8F0)
+                                        },
+                                    modifier =
+                                        Modifier
+                                            .size(
+                                                39.dp
+                                            )
+                                            .padding(
+                                                3.dp
+                                            )
+                                            .clickableStar {
+                                                rating =
+                                                    index + 1
+                                            }
+                                )
+                            }
+                        }
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(
+                                    7.dp
+                                )
+                        )
+
+
+                        Text(
+                            text =
+                                "$rating / 5 • $ratingText",
+                            color =
+                                PatientColors.ReviewAccent,
+                            fontWeight =
+                                FontWeight.Bold,
+                            fontSize =
+                                11.5.sp
+                        )
+                    }
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            14.dp
+                        )
+                )
+
+
+                /*
+                 * Comment
+                 */
+                OutlinedTextField(
+                    value =
+                        comment,
+
+                    onValueChange = {
+                        comment = it
+                    },
+
+                    modifier =
+                        Modifier.fillMaxWidth(),
+
+                    label = {
+                        Text(
+                            "Share your experience"
+                        )
+                    },
+
+                    placeholder = {
+                        Text(
+                            text =
+                                "Tell us what went well or what could be improved.",
+                            color =
+                                PatientColors.TextSecondary,
+                            fontSize =
+                                10.5.sp
+                        )
+                    },
+
+                    minLines =
+                        3,
+
+                    maxLines =
+                        5,
+
+                    shape =
+                        RoundedCornerShape(
+                            16.dp
+                        ),
+
+                    enabled =
+                        !isSubmitting,
+
+                    colors =
+                        OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor =
+                                PatientColors.ReviewAccent,
+
+                            cursorColor =
+                                PatientColors.ReviewAccent,
+
+                            focusedLabelColor =
+                                PatientColors.ReviewAccent,
+
+                            unfocusedBorderColor =
+                                PatientColors.ReviewAccent
+                                    .copy(alpha = 0.18f)
+                        ),
+
+                    supportingText = {
+
+                        Row(
+                            modifier =
+                                Modifier.fillMaxWidth()
+                        ) {
+
+                            Text(
+                                text =
+                                    "Optional",
+                                color =
+                                    PatientColors.TextSecondary,
+                                fontSize =
+                                    9.5.sp
+                            )
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.weight(1f)
+                            )
+
+
+                            Text(
+                                text =
+                                    "${comment.length} characters",
+                                color =
+                                    PatientColors.TextSecondary,
+                                fontSize =
+                                    9.5.sp
+                            )
+                        }
+                    }
+                )
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            8.dp
+                        )
+                )
+
+
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .background(
+                                PatientColors.PurpleSoft,
+                                RoundedCornerShape(
+                                    14.dp
+                                )
+                            )
+                            .padding(
+                                11.dp
+                            ),
+                    verticalAlignment =
+                        Alignment.Top
+                ) {
+
+                    Text(
+                        text =
+                            "Your review helps other patients understand what to expect.",
+                        modifier =
+                            Modifier.weight(1f),
+                        color =
+                            PatientColors.TextSecondary,
+                        fontSize =
+                            10.sp,
+                        lineHeight =
+                            14.sp
+                    )
+                }
             }
         },
+
+        confirmButton = {
+
+            Button(
+                onClick = {
+                    onSubmit(
+                        rating,
+                        comment.trim()
+                    )
+                },
+
+                enabled =
+                    !isSubmitting,
+
+                shape =
+                    RoundedCornerShape(
+                        14.dp
+                    ),
+
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor =
+                            PatientColors.ReviewAccent,
+                        contentColor =
+                            Color.White
+                    )
+            ) {
+
+                if (isSubmitting) {
+
+                    CircularProgressIndicator(
+                        modifier =
+                            Modifier.size(
+                                17.dp
+                            ),
+                        strokeWidth =
+                            2.dp,
+                        color =
+                            Color.White
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(
+                                7.dp
+                            )
+                    )
+
+
+                    Text(
+                        text =
+                            "Submitting..."
+                    )
+
+                } else {
+
+                    Icon(
+                        imageVector =
+                            Icons.Filled.Star,
+                        contentDescription =
+                            null,
+                        modifier =
+                            Modifier.size(
+                                17.dp
+                            )
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(
+                                6.dp
+                            )
+                    )
+
+
+                    Text(
+                        text =
+                            "Submit review",
+                        fontWeight =
+                            FontWeight.Bold
+                    )
+                }
+            }
+        },
+
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel", color = muted) }
+
+            TextButton(
+                onClick =
+                    onDismiss,
+                enabled =
+                    !isSubmitting
+            ) {
+
+                Text(
+                    text =
+                        "Cancel",
+                    color =
+                        PatientColors.TextSecondary,
+                    fontWeight =
+                        FontWeight.SemiBold
+                )
+            }
         }
     )
 }
 
 @SuppressLint("SuspiciousModifierThen")
-private fun Modifier.clickableStar(onClick: () -> Unit): Modifier =
-    this.then(clickable(onClick = onClick))
+private fun Modifier.clickableStar(
+    onClick: () -> Unit
+): Modifier =
+    this.then(
+        clickable(
+            onClick = onClick
+        )
+    )
 
 @Composable
 private fun AppointmentDetailCard(
@@ -366,17 +2095,19 @@ private fun AppointmentDetailCard(
     onLeaveReview: () -> Unit,
     onClick: () -> Unit
 ) {
+
     var doctor by remember {
         mutableStateOf<DoctorProfile?>(null)
     }
-    val ink = MaterialTheme.colorScheme.onSurface
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val teal = MaterialTheme.colorScheme.primary
+
 
     LaunchedEffect(appt.doctor_id) {
-        val doctorId = appt.doctor_id
+
+        val doctorId =
+            appt.doctor_id
 
         if (doctorId != null) {
+
             fetchDoctor(doctorId)
                 .onSuccess {
                     doctor = it
@@ -384,51 +2115,169 @@ private fun AppointmentDetailCard(
         }
     }
 
-    val statusColor = when (appt.status) {
-        "confirmed" -> Color(0xFF10B981)
-        "pending" -> Color(0xFFF59E0B)
-        "rescheduled" -> Color(0xFF3B82F6)
-        "cancelled" -> Color(0xFFEF4444)
-        else -> Color(0xFF94A3B8)
-    }
-    val statusBg = when (appt.status) {
-        "confirmed" -> Color(0xFFF0FDF4)
-        "pending" -> Color(0xFFFFFBEB)
-        "rescheduled" -> Color(0xFFEFF6FF)
-        "cancelled" -> Color(0xFFFEF2F2)
-        else -> Color(0xFFF8FAFF)
-    }
-    val statusLabel = when (appt.status) {
-        "confirmed" -> "Accepted & Paid"
-        "cancelled" -> "Rejected & Refunded"
-        else -> appt.status?.replaceFirstChar { it.uppercase() } ?: "Unknown"
-    }
+
+    val statusColor =
+        when (appt.status) {
+
+            "confirmed" ->
+                PatientColors.SuccessAccent
+
+            "pending" ->
+                PatientColors.ReviewAccent
+
+            "rescheduled" ->
+                PatientColors.AppointmentAccent
+
+            "cancelled" ->
+                PatientColors.Red
+
+            else ->
+                PatientColors.TextSecondary
+        }
+
+
+    val statusBackground =
+        when (appt.status) {
+
+            "confirmed" ->
+                PatientColors.SuccessCard
+
+            "pending" ->
+                PatientColors.ReviewCard
+
+            "rescheduled" ->
+                PatientColors.AppointmentCard
+
+            "cancelled" ->
+                PatientColors.RedSoft
+
+            else ->
+                PatientColors.NeutralCard
+        }
+
+
+    val statusLabel =
+        when (appt.status) {
+
+            "confirmed" ->
+                "Accepted & Paid"
+
+            "cancelled" ->
+                "Rejected & Refunded"
+
+            else ->
+                appt.status
+                    ?.replaceFirstChar {
+                        it.uppercase()
+                    }
+                    ?: "Unknown"
+        }
+
+
+    val isOnline =
+        appt.appointment_type
+            .equals(
+                "online",
+                ignoreCase = true
+            )
+
+
+    val appointmentAccent =
+        if (isOnline) {
+            PatientColors.AppointmentAccent
+        } else {
+            PatientColors.DoctorAccent
+        }
+
+
+    val appointmentBackground =
+        if (isOnline) {
+            PatientColors.AppointmentCard
+        } else {
+            PatientColors.DoctorCard
+        }
+
 
     Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(14.dp),
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(
+                    onClick = onClick
+                ),
+
+        shape =
+            RoundedCornerShape(
+                21.dp
+            ),
+
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    MaterialTheme.colorScheme.surface
+            ),
+
+        border =
+            BorderStroke(
+                width = 1.dp,
+                color =
+                    appointmentAccent
+                        .copy(alpha = 0.10f)
+            ),
+
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 1.dp
+            )
     ) {
-        Column(modifier = Modifier.padding(18.dp)) {
-            doctor?.let { doctorInfo ->
-                Row(
-                    modifier = Modifier
+
+        Column {
+
+            /*
+             * Small coloured accent strip
+             */
+            Box(
+                modifier =
+                    Modifier
                         .fillMaxWidth()
-                        .clickable {
-                            val doctorId = appt.doctor_id
-                            if (doctorId != null) {
-                                onViewDoctorProfile(doctorId)
-                            }
-                        }
-                        .padding(vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .background(teal, CircleShape),
-                        contentAlignment = Alignment.Center
+                        .height(
+                            4.dp
+                        )
+                        .background(
+                            appointmentAccent
+                        )
+            )
+
+
+            Column(
+                modifier =
+                    Modifier.padding(
+                        16.dp
+                    )
+            ) {
+
+                /*
+                 * Doctor section
+                 */
+                doctor?.let { doctorInfo ->
+
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable {
+
+                                    appt.doctor_id
+                                        ?.let {
+                                            onViewDoctorProfile(
+                                                it
+                                            )
+                                        }
+                                },
+                        verticalAlignment =
+                            Alignment.CenterVertically
                     ) {
+
                         val firstInitial =
                             doctorInfo.name
                                 ?.trim()
@@ -443,67 +2292,593 @@ private fun AppointmentDetailCard(
                                 ?.uppercaseChar()
                                 ?: 'R'
 
-                        Text(
-                            text = "$firstInitial$lastInitial",
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold
+
+                        Box(
+                            modifier =
+                                Modifier
+                                    .size(
+                                        48.dp
+                                    )
+                                    .background(
+                                        appointmentBackground,
+                                        CircleShape
+                                    ),
+                            contentAlignment =
+                                Alignment.Center
+                        ) {
+
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .size(
+                                            39.dp
+                                        )
+                                        .background(
+                                            appointmentAccent,
+                                            CircleShape
+                                        ),
+                                contentAlignment =
+                                    Alignment.Center
+                            ) {
+
+                                Text(
+                                    text =
+                                        "$firstInitial$lastInitial",
+                                    color =
+                                        Color.White,
+                                    fontSize =
+                                        14.sp,
+                                    fontWeight =
+                                        FontWeight.ExtraBold
+                                )
+                            }
+                        }
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.width(
+                                    11.dp
+                                )
                         )
-                    }
 
-                    Spacer(modifier = Modifier.size(12.dp))
 
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Dr. ${doctorInfo.name ?: ""} ${doctorInfo.surname ?: ""}".trim(),
-                            color = ink,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Column(
+                            modifier =
+                                Modifier.weight(1f)
+                        ) {
 
-                        doctorInfo.discipline?.let { discipline ->
                             Text(
-                                text = discipline,
-                                color = muted,
-                                fontSize = 12.sp
+                                text =
+                                    "Dr. ${
+                                        doctorInfo.name ?: ""
+                                    } ${
+                                        doctorInfo.surname ?: ""
+                                    }"
+                                        .trim(),
+                                color =
+                                    PatientColors.TextPrimary,
+                                fontSize =
+                                    14.5.sp,
+                                fontWeight =
+                                    FontWeight.ExtraBold
+                            )
+
+
+                            doctorInfo.discipline
+                                ?.takeIf {
+                                    it.isNotBlank()
+                                }
+                                ?.let { discipline ->
+
+                                    Spacer(
+                                        modifier =
+                                            Modifier.height(
+                                                2.dp
+                                            )
+                                    )
+
+
+                                    Text(
+                                        text =
+                                            discipline,
+                                        color =
+                                            PatientColors.TextSecondary,
+                                        fontSize =
+                                            10.5.sp
+                                    )
+                                }
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(
+                                        3.dp
+                                    )
+                            )
+
+
+                            Text(
+                                text =
+                                    "View doctor profile",
+                                color =
+                                    appointmentAccent,
+                                fontSize =
+                                    10.sp,
+                                fontWeight =
+                                    FontWeight.Bold
                             )
                         }
 
+
+                        Icon(
+                            imageVector =
+                                Icons.Outlined.ChevronRight,
+                            contentDescription =
+                                "View doctor",
+                            tint =
+                                PatientColors.TextSecondary,
+                            modifier =
+                                Modifier.size(
+                                    20.dp
+                                )
+                        )
+                    }
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                14.dp
+                            )
+                    )
+                }
+
+
+                /*
+                 * Date + status
+                 */
+                Row(
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+
+                    Row(
+                        modifier =
+                            Modifier.weight(1f),
+                        verticalAlignment =
+                            Alignment.CenterVertically
+                    ) {
+
+                        Box(
+                            modifier =
+                                Modifier
+                                    .size(
+                                        33.dp
+                                    )
+                                    .background(
+                                        appointmentBackground,
+                                        RoundedCornerShape(
+                                            10.dp
+                                        )
+                                    ),
+                            contentAlignment =
+                                Alignment.Center
+                        ) {
+
+                            Icon(
+                                imageVector =
+                                    Icons.Outlined.CalendarMonth,
+                                contentDescription =
+                                    null,
+                                tint =
+                                    appointmentAccent,
+                                modifier =
+                                    Modifier.size(
+                                        17.dp
+                                    )
+                            )
+                        }
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.width(
+                                    8.dp
+                                )
+                        )
+
+
+                        Column {
+
+                            Text(
+                                text =
+                                    appt.date ?: "-",
+                                color =
+                                    PatientColors.TextPrimary,
+                                fontSize =
+                                    12.5.sp,
+                                fontWeight =
+                                    FontWeight.Bold
+                            )
+
+
+                            Text(
+                                text =
+                                    appt.time ?: "-",
+                                color =
+                                    PatientColors.TextSecondary,
+                                fontSize =
+                                    10.sp
+                            )
+                        }
+                    }
+
+
+                    Box(
+                        modifier =
+                            Modifier
+                                .background(
+                                    statusBackground,
+                                    RoundedCornerShape(
+                                        20.dp
+                                    )
+                                )
+                                .padding(
+                                    horizontal = 9.dp,
+                                    vertical = 5.dp
+                                )
+                    ) {
+
                         Text(
-                            text = "View doctor profile",
-                            color = teal,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold
+                            text =
+                                statusLabel,
+                            color =
+                                statusColor,
+                            fontSize =
+                                9.5.sp,
+                            fontWeight =
+                                FontWeight.Bold
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
-            }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("📅 ${appt.date ?: "-"}   🕐 ${appt.time ?: "-"}", color = ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                Box(modifier = Modifier.background(statusBg, RoundedCornerShape(20.dp)).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                    Text(statusLabel, color = statusColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            12.dp
+                        )
+                )
+
+
+                /*
+                 * Visit type
+                 */
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .background(
+                                appointmentBackground,
+                                RoundedCornerShape(
+                                    14.dp
+                                )
+                            )
+                            .padding(
+                                11.dp
+                            ),
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+
+                    Icon(
+                        imageVector =
+                            if (isOnline) {
+                                Icons.Outlined.VideoCall
+                            } else {
+                                Icons.Outlined.LocationOn
+                            },
+                        contentDescription =
+                            null,
+                        tint =
+                            appointmentAccent,
+                        modifier =
+                            Modifier.size(
+                                18.dp
+                            )
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(
+                                8.dp
+                            )
+                    )
+
+
+                    Text(
+                        text =
+                            if (isOnline) {
+                                "Online consultation"
+                            } else {
+                                "In-person appointment"
+                            },
+                        color =
+                            appointmentAccent,
+                        fontSize =
+                            11.sp,
+                        fontWeight =
+                            FontWeight.Bold
+                    )
                 }
-            }
-            Spacer(modifier = Modifier.height(6.dp))
-            Text("📝 ${appt.reason ?: "General consultation"}", color = muted, fontSize = 13.sp)
-            appt.payment_method?.let {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("💳 Paid via $it", color = muted, fontSize = 13.sp)
-            }
-            appt.amount_paid?.let {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("💰 R %.2f".format(it), color = muted, fontSize = 13.sp)
-            }
-            cancellationExplanation(appt)?.let {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(it, color = muted, fontSize = 12.sp, lineHeight = 16.sp)
-            }
-            if (showLeaveReview) {
-                Spacer(modifier = Modifier.height(10.dp))
-                TextButton(onClick = onLeaveReview) {
-                    Text("Leave a Review", color = teal, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            11.dp
+                        )
+                )
+
+
+                /*
+                 * Reason
+                 */
+                Row(
+                    verticalAlignment =
+                        Alignment.Top
+                ) {
+
+                    Icon(
+                        imageVector =
+                            Icons.Outlined.Schedule,
+                        contentDescription =
+                            null,
+                        tint =
+                            PatientColors.TextSecondary,
+                        modifier =
+                            Modifier.size(
+                                16.dp
+                            )
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(
+                                7.dp
+                            )
+                    )
+
+
+                    Column(
+                        modifier =
+                            Modifier.weight(1f)
+                    ) {
+
+                        Text(
+                            text =
+                                "Reason for visit",
+                            color =
+                                PatientColors.TextSecondary,
+                            fontSize =
+                                9.5.sp,
+                            fontWeight =
+                                FontWeight.SemiBold
+                        )
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(
+                                    2.dp
+                                )
+                        )
+
+
+                        Text(
+                            text =
+                                appt.reason
+                                    ?: "General consultation",
+                            color =
+                                PatientColors.TextPrimary,
+                            fontSize =
+                                11.5.sp,
+                            lineHeight =
+                                16.sp
+                        )
+                    }
+                }
+
+
+                /*
+                 * Payment details
+                 */
+                if (
+                    appt.payment_method != null ||
+                    appt.amount_paid != null
+                ) {
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                11.dp
+                            )
+                    )
+
+
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    PatientColors.SuccessCard,
+                                    RoundedCornerShape(
+                                        13.dp
+                                    )
+                                )
+                                .padding(
+                                    10.dp
+                                ),
+                        verticalAlignment =
+                            Alignment.CenterVertically
+                    ) {
+
+                        Icon(
+                            imageVector =
+                                Icons.Outlined.Payments,
+                            contentDescription =
+                                null,
+                            tint =
+                                PatientColors.SuccessAccent,
+                            modifier =
+                                Modifier.size(
+                                    17.dp
+                                )
+                        )
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.width(
+                                    7.dp
+                                )
+                        )
+
+
+                        Column(
+                            modifier =
+                                Modifier.weight(1f)
+                        ) {
+
+                            Text(
+                                text =
+                                    appt.payment_method
+                                        ?.let {
+                                            "Paid via $it"
+                                        }
+                                        ?: "Payment",
+                                color =
+                                    PatientColors.TextSecondary,
+                                fontSize =
+                                    9.5.sp
+                            )
+
+
+                            appt.amount_paid
+                                ?.let { amount ->
+
+                                    Text(
+                                        text =
+                                            "R %.2f"
+                                                .format(
+                                                    amount
+                                                ),
+                                        color =
+                                            PatientColors.SuccessAccent,
+                                        fontSize =
+                                            12.sp,
+                                        fontWeight =
+                                            FontWeight.ExtraBold
+                                    )
+                                }
+                        }
+                    }
+                }
+
+
+                cancellationExplanation(appt)
+                    ?.let { explanation ->
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(
+                                    10.dp
+                                )
+                        )
+
+
+                        Box(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        PatientColors.RedSoft,
+                                        RoundedCornerShape(
+                                            13.dp
+                                        )
+                                    )
+                                    .padding(
+                                        10.dp
+                                    )
+                        ) {
+
+                            Text(
+                                text =
+                                    explanation,
+                                color =
+                                    PatientColors.TextSecondary,
+                                fontSize =
+                                    10.5.sp,
+                                lineHeight =
+                                    15.sp
+                            )
+                        }
+                    }
+
+
+                if (showLeaveReview) {
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                10.dp
+                            )
+                    )
+
+
+                    TextButton(
+                        onClick =
+                            onLeaveReview
+                    ) {
+
+                        Icon(
+                            imageVector =
+                                Icons.Filled.Star,
+                            contentDescription =
+                                null,
+                            tint =
+                                PatientColors.ReviewAccent,
+                            modifier =
+                                Modifier.size(
+                                    17.dp
+                                )
+                        )
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.width(
+                                    6.dp
+                                )
+                        )
+
+
+                        Text(
+                            text =
+                                "Leave a review",
+                            color =
+                                PatientColors.ReviewAccent,
+                            fontSize =
+                                11.5.sp,
+                            fontWeight =
+                                FontWeight.Bold
+                        )
+                    }
                 }
             }
         }

@@ -44,6 +44,7 @@ import io.getstream.video.android.compose.theme.VideoTheme
 import io.getstream.video.android.compose.ui.components.call.activecall.CallContent
 import io.getstream.video.android.core.Call
 import io.getstream.video.android.core.GEO
+import io.getstream.video.android.core.StreamVideo
 import io.getstream.video.android.core.StreamVideoBuilder
 import io.getstream.video.android.model.User
 import kotlinx.coroutines.delay
@@ -114,6 +115,15 @@ fun CallScreen(
                 return@LaunchedEffect
             }
 
+            // Always tear down any previous client before building a new one —
+            // otherwise retries and re-entering this screen leave stale
+            // client instances around, which corrupts call.state.
+            try {
+                StreamVideo.removeClient()
+            } catch (e: Exception) {
+                // No client was installed yet — fine, nothing to remove.
+            }
+
             val user = User(id = tokenResponse.userId, name = displayName, role = "user")
             val client = StreamVideoBuilder(
                 context = context.applicationContext,
@@ -128,7 +138,7 @@ fun CallScreen(
 
             if (joinResult.isFailure) {
                 val cause = joinResult.errorOrNull()
-                android.util.Log.e("CallScreen", "Stream join failed: $cause")
+                android.util.Log.e("CallScreen", "Stream join failed")
                 screenState = CallScreenState.Error(
                     "Could not join the call.\n\nDetails: ${cause?.message ?: cause.toString()}"
                 )
@@ -189,6 +199,11 @@ fun CallScreen(
     DisposableEffect(Unit) {
         onDispose {
             call?.leave()
+            try {
+                StreamVideo.removeClient()
+            } catch (e: Exception) {
+
+            }
         }
     }
 

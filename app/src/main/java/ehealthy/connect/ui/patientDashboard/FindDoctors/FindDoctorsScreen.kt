@@ -72,7 +72,27 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
-
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.graphics.Color
+import ehealthy.connect.ui.patientDashboard.PatientColors
+import ehealthy.connect.ui.patientDashboard.patientPressAnimation
+import androidx.compose.material3.Card
+import androidx.compose.material.icons.outlined.HealthAndSafety
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.style.TextAlign
 /**
  * This model intentionally keeps the Supabase database column names
  * because MainActivity currently decodes directly into DoctorListing.
@@ -524,13 +544,34 @@ fun FindDoctorsScreen(
                         ),
 
                     colors =
-                        OutlinedTextFieldDefaults
-                            .colors(
-                                focusedBorderColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .primary
-                            )
+                        OutlinedTextFieldDefaults.colors(
+
+                            focusedBorderColor =
+                                PatientColors.DoctorAccent,
+
+                            unfocusedBorderColor =
+                                PatientColors.DoctorAccent
+                                    .copy(
+                                        alpha = 0.16f
+                                    ),
+
+                            focusedContainerColor =
+                                PatientColors.DoctorCard
+                                    .copy(
+                                        alpha = 0.55f
+                                    ),
+
+                            unfocusedContainerColor =
+                                MaterialTheme
+                                    .colorScheme
+                                    .surface,
+
+                            focusedLeadingIconColor =
+                                PatientColors.DoctorAccent,
+
+                            cursorColor =
+                                PatientColors.DoctorAccent
+                        )
                 )
 
                 Spacer(
@@ -824,105 +865,225 @@ private fun DoctorDiscoveryHeader(
                 )
                 .clip(
                     RoundedCornerShape(
-                        24.dp
+                        28.dp
                     )
                 )
                 .background(
-                    Brush.linearGradient(
-                        listOf(
-                            MaterialTheme
-                                .colorScheme
-                                .primary,
-
-                            MaterialTheme
-                                .colorScheme
-                                .tertiary
-                        )
-                    )
+                    PatientColors
+                        .ConsultationGradient
                 )
                 .padding(
-                    20.dp
+                    22.dp
                 )
     ) {
 
-        Column {
-
-            Text(
-                text =
-                    "Care that fits your day",
-                color =
-                    MaterialTheme
-                        .colorScheme
-                        .onPrimary,
-                fontWeight =
-                    FontWeight.Bold,
-                fontSize =
-                    22.sp
-            )
-
-            Spacer(
-                modifier =
-                    Modifier.height(
-                        6.dp
+        /*
+         * Decorative circle
+         */
+        Box(
+            modifier =
+                Modifier
+                    .align(
+                        Alignment.TopEnd
                     )
-            )
-
-            Text(
-                text =
-                    "Compare specialists, view their fees and choose who you want to see.",
-                color =
-                    MaterialTheme
-                        .colorScheme
-                        .onPrimary
-                        .copy(
-                            alpha = 0.88f
-                        ),
-                fontSize =
-                    13.sp,
-                lineHeight =
-                    18.sp
-            )
-
-            Spacer(
-                modifier =
-                    Modifier.height(
-                        14.dp
+                    .size(
+                        105.dp
                     )
-            )
-
-            AssistChip(
-
-                onClick = {},
-
-                label = {
-
-                    Text(
-                        "$doctorCount approved doctor${
-                            if (
-                                doctorCount == 1
-                            ) {
-                                ""
-                            } else {
-                                "s"
-                            }
-                        }"
+                    .clip(
+                        CircleShape
                     )
-                },
+                    .background(
+                        Color.White.copy(
+                            alpha = 0.08f
+                        )
+                    )
+        )
 
-                leadingIcon = {
+
+        Column(
+            modifier =
+                Modifier.fillMaxWidth(
+                    0.82f
+                )
+        ) {
+
+            Row(
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+
+                Box(
+                    modifier =
+                        Modifier
+                            .size(
+                                34.dp
+                            )
+                            .clip(
+                                RoundedCornerShape(
+                                    11.dp
+                                )
+                            )
+                            .background(
+                                Color.White.copy(
+                                    alpha = 0.16f
+                                )
+                            ),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
 
                     Icon(
                         imageVector =
-                            Icons.Outlined.Verified,
+                            Icons.Outlined.Search,
                         contentDescription =
                             null,
+                        tint =
+                            Color.White,
                         modifier =
                             Modifier.size(
                                 18.dp
                             )
                     )
                 }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.width(
+                            9.dp
+                        )
+                )
+
+
+                Text(
+                    text =
+                        "FIND CARE",
+                    color =
+                        Color.White.copy(
+                            alpha = 0.90f
+                        ),
+                    fontSize =
+                        10.sp,
+                    fontWeight =
+                        FontWeight.Bold,
+                    letterSpacing =
+                        0.8.sp
+                )
+            }
+
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        15.dp
+                    )
             )
+
+
+            Text(
+                text =
+                    "Find the right\ndoctor for you",
+                color =
+                    Color.White,
+                fontWeight =
+                    FontWeight.ExtraBold,
+                fontSize =
+                    24.sp,
+                lineHeight =
+                    28.sp
+            )
+
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        8.dp
+                    )
+            )
+
+
+            Text(
+                text =
+                    "Browse approved healthcare professionals, compare their services and choose your preferred doctor.",
+                color =
+                    Color.White.copy(
+                        alpha = 0.84f
+                    ),
+                fontSize =
+                    12.5.sp,
+                lineHeight =
+                    18.sp
+            )
+
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        16.dp
+                    )
+            )
+
+
+            Row(
+                modifier =
+                    Modifier
+                        .clip(
+                            RoundedCornerShape(
+                                20.dp
+                            )
+                        )
+                        .background(
+                            Color.White.copy(
+                                alpha = 0.15f
+                            )
+                        )
+                        .padding(
+                            horizontal = 11.dp,
+                            vertical = 7.dp
+                        ),
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+
+                Icon(
+                    imageVector =
+                        Icons.Outlined.Verified,
+                    contentDescription =
+                        null,
+                    tint =
+                        Color.White,
+                    modifier =
+                        Modifier.size(
+                            16.dp
+                        )
+                )
+
+
+                Spacer(
+                    modifier =
+                        Modifier.width(
+                            6.dp
+                        )
+                )
+
+
+                Text(
+                    text =
+                        "$doctorCount approved doctor${
+                            if (doctorCount == 1) {
+                                ""
+                            } else {
+                                "s"
+                            }
+                        }",
+                    color =
+                        Color.White,
+                    fontSize =
+                        11.sp,
+                    fontWeight =
+                        FontWeight.Bold
+                )
+            }
         }
     }
 }
@@ -944,16 +1105,15 @@ private fun SpecialtyFilters(
                 .padding(
                     start = 16.dp,
                     end = 16.dp,
-                    bottom = 8.dp
+                    bottom = 10.dp
                 ),
         horizontalArrangement =
             Arrangement.spacedBy(
-                8.dp
+                9.dp
             )
     ) {
 
         FilterChip(
-
             selected =
                 selectedSpecialty == null,
 
@@ -964,43 +1124,132 @@ private fun SpecialtyFilters(
             },
 
             label = {
+
                 Text(
-                    "All"
+                    text = "All",
+                    fontWeight =
+                        if (
+                            selectedSpecialty == null
+                        ) {
+                            FontWeight.Bold
+                        } else {
+                            FontWeight.Medium
+                        }
                 )
-            }
+            },
+
+            leadingIcon = {
+
+                Icon(
+                    imageVector =
+                        Icons.Outlined.HealthAndSafety,
+                    contentDescription =
+                        null,
+                    modifier =
+                        Modifier.size(
+                            16.dp
+                        )
+                )
+            },
+
+            colors =
+                FilterChipDefaults
+                    .filterChipColors(
+
+                        containerColor =
+                            MaterialTheme
+                                .colorScheme
+                                .surface,
+
+                        labelColor =
+                            PatientColors
+                                .TextSecondary,
+
+                        iconColor =
+                            PatientColors
+                                .TextSecondary,
+
+                        selectedContainerColor =
+                            PatientColors
+                                .DoctorAccent,
+
+                        selectedLabelColor =
+                            Color.White,
+
+                        selectedLeadingIconColor =
+                            Color.White
+                    ),
+
+            shape =
+                RoundedCornerShape(
+                    18.dp
+                )
         )
 
-        specialties
-            .forEach { specialty ->
 
-                FilterChip(
+        specialties.forEach { specialty ->
 
-                    selected =
-                        selectedSpecialty ==
-                                specialty,
+            val selected =
+                selectedSpecialty ==
+                        specialty
 
-                    onClick = {
 
-                        onSpecialtySelected(
-                            if (
-                                selectedSpecialty ==
-                                specialty
-                            ) {
-                                null
-                            } else {
-                                specialty
-                            }
-                        )
-                    },
+            FilterChip(
+                selected =
+                    selected,
 
-                    label = {
+                onClick = {
 
-                        Text(
+                    onSpecialtySelected(
+                        if (selected) {
+                            null
+                        } else {
                             specialty
-                        )
-                    }
-                )
-            }
+                        }
+                    )
+                },
+
+                label = {
+
+                    Text(
+                        text =
+                            specialty,
+                        fontWeight =
+                            if (selected) {
+                                FontWeight.Bold
+                            } else {
+                                FontWeight.Medium
+                            },
+                        maxLines = 1
+                    )
+                },
+
+                colors =
+                    FilterChipDefaults
+                        .filterChipColors(
+
+                            containerColor =
+                                PatientColors
+                                    .DoctorCard,
+
+                            labelColor =
+                                PatientColors
+                                    .DoctorAccent,
+
+                            selectedContainerColor =
+                                PatientColors
+                                    .DoctorAccent,
+
+                            selectedLabelColor =
+                                Color.White
+                        ),
+
+                shape =
+                    RoundedCornerShape(
+                        18.dp
+                    )
+            )
+        }
     }
 }
 
@@ -1011,400 +1260,588 @@ private fun ModernDoctorCard(
     onBook: () -> Unit
 ) {
 
-    ElevatedCard(
+    val interactionSource =
+        remember {
+            MutableInteractionSource()
+        }
 
+
+    Card(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .animateContentSize(),
-
-        colors =
-            CardDefaults
-                .elevatedCardColors(
-                    containerColor =
-                        MaterialTheme
-                            .colorScheme
-                            .surface
+                .animateContentSize()
+                .patientPressAnimation(
+                    interactionSource
                 ),
+        shape =
+            RoundedCornerShape(
+                25.dp
+            ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    PatientColors.DoctorCard
+            ),
 
         elevation =
-            CardDefaults
-                .elevatedCardElevation(
-                    defaultElevation =
-                        2.dp
-                )
+            CardDefaults.cardElevation(
+                defaultElevation = 2.dp,
+                pressedElevation = 5.dp
+            ),
+        border =
+            BorderStroke(
+                width =
+                    1.dp,
+                color =
+                    PatientColors
+                        .DoctorAccent
+                        .copy(
+                            alpha = 0.10f
+                        )
+            )
     ) {
 
-        Column(
-            modifier =
-                Modifier.padding(
-                    16.dp
-                )
-        ) {
+        Column {
 
-            Row(
+            /*
+             * Teal accent strip
+             */
+            Box(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .clickable(
-                            onClick =
-                                onProfile
-                        ),
-                verticalAlignment =
-                    Alignment.CenterVertically
+                        .height(
+                            4.dp
+                        )
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(
+                                    PatientColors
+                                        .DoctorAccent,
+                                    PatientColors
+                                        .Primary,
+                                    PatientColors
+                                        .AppointmentAccent
+                                )
+                            )
+                        )
+            )
+
+
+            Column(
+                modifier =
+                    Modifier.padding(
+                        17.dp
+                    )
             ) {
 
-                DoctorAvatar(
-                    doctor =
-                        doctor
-                )
-
-                Spacer(
+                /*
+                 * Doctor header
+                 */
+                Row(
                     modifier =
-                        Modifier.width(
-                            14.dp
-                        )
-                )
-
-                Column(
-                    modifier =
-                        Modifier.weight(
-                            1f
-                        )
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable(
+                                interactionSource =
+                                    interactionSource,
+                                indication =
+                                    null,
+                                onClick =
+                                    onProfile
+                            ),
+                    verticalAlignment =
+                        Alignment.CenterVertically
                 ) {
 
-                    Row(
-                        verticalAlignment =
-                            Alignment.CenterVertically
-                    ) {
-
-                        Text(
-                            text =
-                                doctor.fullName,
-                            fontWeight =
-                                FontWeight.Bold,
-                            fontSize =
-                                16.sp,
-                            maxLines =
-                                1,
-                            overflow =
-                                TextOverflow.Ellipsis
-                        )
-
-                        if (
-                            doctor.verification_status ==
-                            "approved"
-                        ) {
-
-                            Spacer(
-                                modifier =
-                                    Modifier.width(
-                                        5.dp
-                                    )
-                            )
-
-                            Icon(
-                                imageVector =
-                                    Icons.Outlined.Verified,
-                                contentDescription =
-                                    "Verified doctor",
-                                tint =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .primary,
-                                modifier =
-                                    Modifier.size(
-                                        17.dp
-                                    )
-                            )
-                        }
-                    }
-
-                    Text(
-                        text =
-                            doctor.specialty,
-                        color =
-                            MaterialTheme
-                                .colorScheme
-                                .primary,
-                        fontWeight =
-                            FontWeight.SemiBold,
-                        fontSize =
-                            13.sp
+                    DoctorAvatar(
+                        doctor = doctor
                     )
 
-                    doctor
-                        .years_of_experience
-                        ?.takeIf {
-                            it > 0
-                        }
-                        ?.let { years ->
 
-                            Spacer(
-                                modifier =
-                                    Modifier.height(
-                                        3.dp
-                                    )
+                    Spacer(
+                        modifier =
+                            Modifier.width(
+                                14.dp
+                            )
+                    )
+
+
+                    Column(
+                        modifier =
+                            Modifier.weight(
+                                1f
+                            )
+                    ) {
+
+                        Row(
+                            verticalAlignment =
+                                Alignment.CenterVertically
+                        ) {
+
+                            Text(
+                                text =
+                                    doctor.fullName,
+                                color =
+                                    PatientColors
+                                        .TextPrimary,
+                                fontWeight =
+                                    FontWeight.ExtraBold,
+                                fontSize =
+                                    16.sp,
+                                maxLines =
+                                    1,
+                                overflow =
+                                    TextOverflow.Ellipsis
                             )
 
-                            Row(
-                                verticalAlignment =
-                                    Alignment.CenterVertically
-                            ) {
 
-                                Icon(
-                                    imageVector =
-                                        Icons.Filled.Star,
-                                    contentDescription =
-                                        null,
-                                    tint =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .tertiary,
-                                    modifier =
-                                        Modifier.size(
-                                            14.dp
-                                        )
-                                )
+                            if (
+                                doctor.verification_status
+                                    .equals(
+                                        "approved",
+                                        ignoreCase =
+                                            true
+                                    )
+                            ) {
 
                                 Spacer(
                                     modifier =
                                         Modifier.width(
-                                            4.dp
+                                            5.dp
                                         )
                                 )
 
-                                Text(
-                                    text =
-                                        "$years year${
-                                            if (
-                                                years == 1
-                                            ) {
-                                                ""
-                                            } else {
-                                                "s"
-                                            }
-                                        } experience",
-                                    fontSize =
-                                        11.sp,
-                                    color =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .onSurfaceVariant
+
+                                Icon(
+                                    imageVector =
+                                        Icons.Outlined.Verified,
+                                    contentDescription =
+                                        "Verified doctor",
+                                    tint =
+                                        PatientColors
+                                            .DoctorAccent,
+                                    modifier =
+                                        Modifier.size(
+                                            17.dp
+                                        )
                                 )
                             }
                         }
-                }
-            }
 
-            Spacer(
-                modifier =
-                    Modifier.height(
-                        14.dp
-                    )
-            )
 
-            DoctorInformationRow(
-                icon =
-                    Icons.Outlined.LocationOn,
-                text =
-                    doctor.location
-            )
-
-            if (
-                !doctor
-                    .operating_hours
-                    .isNullOrBlank()
-            ) {
-
-                DoctorInformationRow(
-                    icon =
-                        Icons.Outlined.Schedule,
-                    text =
-                        doctor.operating_hours
-                            ?: ""
-                )
-            }
-
-            Spacer(
-                modifier =
-                    Modifier.height(
-                        12.dp
-                    )
-            )
-
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(
-                            RoundedCornerShape(
-                                14.dp
-                            )
-                        )
-                        .background(
-                            MaterialTheme
-                                .colorScheme
-                                .primaryContainer
-                                .copy(
-                                    alpha =
-                                        0.55f
+                        Spacer(
+                            modifier =
+                                Modifier.height(
+                                    3.dp
                                 )
                         )
-                        .padding(
-                            horizontal =
-                                14.dp,
-                            vertical =
-                                12.dp
-                        ),
-                verticalAlignment =
-                    Alignment.CenterVertically
-            ) {
 
-                Icon(
-                    imageVector =
-                        Icons.Outlined.Payments,
-                    contentDescription =
-                        null,
-                    tint =
-                        MaterialTheme
-                            .colorScheme
-                            .primary,
-                    modifier =
-                        Modifier.size(
-                            19.dp
+
+                        Text(
+                            text =
+                                doctor.specialty,
+                            color =
+                                PatientColors
+                                    .DoctorAccent,
+                            fontWeight =
+                                FontWeight.SemiBold,
+                            fontSize =
+                                12.5.sp
                         )
-                )
 
-                Spacer(
-                    modifier =
-                        Modifier.width(
-                            8.dp
-                        )
-                )
 
-                Column {
+                        doctor
+                            .years_of_experience
+                            ?.takeIf {
+                                it > 0
+                            }
+                            ?.let { years ->
 
-                    Text(
-                        text =
-                            "Private consultation",
-                        fontSize =
-                            11.sp,
-                        color =
-                            MaterialTheme
-                                .colorScheme
-                                .onSurfaceVariant
-                    )
+                                Spacer(
+                                    modifier =
+                                        Modifier.height(
+                                            6.dp
+                                        )
+                                )
 
-                    Text(
-                        text =
-                            doctor.hourly_rate
-                                ?.let {
-                                    "R %.2f".format(
-                                        it
-                                    )
+
+                                Row(
+                                    verticalAlignment =
+                                        Alignment.CenterVertically
+                                ) {
+
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .clip(
+                                                    RoundedCornerShape(
+                                                        20.dp
+                                                    )
+                                                )
+                                                .background(
+                                                    PatientColors
+                                                        .ReviewCard
+                                                )
+                                                .padding(
+                                                    horizontal =
+                                                        8.dp,
+                                                    vertical =
+                                                        4.dp
+                                                )
+                                    ) {
+
+                                        Row(
+                                            verticalAlignment =
+                                                Alignment.CenterVertically
+                                        ) {
+
+                                            Icon(
+                                                imageVector =
+                                                    Icons.Filled.Star,
+                                                contentDescription =
+                                                    null,
+                                                tint =
+                                                    PatientColors
+                                                        .ReviewAccent,
+                                                modifier =
+                                                    Modifier.size(
+                                                        13.dp
+                                                    )
+                                            )
+
+
+                                            Spacer(
+                                                modifier =
+                                                    Modifier.width(
+                                                        4.dp
+                                                    )
+                                            )
+
+
+                                            Text(
+                                                text =
+                                                    "$years year${
+                                                        if (years == 1) {
+                                                            ""
+                                                        } else {
+                                                            "s"
+                                                        }
+                                                    } experience",
+                                                color =
+                                                    PatientColors
+                                                        .ReviewAccent,
+                                                fontSize =
+                                                    9.5.sp,
+                                                fontWeight =
+                                                    FontWeight.Bold
+                                            )
+                                        }
+                                    }
                                 }
-                                ?: "Rate unavailable",
-                        fontWeight =
-                            FontWeight.Bold,
-                        fontSize =
-                            16.sp,
-                        color =
-                            MaterialTheme
-                                .colorScheme
-                                .primary
-                    )
+                            }
+                    }
                 }
+
 
                 Spacer(
                     modifier =
-                        Modifier.weight(
-                            1f
+                        Modifier.height(
+                            15.dp
                         )
                 )
 
-                Text(
-                    text =
-                        "per hour",
-                    fontSize =
-                        11.sp,
-                    color =
-                        MaterialTheme
-                            .colorScheme
-                            .onSurfaceVariant
-                )
-            }
 
-            Spacer(
-                modifier =
-                    Modifier.height(
-                        14.dp
-                    )
-            )
-
-            Row(
-                modifier =
-                    Modifier.fillMaxWidth(),
-                horizontalArrangement =
-                    Arrangement.spacedBy(
-                        10.dp
-                    )
-            ) {
-
-                OutlinedButton(
-
-                    onClick =
-                        onProfile,
-
+                /*
+                 * Doctor information
+                 */
+                Column(
                     modifier =
-                        Modifier.weight(
-                            1f
-                        ),
-
-                    shape =
-                        RoundedCornerShape(
-                            14.dp
-                        )
-
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(
+                                RoundedCornerShape(
+                                    16.dp
+                                )
+                            )
+                            .background(
+                                Color.White.copy(
+                                    alpha = 0.55f
+                                )
+                            )
+                            .padding(
+                                12.dp
+                            )
                 ) {
 
-                    Text(
-                        "View profile"
+                    DoctorInformationRow(
+                        icon =
+                            Icons.Outlined.LocationOn,
+                        text =
+                            doctor.location
                     )
+
+
+                    if (
+                        !doctor.operating_hours
+                            .isNullOrBlank()
+                    ) {
+
+                        DoctorInformationRow(
+                            icon =
+                                Icons.Outlined.Schedule,
+                            text =
+                                doctor.operating_hours
+                                    ?: ""
+                        )
+                    }
+
+
+                    if (
+                        !doctor.language
+                            .isNullOrBlank()
+                    ) {
+
+                        DoctorInformationRow(
+                            icon =
+                                Icons.Outlined.Verified,
+                            text =
+                                "Languages: ${doctor.language}"
+                        )
+                    }
                 }
 
-                Button(
 
-                    onClick =
-                        onBook,
-
+                Spacer(
                     modifier =
-                        Modifier.weight(
-                            1f
-                        ),
-
-                    shape =
-                        RoundedCornerShape(
+                        Modifier.height(
                             14.dp
-                        ),
+                        )
+                )
 
-                    colors =
-                        ButtonDefaults
-                            .buttonColors(
-                                containerColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .primary
+
+                /*
+                 * Consultation price
+                 */
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(
+                                RoundedCornerShape(
+                                    16.dp
+                                )
                             )
-
+                            .background(
+                                PatientColors
+                                    .AppointmentCard
+                            )
+                            .padding(
+                                horizontal = 13.dp,
+                                vertical = 12.dp
+                            ),
+                    verticalAlignment =
+                        Alignment.CenterVertically
                 ) {
 
-                    Text(
-                        text =
-                            "Book",
-                        fontWeight =
-                            FontWeight.Bold
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(
+                                    38.dp
+                                )
+                                .clip(
+                                    RoundedCornerShape(
+                                        12.dp
+                                    )
+                                )
+                                .background(
+                                    PatientColors
+                                        .AppointmentAccent
+                                        .copy(
+                                            alpha = 0.11f
+                                        )
+                                ),
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+
+                        Icon(
+                            imageVector =
+                                Icons.Outlined.Payments,
+                            contentDescription =
+                                null,
+                            tint =
+                                PatientColors
+                                    .AppointmentAccent,
+                            modifier =
+                                Modifier.size(
+                                    19.dp
+                                )
+                        )
+                    }
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(
+                                10.dp
+                            )
                     )
+
+
+                    Column {
+
+                        Text(
+                            text =
+                                "Private consultation",
+                            color =
+                                PatientColors
+                                    .TextSecondary,
+                            fontSize =
+                                10.5.sp
+                        )
+
+
+                        Text(
+                            text =
+                                doctor.hourly_rate
+                                    ?.let {
+                                        "R %.2f"
+                                            .format(it)
+                                    }
+                                    ?: "Rate unavailable",
+                            color =
+                                PatientColors
+                                    .AppointmentAccent,
+                            fontWeight =
+                                FontWeight.ExtraBold,
+                            fontSize =
+                                16.sp
+                        )
+                    }
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.weight(
+                                1f
+                            )
+                    )
+
+
+                    if (
+                        doctor.hourly_rate != null
+                    ) {
+
+                        Text(
+                            text =
+                                "per hour",
+                            color =
+                                PatientColors
+                                    .TextSecondary,
+                            fontSize =
+                                10.5.sp
+                        )
+                    }
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            15.dp
+                        )
+                )
+
+
+                /*
+                 * Actions
+                 */
+                Row(
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    horizontalArrangement =
+                        Arrangement.spacedBy(
+                            10.dp
+                        )
+                ) {
+
+                    OutlinedButton(
+                        onClick =
+                            onProfile,
+                        modifier =
+                            Modifier
+                                .weight(
+                                    1f
+                                )
+                                .height(
+                                    48.dp
+                                ),
+                        shape =
+                            RoundedCornerShape(
+                                15.dp
+                            ),
+                        border =
+                            BorderStroke(
+                                width =
+                                    1.dp,
+                                color =
+                                    PatientColors
+                                        .DoctorAccent
+                            )
+                    ) {
+
+                        Text(
+                            text =
+                                "View profile",
+                            color =
+                                PatientColors
+                                    .DoctorAccent,
+                            fontWeight =
+                                FontWeight.Bold,
+                            fontSize =
+                                12.sp
+                        )
+                    }
+
+
+                    Button(
+                        onClick =
+                            onBook,
+                        modifier =
+                            Modifier
+                                .weight(
+                                    1f
+                                )
+                                .height(
+                                    48.dp
+                                ),
+                        shape =
+                            RoundedCornerShape(
+                                15.dp
+                            ),
+                        colors =
+                            ButtonDefaults
+                                .buttonColors(
+                                    containerColor =
+                                        PatientColors
+                                            .DoctorAccent,
+                                    contentColor =
+                                        Color.White
+                                )
+                    ) {
+
+                        Text(
+                            text =
+                                "Book appointment",
+                            fontWeight =
+                                FontWeight.Bold,
+                            fontSize =
+                                11.5.sp
+                        )
+                    }
                 }
             }
         }
@@ -1418,68 +1855,160 @@ private fun DoctorAvatar(
 
     Box(
         modifier =
-            Modifier
-                .size(
-                    68.dp
-                )
-                .clip(
-                    CircleShape
-                )
-                .background(
-                    MaterialTheme
-                        .colorScheme
-                        .primaryContainer
-                ),
+            Modifier.size(
+                72.dp
+            ),
         contentAlignment =
             Alignment.Center
     ) {
 
-        if (
-            !doctor
-                .profile_image_url
-                .isNullOrBlank()
+        /*
+         * Soft outer ring
+         */
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .clip(
+                        CircleShape
+                    )
+                    .background(
+                        PatientColors
+                            .DoctorAccent
+                            .copy(
+                                alpha = 0.10f
+                            )
+                    )
+        )
+
+
+        Box(
+            modifier =
+                Modifier
+                    .size(
+                        64.dp
+                    )
+                    .clip(
+                        CircleShape
+                    )
+                    .background(
+                        PatientColors
+                            .DoctorCard
+                    ),
+            contentAlignment =
+                Alignment.Center
         ) {
 
-            AsyncImage(
-                model =
-                    doctor.profile_image_url,
-                contentDescription =
-                    doctor.fullName,
-                contentScale =
-                    ContentScale.Crop,
+            if (
+                !doctor.profile_image_url
+                    .isNullOrBlank()
+            ) {
+
+                AsyncImage(
+                    model =
+                        doctor.profile_image_url,
+                    contentDescription =
+                        doctor.fullName,
+                    contentScale =
+                        ContentScale.Crop,
+                    modifier =
+                        Modifier.fillMaxSize()
+                )
+
+            } else {
+
+                Text(
+                    text =
+                        buildString {
+
+                            append(
+                                doctor.name
+                                    .firstOrNull()
+                                    ?.uppercaseChar()
+                                    ?: 'D'
+                            )
+
+                            append(
+                                doctor.surname
+                                    .firstOrNull()
+                                    ?.uppercaseChar()
+                                    ?: 'R'
+                            )
+                        },
+                    color =
+                        PatientColors
+                            .DoctorAccent,
+                    fontSize =
+                        19.sp,
+                    fontWeight =
+                        FontWeight.ExtraBold
+                )
+            }
+        }
+
+
+        /*
+         * Verified badge
+         */
+        if (
+            doctor.verification_status
+                .equals(
+                    "approved",
+                    ignoreCase = true
+                )
+        ) {
+
+            Box(
                 modifier =
-                    Modifier.fillMaxSize()
-            )
-
-        } else {
-
-            Text(
-                text =
-                    buildString {
-
-                        append(
-                            doctor.name
-                                .firstOrNull()
-                                ?.uppercaseChar()
-                                ?: 'D'
+                    Modifier
+                        .align(
+                            Alignment.BottomEnd
                         )
-
-                        append(
-                            doctor.surname
-                                .firstOrNull()
-                                ?.uppercaseChar()
-                                ?: 'R'
+                        .size(
+                            24.dp
                         )
-                    },
-                fontSize =
-                    19.sp,
-                fontWeight =
-                    FontWeight.Bold,
-                color =
-                    MaterialTheme
-                        .colorScheme
-                        .primary
-            )
+                        .clip(
+                            CircleShape
+                        )
+                        .background(
+                            MaterialTheme
+                                .colorScheme
+                                .surface
+                        )
+                        .padding(
+                            2.dp
+                        )
+            ) {
+
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .clip(
+                                CircleShape
+                            )
+                            .background(
+                                PatientColors
+                                    .SuccessAccent
+                            ),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+
+                    Icon(
+                        imageVector =
+                            Icons.Outlined.Verified,
+                        contentDescription =
+                            "Approved doctor",
+                        tint =
+                            Color.White,
+                        modifier =
+                            Modifier.size(
+                                13.dp
+                            )
+                    )
+                }
+            }
         }
     }
 }
@@ -1542,35 +2071,185 @@ private fun DoctorInformationRow(
 @Composable
 private fun LoadingDoctors() {
 
-    Box(
+    val infinite =
+        rememberInfiniteTransition(
+            label = "DoctorLoading"
+        )
+
+    val shimmer by
+    infinite.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1f,
+        animationSpec =
+            infiniteRepeatable(
+                animation =
+                    tween(
+                        900,
+                        easing = FastOutSlowInEasing
+                    ),
+                repeatMode =
+                    RepeatMode.Reverse
+            ),
+        label = "DoctorLoadingPulse"
+    )
+
+    LazyColumn(
         modifier =
             Modifier.fillMaxSize(),
-        contentAlignment =
-            Alignment.Center
+        contentPadding =
+            PaddingValues(
+                horizontal = 16.dp,
+                vertical = 12.dp
+            ),
+        verticalArrangement =
+            Arrangement.spacedBy(
+                14.dp
+            )
     ) {
 
-        Column(
-            horizontalAlignment =
-                Alignment.CenterHorizontally
-        ) {
+        items(3) {
 
-            CircularProgressIndicator()
-
-            Spacer(
+            Card(
                 modifier =
-                    Modifier.height(
-                        12.dp
+                    Modifier
+                        .fillMaxWidth()
+                        .alpha(shimmer),
+                shape =
+                    RoundedCornerShape(
+                        24.dp
+                    ),
+                colors =
+                    CardDefaults.cardColors(
+                        containerColor =
+                            PatientColors.DoctorCard
+                    ),
+                border =
+                    BorderStroke(
+                        1.dp,
+                        PatientColors.DoctorAccent
+                            .copy(alpha = 0.08f)
                     )
-            )
+            ) {
 
-            Text(
-                text =
-                    "Finding approved doctors...",
-                color =
-                    MaterialTheme
-                        .colorScheme
-                        .onSurfaceVariant
-            )
+                Column(
+                    modifier =
+                        Modifier.padding(
+                            17.dp
+                        )
+                ) {
+
+                    Row(
+                        verticalAlignment =
+                            Alignment.CenterVertically
+                    ) {
+
+                        Box(
+                            modifier =
+                                Modifier
+                                    .size(68.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        PatientColors.DoctorAccent
+                                            .copy(alpha = 0.10f)
+                                    )
+                        )
+
+                        Spacer(
+                            Modifier.width(
+                                14.dp
+                            )
+                        )
+
+                        Column(
+                            modifier =
+                                Modifier.weight(1f)
+                        ) {
+
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth(0.70f)
+                                        .height(16.dp)
+                                        .clip(
+                                            RoundedCornerShape(
+                                                8.dp
+                                            )
+                                        )
+                                        .background(
+                                            PatientColors.DoctorAccent
+                                                .copy(alpha = 0.12f)
+                                        )
+                            )
+
+                            Spacer(
+                                Modifier.height(
+                                    9.dp
+                                )
+                            )
+
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth(0.45f)
+                                        .height(11.dp)
+                                        .clip(
+                                            RoundedCornerShape(
+                                                8.dp
+                                            )
+                                        )
+                                        .background(
+                                            PatientColors.DoctorAccent
+                                                .copy(alpha = 0.08f)
+                                        )
+                            )
+                        }
+                    }
+
+                    Spacer(
+                        Modifier.height(
+                            16.dp
+                        )
+                    )
+
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .height(58.dp)
+                                .clip(
+                                    RoundedCornerShape(
+                                        15.dp
+                                    )
+                                )
+                                .background(
+                                    Color.White.copy(
+                                        alpha = 0.45f
+                                    )
+                                )
+                    )
+
+                    Spacer(
+                        Modifier.height(
+                            12.dp
+                        )
+                    )
+
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .height(58.dp)
+                                .clip(
+                                    RoundedCornerShape(
+                                        15.dp
+                                    )
+                                )
+                                .background(
+                                    PatientColors.AppointmentCard
+                                )
+                    )
+                }
+            }
         }
     }
 }
@@ -1581,6 +2260,22 @@ private fun ErrorDoctors(
     onRetry: () -> Unit
 ) {
 
+    val friendlyMessage =
+        when {
+            message.contains(
+                "network",
+                ignoreCase = true
+            ) ||
+                    message.contains(
+                        "internet",
+                        ignoreCase = true
+                    ) ->
+                "We couldn't connect to the doctor directory. Check your internet connection and try again."
+
+            else ->
+                "We couldn't load the doctor directory right now. Please try again."
+        }
+
     Box(
         modifier =
             Modifier
@@ -1592,67 +2287,190 @@ private fun ErrorDoctors(
             Alignment.Center
     ) {
 
-        Column(
-            horizontalAlignment =
-                Alignment.CenterHorizontally
+        Card(
+            modifier =
+                Modifier.fillMaxWidth(),
+            shape =
+                RoundedCornerShape(
+                    26.dp
+                ),
+            colors =
+                CardDefaults.cardColors(
+                    containerColor =
+                        PatientColors.RedSoft
+                ),
+            border =
+                BorderStroke(
+                    1.dp,
+                    PatientColors.Red
+                        .copy(alpha = 0.12f)
+                )
         ) {
 
-            Text(
-                text =
-                    "We couldn't load doctors",
-                fontWeight =
-                    FontWeight.Bold,
-                fontSize =
-                    18.sp
-            )
-
-            Spacer(
+            Column(
                 modifier =
-                    Modifier.height(
-                        8.dp
-                    )
-            )
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            24.dp
+                        ),
+                horizontalAlignment =
+                    Alignment.CenterHorizontally
+            ) {
 
-            Text(
-                text =
-                    message,
-                color =
-                    MaterialTheme
-                        .colorScheme
-                        .onSurfaceVariant
-            )
+                DoctorErrorIllustration()
 
-            Spacer(
-                modifier =
+                Spacer(
                     Modifier.height(
                         16.dp
                     )
-            )
-
-            Button(
-                onClick =
-                    onRetry
-            ) {
-
-                Icon(
-                    imageVector =
-                        Icons.Filled.Refresh,
-                    contentDescription =
-                        null
-                )
-
-                Spacer(
-                    modifier =
-                        Modifier.width(
-                            8.dp
-                        )
                 )
 
                 Text(
-                    "Try again"
+                    text =
+                        "Couldn't load doctors",
+                    color =
+                        PatientColors.TextPrimary,
+                    fontSize =
+                        18.sp,
+                    fontWeight =
+                        FontWeight.ExtraBold,
+                    textAlign =
+                        TextAlign.Center
                 )
+
+                Spacer(
+                    Modifier.height(
+                        7.dp
+                    )
+                )
+
+                Text(
+                    text =
+                        friendlyMessage,
+                    color =
+                        PatientColors.TextSecondary,
+                    fontSize =
+                        12.5.sp,
+                    lineHeight =
+                        18.sp,
+                    textAlign =
+                        TextAlign.Center
+                )
+
+                Spacer(
+                    Modifier.height(
+                        20.dp
+                    )
+                )
+
+                Button(
+                    onClick =
+                        onRetry,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(
+                                49.dp
+                            ),
+                    shape =
+                        RoundedCornerShape(
+                            16.dp
+                        ),
+                    colors =
+                        ButtonDefaults.buttonColors(
+                            containerColor =
+                                PatientColors.Red
+                        )
+                ) {
+
+                    Icon(
+                        imageVector =
+                            Icons.Filled.Refresh,
+                        contentDescription =
+                            null
+                    )
+
+                    Spacer(
+                        Modifier.width(
+                            8.dp
+                        )
+                    )
+
+                    Text(
+                        text =
+                            "Try again",
+                        fontWeight =
+                            FontWeight.Bold
+                    )
+                }
             }
         }
+    }
+}
+@Composable
+private fun DoctorErrorIllustration() {
+
+    Canvas(
+        modifier =
+            Modifier.size(
+                82.dp
+            )
+    ) {
+
+        val center =
+            Offset(
+                size.width / 2f,
+                size.height / 2f
+            )
+
+        drawCircle(
+            color =
+                PatientColors.Red,
+            radius =
+                size.minDimension * 0.34f,
+            center =
+                center,
+            style =
+                Stroke(
+                    width =
+                        4.dp.toPx()
+                )
+        )
+
+        drawLine(
+            color =
+                PatientColors.Red,
+            start =
+                Offset(
+                    center.x,
+                    center.y -
+                            15.dp.toPx()
+                ),
+            end =
+                Offset(
+                    center.x,
+                    center.y +
+                            5.dp.toPx()
+                ),
+            strokeWidth =
+                5.dp.toPx(),
+            cap =
+                StrokeCap.Round
+        )
+
+        drawCircle(
+            color =
+                PatientColors.Red,
+            radius =
+                3.dp.toPx(),
+            center =
+                Offset(
+                    center.x,
+                    center.y +
+                            16.dp.toPx()
+                )
+        )
     }
 }
 
@@ -1662,6 +2480,28 @@ private fun EmptyDoctors(
     onClear: () -> Unit
 ) {
 
+    val infinite =
+        rememberInfiniteTransition(
+            label = "EmptyDoctors"
+        )
+
+    val pulse by
+    infinite.animateFloat(
+        initialValue = 0.94f,
+        targetValue = 1f,
+        animationSpec =
+            infiniteRepeatable(
+                animation =
+                    tween(
+                        1300,
+                        easing = FastOutSlowInEasing
+                    ),
+                repeatMode =
+                    RepeatMode.Reverse
+            ),
+        label = "EmptyDoctorsPulse"
+    )
+
     Box(
         modifier =
             Modifier
@@ -1673,89 +2513,150 @@ private fun EmptyDoctors(
             Alignment.Center
     ) {
 
-        Column(
-            horizontalAlignment =
-                Alignment.CenterHorizontally
+        Card(
+            modifier =
+                Modifier.fillMaxWidth(),
+            shape =
+                RoundedCornerShape(
+                    26.dp
+                ),
+            colors =
+                CardDefaults.cardColors(
+                    containerColor =
+                        PatientColors.DoctorCard
+                ),
+            border =
+                BorderStroke(
+                    1.dp,
+                    PatientColors.DoctorAccent
+                        .copy(alpha = 0.10f)
+                )
         ) {
 
-            Icon(
-                imageVector =
-                    Icons.Outlined.Search,
-                contentDescription =
-                    null,
-                tint =
-                    MaterialTheme
-                        .colorScheme
-                        .primary,
+            Column(
                 modifier =
-                    Modifier.size(
-                        42.dp
-                    )
-            )
-
-            Spacer(
-                modifier =
-                    Modifier.height(
-                        12.dp
-                    )
-            )
-
-            Text(
-                text =
-                    if (
-                        hasFilters
-                    ) {
-                        "No matching doctors"
-                    } else {
-                        "No doctors available"
-                    },
-                fontWeight =
-                    FontWeight.Bold,
-                fontSize =
-                    18.sp
-            )
-
-            Spacer(
-                modifier =
-                    Modifier.height(
-                        6.dp
-                    )
-            )
-
-            Text(
-                text =
-                    if (
-                        hasFilters
-                    ) {
-                        "Try another specialty, name or location."
-                    } else {
-                        "Approved doctors will appear here when available."
-                    },
-                color =
-                    MaterialTheme
-                        .colorScheme
-                        .onSurfaceVariant
-            )
-
-            if (
-                hasFilters
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            24.dp
+                        ),
+                horizontalAlignment =
+                    Alignment.CenterHorizontally
             ) {
 
-                Spacer(
+                Box(
                     modifier =
-                        Modifier.height(
-                            14.dp
-                        )
-                )
-
-                TextButton(
-                    onClick =
-                        onClear
+                        Modifier
+                            .size(
+                                100.dp
+                            )
+                            .scale(
+                                pulse
+                            )
+                            .clip(
+                                CircleShape
+                            )
+                            .background(
+                                PatientColors.DoctorAccent
+                                    .copy(alpha = 0.08f)
+                            ),
+                    contentAlignment =
+                        Alignment.Center
                 ) {
 
-                    Text(
-                        "Clear filters"
+                    Icon(
+                        imageVector =
+                            Icons.Outlined.Search,
+                        contentDescription =
+                            null,
+                        tint =
+                            PatientColors.DoctorAccent,
+                        modifier =
+                            Modifier.size(
+                                42.dp
+                            )
                     )
+                }
+
+                Spacer(
+                    Modifier.height(
+                        18.dp
+                    )
+                )
+
+                Text(
+                    text =
+                        if (hasFilters) {
+                            "No matching doctors"
+                        } else {
+                            "No doctors available"
+                        },
+                    color =
+                        PatientColors.TextPrimary,
+                    fontWeight =
+                        FontWeight.ExtraBold,
+                    fontSize =
+                        18.sp,
+                    textAlign =
+                        TextAlign.Center
+                )
+
+                Spacer(
+                    Modifier.height(
+                        7.dp
+                    )
+                )
+
+                Text(
+                    text =
+                        if (hasFilters) {
+                            "Try another doctor name, specialty or location."
+                        } else {
+                            "Approved doctors will appear here when they become available."
+                        },
+                    color =
+                        PatientColors.TextSecondary,
+                    fontSize =
+                        12.5.sp,
+                    lineHeight =
+                        18.sp,
+                    textAlign =
+                        TextAlign.Center
+                )
+
+                if (hasFilters) {
+
+                    Spacer(
+                        Modifier.height(
+                            19.dp
+                        )
+                    )
+
+                    OutlinedButton(
+                        onClick =
+                            onClear,
+                        modifier =
+                            Modifier.fillMaxWidth(),
+                        shape =
+                            RoundedCornerShape(
+                                15.dp
+                            ),
+                        border =
+                            BorderStroke(
+                                1.dp,
+                                PatientColors.DoctorAccent
+                            )
+                    ) {
+
+                        Text(
+                            text =
+                                "Clear filters",
+                            color =
+                                PatientColors.DoctorAccent,
+                            fontWeight =
+                                FontWeight.Bold
+                        )
+                    }
                 }
             }
         }

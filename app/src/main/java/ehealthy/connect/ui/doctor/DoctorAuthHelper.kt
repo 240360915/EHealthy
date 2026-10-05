@@ -47,6 +47,7 @@ suspend fun signInDoctorWithEmail(email: String, password: String): Result<Unit>
             this.password = password
         }
         Result.success(Unit)
+    } catch (e: kotlinx.coroutines.CancellationException) { throw e
     } catch (e: Exception) {
         Result.failure(Exception(friendlyAuthError(e)))
     }
@@ -70,15 +71,22 @@ suspend fun registerDoctor(
     files: DoctorRegistrationFiles = DoctorRegistrationFiles()
 ): Result<Unit> {
     return try {
-        SupabaseClientProvider.client.auth.signUpWith(Email) {
-            email = info.email
-            password = info.password
+        val auth = SupabaseClientProvider.client.auth
+        val existingUser = auth.currentUserOrNull()
+        if (existingUser == null) {
+            auth.signUpWith(Email) { email = info.email.trim(); password = info.password }
+        } else {
+            check(existingUser.email.equals(info.email.trim(), ignoreCase = true)) {
+                "Sign out before registering a different email address."
+            }
         }
-
-        val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
-            ?: return Result.failure(
-                Exception("Account created — please confirm your email, then log in.")
-            )
+        val userId = auth.currentUserOrNull()?.id
+            ?: return Result.failure(Exception("Confirm your email, then sign in to complete your doctor profile. You will need to re-enter your details and select your documents again."))
+        val existing = SupabaseClientProvider.client.postgrest.from("doctors")
+            .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id")) {
+                filter { eq("user_id", userId) }
+            }.decodeSingleOrNull<Map<String, String?>>()
+        check(existing == null) { "This doctor profile already exists. Please sign in." }
 
         val hourlyRate = info.consultationFee.trim().toDoubleOrNull()
 
@@ -138,7 +146,7 @@ suspend fun registerDoctor(
             put("surname", info.surname)
             put("id_number", info.idNumber)
             put("phone", info.cellNumber)
-            put("email", info.email)
+            put("email", info.email.trim())
             put("language", info.languagesSpoken)
             put("gender", info.gender)
             put("province", info.province)
@@ -161,6 +169,7 @@ suspend fun registerDoctor(
 
         SupabaseClientProvider.client.postgrest.from("doctors").insert(row)
         Result.success(Unit)
+    } catch (e: kotlinx.coroutines.CancellationException) { throw e
     } catch (e: Exception) {
         Result.failure(Exception(friendlyAuthError(e)))
     }
@@ -170,6 +179,7 @@ suspend fun sendDoctorPasswordResetEmail(email: String): Result<Unit> {
     return try {
         SupabaseClientProvider.client.auth.resetPasswordForEmail(email = email)
         Result.success(Unit)
+    } catch (e: kotlinx.coroutines.CancellationException) { throw e
     } catch (e: Exception) {
         Result.failure(Exception(friendlyAuthError(e)))
     }
@@ -190,6 +200,7 @@ suspend fun verifyDoctorResetCodeAndSetPassword(
             password = newPassword
         }
         Result.success(Unit)
+    } catch (e: kotlinx.coroutines.CancellationException) { throw e
     } catch (e: Exception) {
         Result.failure(Exception(friendlyAuthError(e)))
     }
@@ -219,6 +230,7 @@ suspend fun savePrescription(
 
         SupabaseClientProvider.client.postgrest.from("prescriptions").insert(rows)
         Result.success(Unit)
+    } catch (e: kotlinx.coroutines.CancellationException) { throw e
     } catch (e: Exception) {
         Result.failure(Exception(friendlyAuthError(e)))
     }
@@ -249,6 +261,7 @@ suspend fun fetchConfirmedPrescriptionPatients(doctorId: String): Result<List<Pr
             .map { PrescriptionPatient(id = it.patient_id!!, name = it.patient_name!!) }
 
         Result.success(patients)
+    } catch (e: kotlinx.coroutines.CancellationException) { throw e
     } catch (e: Exception) {
         Result.failure(Exception(friendlyAuthError(e)))
     }
@@ -260,22 +273,14 @@ suspend fun fetchDoctorTimeSlots(doctorId: String, date: String): Result<List<Ti
             .select { filter { eq("doctor_id", doctorId); eq("date", date) } }
             .decodeList<TimeSlotRow>()
         Result.success(rows)
+    } catch (e: kotlinx.coroutines.CancellationException) { throw e
     } catch (e: Exception) {
         Result.failure(Exception(friendlyAuthError(e)))
     }
 }
 
-/**
- * Only "open" and "booked" slots get written as rows — a row's mere
- * existence is what makes a time bookable, since "time_slots" has no
- * status column, just is_booked. "Closed" slots are deleted instead of
- * saved, so patients never see them as available.
- *
- * ASSUMPTION: a unique constraint on (doctor_id, date, time) exists in
- * Supabase for the upsert's onConflict to work. If it doesn't, this will
- * fail with "no unique or exclusion constraint matching ON CONFLICT" —
- * worth checking Table Editor → time_slots → constraints if you hit that.
- */
+/** Publish new open slots, leave existing rows untouched, and close only unbooked slots.
+ * TODO: move this operation into a transaction with a unique doctor/date/time constraint. */
 suspend fun saveDoctorTimeSlots(
     doctorId: String,
     date: String,
@@ -283,9 +288,13 @@ suspend fun saveDoctorTimeSlots(
     closedTimes: List<String>
 ): Result<Unit> {
     return try {
-        if (openOrBookedRows.isNotEmpty()) {
-            SupabaseClientProvider.client.postgrest.from("time_slots")
-                .upsert(openOrBookedRows) { onConflict = "doctor_id,date,time" }
+        val existing = fetchDoctorTimeSlots(doctorId, date).getOrThrow()
+        val existingTimes = existing.map { it.time.take(5) }.toSet()
+        val newRows = openOrBookedRows.filter { !it.is_booked && it.time.take(5) !in existingTimes }
+            .map { it.copy(doctor_id = doctorId, date = date, is_booked = false) }
+        if (newRows.isNotEmpty()) {
+            // A database uniqueness constraint is still required to handle concurrent publishers.
+            SupabaseClientProvider.client.postgrest.from("time_slots").insert(newRows)
         }
         if (closedTimes.isNotEmpty()) {
             SupabaseClientProvider.client.postgrest.from("time_slots").delete {
@@ -293,10 +302,12 @@ suspend fun saveDoctorTimeSlots(
                     eq("doctor_id", doctorId)
                     eq("date", date)
                     isIn("time", closedTimes)
+                    eq("is_booked", false)
                 }
             }
         }
         Result.success(Unit)
+    } catch (e: kotlinx.coroutines.CancellationException) { throw e
     } catch (e: Exception) {
         Result.failure(Exception(friendlyAuthError(e)))
     }

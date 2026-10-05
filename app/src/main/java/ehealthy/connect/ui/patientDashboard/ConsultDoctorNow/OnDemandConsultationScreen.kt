@@ -1,4 +1,4 @@
-package ehealthy.connect.ui.patientDashboard
+package ehealthy.connect.ui.patientDashboard.ConsultDoctorNow
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background

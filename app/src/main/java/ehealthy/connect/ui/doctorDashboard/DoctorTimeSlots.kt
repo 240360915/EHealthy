@@ -29,9 +29,6 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 
-/* Table `availability_slots`: doctor_id, slot_date ("yyyy-MM-dd"),
-   slot_time (24hr "HH:mm"), status ("open" | "closed" | "booked"). See
-   DoctorAuthHelper.kt for fetchDoctorTimeSlots / saveDoctorTimeSlots. */
 /* Table `time_slots`: id, doctor_id, date ("yyyy-MM-dd"), time ("HH:mm:ss"),
    is_booked (bool), created_at. A row's existence = the doctor made that
    time available; is_booked flags whether a patient has taken it. See
@@ -142,7 +139,7 @@ fun DoctorTimeSlots(
     }
 
     // Generate once the doctor id resolves, using today's default range.
-    LaunchedEffect(doctorId) { generateSlots() }
+    LaunchedEffect(doctorId, slotDateString) { slots = emptyList(); generateSlots() }
 
     Scaffold(
         topBar = {

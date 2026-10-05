@@ -126,41 +126,41 @@ fun PatientRegister(
     )
 
     val appContext = LocalContext.current
-    var step by rememberSaveable { mutableStateOf(RegisterStep.PERSONAL) }
+    var step by remember { mutableStateOf(RegisterStep.PERSONAL) }
 
-    var email by rememberSaveable { mutableStateOf(initialEmail) }
-    var name by rememberSaveable { mutableStateOf(initialName) }
-    var surname by rememberSaveable { mutableStateOf(initialSurname) }
-    var title by rememberSaveable { mutableStateOf("") }
-    var dateOfBirth by rememberSaveable { mutableStateOf("") }
-    var idNumber by rememberSaveable { mutableStateOf("") }
-    var gender by rememberSaveable { mutableStateOf("") }
+    var email by remember { mutableStateOf(initialEmail) }
+    var name by remember { mutableStateOf(initialName) }
+    var surname by remember { mutableStateOf(initialSurname) }
+    var title by remember { mutableStateOf("") }
+    var dateOfBirth by remember { mutableStateOf("") }
+    var idNumber by remember { mutableStateOf("") }
+    var gender by remember { mutableStateOf("") }
 
-    var phone by rememberSaveable { mutableStateOf("") }
-    var language by rememberSaveable { mutableStateOf("") }
-    var province by rememberSaveable { mutableStateOf("") }
-    var address1 by rememberSaveable { mutableStateOf("") }
-    var address2 by rememberSaveable { mutableStateOf("") }
-    var address3 by rememberSaveable { mutableStateOf("") }
-    var postalCode by rememberSaveable { mutableStateOf("") }
+    var phone by remember { mutableStateOf("") }
+    var language by remember { mutableStateOf("") }
+    var province by remember { mutableStateOf("") }
+    var address1 by remember { mutableStateOf("") }
+    var address2 by remember { mutableStateOf("") }
+    var address3 by remember { mutableStateOf("") }
+    var postalCode by remember { mutableStateOf("") }
 
-    var allergies by rememberSaveable { mutableStateOf("") }
-    var medication by rememberSaveable { mutableStateOf("") }
-    var conditions by rememberSaveable { mutableStateOf("") }
-    var chronic by rememberSaveable { mutableStateOf("") }
-    var surgeries by rememberSaveable { mutableStateOf("") }
-    var bloodGroup by rememberSaveable { mutableStateOf("") }
-    var disability by rememberSaveable { mutableStateOf("") }
+    var allergies by remember { mutableStateOf("") }
+    var medication by remember { mutableStateOf("") }
+    var conditions by remember { mutableStateOf("") }
+    var chronic by remember { mutableStateOf("") }
+    var surgeries by remember { mutableStateOf("") }
+    var bloodGroup by remember { mutableStateOf("") }
+    var disability by remember { mutableStateOf("") }
 
-    var emergencyName by rememberSaveable { mutableStateOf("") }
-    var emergencyPhone by rememberSaveable { mutableStateOf("") }
-    var emergencyRelationship by rememberSaveable { mutableStateOf("") }
+    var emergencyName by remember { mutableStateOf("") }
+    var emergencyPhone by remember { mutableStateOf("") }
+    var emergencyRelationship by remember { mutableStateOf("") }
 
-    var password by rememberSaveable { mutableStateOf("") }
-    var confirmPassword by rememberSaveable { mutableStateOf("") }
-    var consentGiven by rememberSaveable { mutableStateOf(false) }
+    var password by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
+    var consentGiven by remember { mutableStateOf(false) }
 
-    var stepError by rememberSaveable { mutableStateOf<String?>(null) }
+    var stepError by remember { mutableStateOf<String?>(null) }
 
     @Composable
     fun fieldColors() = textFieldColors

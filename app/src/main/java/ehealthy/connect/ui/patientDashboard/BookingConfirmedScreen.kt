@@ -85,7 +85,7 @@ fun BookingConfirmedScreen(
             Text("Booking Confirmed!", color = ink, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                "Payment processed. Awaiting doctor approval.",
+                "Awaiting doctor approval. Payment status must be verified separately.",
                 color = muted, fontSize = 14.sp, textAlign = TextAlign.Center
             )
             Spacer(modifier = Modifier.height(8.dp))

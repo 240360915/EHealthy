@@ -119,6 +119,7 @@ fun DoctorDashboard(
     onNavigatePrescriptions: () -> Unit,
     onNavigateSettings: () -> Unit,
     onNavigateTimeSlots: () -> Unit,
+    onNavigateAvailability: () -> Unit = {},
     onStartCall: (appointmentId: String) -> Unit = {},
     onVerifyCompletionCode: suspend (appointmentId: String, code: String) -> Result<Unit> = { _, _ -> Result.failure(Exception("Not available")) }
 ) {
@@ -167,6 +168,7 @@ fun DoctorDashboard(
                     }
                 },
                 actions = {
+                    TextButton(onClick = onNavigateAvailability) { Text("Availability") }
                     PatientAvatar(
                         avatarUrl = doctorProfile?.profileImageUrl,
                         name = doctorProfile?.name ?: "",

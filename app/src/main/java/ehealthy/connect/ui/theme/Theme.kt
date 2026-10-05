@@ -13,24 +13,42 @@ import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
     primary = TealLight,
+    onPrimary = Color(0xFF00201C),
+    primaryContainer = Color(0xFF004D43),
+    onPrimaryContainer = Color(0xFFA6F5EA),
     secondary = DarkBlue,
+    onSecondary = Color(0xFFE6E1E5),
+    secondaryContainer = Color(0xFF2B3B5C),
+    onSecondaryContainer = Color(0xFFB9D4FF),
     tertiary = Green,
     background = Color(0xFF121212),
     surface = Color(0xFF1E1E1E),
+    surfaceVariant = Color(0xFF2A2A2E),
     onBackground = Color(0xFFCECDCD),
     onSurface = Color(0xFFE6E1E5),
-    onSurfaceVariant = Color(0xFFA9A4AA)
+    onSurfaceVariant = Color(0xFFA9A4AA),
+    outline = Color(0xFF8D8B92),
+    error = Color(0xFFEF5350)
 )
 
 private val LightColorScheme = lightColorScheme(
     primary = Teal,
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFCCFBF1),
+    onPrimaryContainer = Color(0xFF00201C),
     secondary = Navy,
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFFDBEAFE),
+    onSecondaryContainer = Color(0xFF2563EB),
     tertiary = Green,
     background = LightBackground,
     surface = Color(0xFFFFFFFF),
+    surfaceVariant = Color(0xFFF0F4F8),
     onBackground = Color(0xFF1C1B1F),
     onSurface = Color(0xFF1C1B1F),
-    onSurfaceVariant = Color(0xFF605D66)
+    onSurfaceVariant = Color(0xFF605D66),
+    outline = Color(0xFF94A3B8),
+    error = Color(0xFFDC2626)
 )
 
 @Composable

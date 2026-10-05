@@ -30,8 +30,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.LocalHospital
 import androidx.compose.material.icons.outlined.WifiTethering
 import androidx.compose.material3.Button
@@ -44,6 +44,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -59,7 +60,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -74,7 +74,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import java.util.Calendar
 import kotlin.random.Random
-import androidx.compose.material3.MaterialTheme
+
 enum class TipCategory(val label: String) {
     ALL("All Tips"),
     HOME("General Health"),
@@ -119,146 +119,962 @@ fun HealthTipsScreen(
     onBack: () -> Unit,
     onBookConsultation: () -> Unit
 ) {
-    var selectedCategory by remember { mutableStateOf(TipCategory.ALL) }
-    var tips by remember { mutableStateOf<List<ExternalHealthTip>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-    var loadError by remember { mutableStateOf<String?>(null) }
-    var reloadTrigger by remember { mutableIntStateOf(0) }
 
+    var selectedCategory by remember {
+        mutableStateOf(TipCategory.ALL)
+    }
+
+    var tips by remember {
+        mutableStateOf<List<ExternalHealthTip>>(emptyList())
+    }
+
+    var isLoading by remember {
+        mutableStateOf(true)
+    }
+
+    var loadError by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    var reloadTrigger by remember {
+        mutableIntStateOf(0)
+    }
+
+    var selectedTip by remember {
+        mutableStateOf<ExternalHealthTip?>(null)
+    }
+
+
+    /*
+     * Load health tips
+     */
     LaunchedEffect(reloadTrigger) {
+
         isLoading = true
         loadError = null
+
         fetchCuratedHealthTips()
-            .onSuccess { tips = it }
-            .onFailure { loadError = it.message ?: "Couldn't load health tips right now." }
+            .onSuccess {
+                tips = it
+            }
+            .onFailure {
+                loadError =
+                    it.message
+                        ?: "Couldn't load health tips right now."
+            }
+
         isLoading = false
     }
 
-    val todayTip = remember(tips) {
-        if (tips.isEmpty()) null else tips[(daySeed() % tips.size).toInt()]
-    }
-    val restTips = remember(tips, todayTip) { tips.filterNot { it.id == todayTip?.id } }
 
-    val groupedTips = remember(restTips, selectedCategory) {
-        val categories = if (selectedCategory == TipCategory.ALL) {
-            TipCategory.entries.filter { it != TipCategory.ALL }
-        } else {
-            listOf(selectedCategory)
-        }
-        categories.mapNotNull { category ->
-            val items = restTips.filter { it.category == category }.shuffled(Random(daySeed()))
-            if (items.isEmpty()) null else category to items
-        }
-    }
+    /*
+     * Tip of the day
+     */
+    val todayTip =
+        remember(tips) {
 
-    var selectedTip by remember { mutableStateOf<ExternalHealthTip?>(null) }
-    val navy = MaterialTheme.colorScheme.primary
-    val tealDeep = MaterialTheme.colorScheme.primary
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val bg = MaterialTheme.colorScheme.background
+            if (tips.isEmpty()) {
+
+                null
+
+            } else {
+
+                tips[
+                    (daySeed() % tips.size)
+                        .toInt()
+                ]
+            }
+        }
+
+
+    /*
+     * Remaining tips
+     */
+    val restTips =
+        remember(
+            tips,
+            todayTip
+        ) {
+
+            tips.filterNot {
+                it.id == todayTip?.id
+            }
+        }
+
+
+    /*
+     * Group tips by selected category
+     */
+    val groupedTips =
+        remember(
+            restTips,
+            selectedCategory
+        ) {
+
+            val categories =
+                if (
+                    selectedCategory ==
+                    TipCategory.ALL
+                ) {
+
+                    TipCategory.entries
+                        .filter {
+                            it != TipCategory.ALL
+                        }
+
+                } else {
+
+                    listOf(
+                        selectedCategory
+                    )
+                }
+
+
+            categories.mapNotNull { category ->
+
+                val categoryTips =
+                    restTips
+                        .filter {
+                            it.category == category
+                        }
+                        .shuffled(
+                            Random(
+                                daySeed()
+                            )
+                        )
+
+
+                if (
+                    categoryTips.isEmpty()
+                ) {
+
+                    null
+
+                } else {
+
+                    category to categoryTips
+                }
+            }
+        }
+
 
     Scaffold(
+
+        /*
+         * Top bar
+         */
         topBar = {
+
             TopAppBar(
                 title = {
-                    Text("Health Tips", color = navy, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = navy)
+
+                    Column {
+
+                        Text(
+                            text =
+                                "Health Tips",
+                            color =
+                                PatientColors.TextPrimary,
+                            fontWeight =
+                                FontWeight.ExtraBold,
+                            fontSize =
+                                18.sp
+                        )
+
+
+                        Text(
+                            text =
+                                if (
+                                    tips.isEmpty()
+                                ) {
+                                    "Simple guidance for healthier living"
+                                } else {
+                                    "${tips.size} wellness tip${
+                                        if (tips.size == 1) {
+                                            ""
+                                        } else {
+                                            "s"
+                                        }
+                                    }"
+                                },
+                            color =
+                                PatientColors.TextSecondary,
+                            fontSize =
+                                10.5.sp
+                        )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+
+                navigationIcon = {
+
+                    IconButton(
+                        onClick =
+                            onBack
+                    ) {
+
+                        Box(
+                            modifier =
+                                Modifier
+                                    .size(
+                                        36.dp
+                                    )
+                                    .background(
+                                        PatientColors.TipsCard,
+                                        CircleShape
+                                    ),
+                            contentAlignment =
+                                Alignment.Center
+                        ) {
+
+                            Icon(
+                                imageVector =
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription =
+                                    "Back",
+                                tint =
+                                    PatientColors.TipsAccent,
+                                modifier =
+                                    Modifier.size(
+                                        20.dp
+                                    )
+                            )
+                        }
+                    }
+                },
+
+                colors =
+                    TopAppBarDefaults
+                        .topAppBarColors(
+                            containerColor =
+                                MaterialTheme
+                                    .colorScheme
+                                    .surface
+                        )
             )
         },
-        containerColor = bg
+
+        containerColor =
+            MaterialTheme
+                .colorScheme
+                .background
+
     ) { paddingValues ->
+
+
         when {
+
+            /*
+             * Loading
+             */
             isLoading -> {
+
                 Box(
-                    modifier = Modifier.fillMaxSize().padding(paddingValues),
-                    contentAlignment = Alignment.Center
-                ) { CircularProgressIndicator(color = tealDeep) }
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(
+                                paddingValues
+                            ),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+
+                    Column(
+                        horizontalAlignment =
+                            Alignment.CenterHorizontally
+                    ) {
+
+                        Box(
+                            modifier =
+                                Modifier
+                                    .size(
+                                        64.dp
+                                    )
+                                    .background(
+                                        PatientColors.TipsCard,
+                                        CircleShape
+                                    ),
+                            contentAlignment =
+                                Alignment.Center
+                        ) {
+
+                            CircularProgressIndicator(
+                                modifier =
+                                    Modifier.size(
+                                        30.dp
+                                    ),
+                                color =
+                                    PatientColors.TipsAccent,
+                                strokeWidth =
+                                    2.5.dp
+                            )
+                        }
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(
+                                    12.dp
+                                )
+                        )
+
+
+                        Text(
+                            text =
+                                "Loading health tips",
+                            color =
+                                PatientColors.TextPrimary,
+                            fontWeight =
+                                FontWeight.Bold,
+                            fontSize =
+                                14.sp
+                        )
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(
+                                    3.dp
+                                )
+                        )
+
+
+                        Text(
+                            text =
+                                "Preparing wellness guidance for you...",
+                            color =
+                                PatientColors.TextSecondary,
+                            fontSize =
+                                10.5.sp
+                        )
+                    }
+                }
             }
 
+
+            /*
+             * Error
+             */
             loadError != null -> {
+
                 Box(
-                    modifier = Modifier.fillMaxSize().padding(paddingValues).padding(24.dp),
-                    contentAlignment = Alignment.Center
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(
+                                paddingValues
+                            )
+                            .padding(
+                                24.dp
+                            ),
+                    contentAlignment =
+                        Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(loadError ?: "", color = muted, fontSize = 13.sp, textAlign = TextAlign.Center)
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Button(onClick = { reloadTrigger++ }, colors = ButtonDefaults.buttonColors(containerColor = navy)) {
-                            Text("Try Again", color = MaterialTheme.colorScheme.onPrimary)
+
+                    Card(
+                        modifier =
+                            Modifier.fillMaxWidth(),
+                        shape =
+                            RoundedCornerShape(
+                                22.dp
+                            ),
+                        colors =
+                            CardDefaults.cardColors(
+                                containerColor =
+                                    PatientColors.RedSoft
+                            ),
+                        elevation =
+                            CardDefaults.cardElevation(
+                                defaultElevation =
+                                    0.dp
+                            )
+                    ) {
+
+                        Column(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        22.dp
+                                    ),
+                            horizontalAlignment =
+                                Alignment.CenterHorizontally
+                        ) {
+
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .size(
+                                            62.dp
+                                        )
+                                        .background(
+                                            PatientColors.Red
+                                                .copy(
+                                                    alpha = 0.10f
+                                                ),
+                                            CircleShape
+                                        ),
+                                contentAlignment =
+                                    Alignment.Center
+                            ) {
+
+                                Icon(
+                                    imageVector =
+                                        Icons.Outlined.LocalHospital,
+                                    contentDescription =
+                                        null,
+                                    tint =
+                                        PatientColors.Red,
+                                    modifier =
+                                        Modifier.size(
+                                            29.dp
+                                        )
+                                )
+                            }
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(
+                                        13.dp
+                                    )
+                            )
+
+
+                            Text(
+                                text =
+                                    "Couldn't load health tips",
+                                color =
+                                    PatientColors.TextPrimary,
+                                fontWeight =
+                                    FontWeight.ExtraBold,
+                                fontSize =
+                                    15.sp
+                            )
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(
+                                        5.dp
+                                    )
+                            )
+
+
+                            Text(
+                                text =
+                                    loadError
+                                        ?: "Something went wrong.",
+                                color =
+                                    PatientColors.TextSecondary,
+                                fontSize =
+                                    11.sp,
+                                lineHeight =
+                                    16.sp,
+                                textAlign =
+                                    TextAlign.Center
+                            )
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(
+                                        14.dp
+                                    )
+                            )
+
+
+                            Button(
+                                onClick = {
+                                    reloadTrigger++
+                                },
+                                shape =
+                                    RoundedCornerShape(
+                                        14.dp
+                                    ),
+                                colors =
+                                    ButtonDefaults.buttonColors(
+                                        containerColor =
+                                            PatientColors.TipsAccent,
+                                        contentColor =
+                                            Color.White
+                                    )
+                            ) {
+
+                                Text(
+                                    text =
+                                        "Try again",
+                                    fontWeight =
+                                        FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }
             }
 
+
+            /*
+             * Main content
+             */
             else -> {
+
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(1),
-                    contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
-                    modifier = Modifier.padding(paddingValues)
+                    columns =
+                        GridCells.Fixed(1),
+
+                    contentPadding =
+                        PaddingValues(
+                            top = 10.dp,
+                            bottom = 24.dp
+                        ),
+
+                    modifier =
+                        Modifier.padding(
+                            paddingValues
+                        )
                 ) {
-                    todayTip?.let { tip ->
-                        item { TipOfTheDayCard(tip, onClick = { selectedTip = tip }) }
+
+                    /*
+                     * Wellness intro card
+                     */
+                    item {
+
+                        Card(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        horizontal = 20.dp,
+                                        vertical = 6.dp
+                                    ),
+
+                            shape =
+                                RoundedCornerShape(
+                                    22.dp
+                                ),
+
+                            colors =
+                                CardDefaults.cardColors(
+                                    containerColor =
+                                        PatientColors.TipsCard
+                                ),
+
+                            elevation =
+                                CardDefaults.cardElevation(
+                                    defaultElevation =
+                                        0.dp
+                                )
+                        ) {
+
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            16.dp
+                                        ),
+                                verticalAlignment =
+                                    Alignment.CenterVertically
+                            ) {
+
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .size(
+                                                50.dp
+                                            )
+                                            .background(
+                                                PatientColors.TipsAccent
+                                                    .copy(
+                                                        alpha = 0.12f
+                                                    ),
+                                                RoundedCornerShape(
+                                                    15.dp
+                                                )
+                                            ),
+                                    contentAlignment =
+                                        Alignment.Center
+                                ) {
+
+                                    Icon(
+                                        imageVector =
+                                            Icons.Outlined.LocalHospital,
+                                        contentDescription =
+                                            null,
+                                        tint =
+                                            PatientColors.TipsAccent,
+                                        modifier =
+                                            Modifier.size(
+                                                24.dp
+                                            )
+                                    )
+                                }
+
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.width(
+                                            12.dp
+                                        )
+                                )
+
+
+                                Column(
+                                    modifier =
+                                        Modifier.weight(
+                                            1f
+                                        )
+                                ) {
+
+                                    Text(
+                                        text =
+                                            "Wellness library",
+                                        color =
+                                            PatientColors.TextPrimary,
+                                        fontWeight =
+                                            FontWeight.ExtraBold,
+                                        fontSize =
+                                            14.sp
+                                    )
+
+
+                                    Spacer(
+                                        modifier =
+                                            Modifier.height(
+                                                2.dp
+                                            )
+                                    )
+
+
+                                    Text(
+                                        text =
+                                            "Explore practical tips for everyday health, prevention and wellbeing.",
+                                        color =
+                                            PatientColors.TextSecondary,
+                                        fontSize =
+                                            10.5.sp,
+                                        lineHeight =
+                                            15.sp
+                                    )
+                                }
+                            }
+                        }
                     }
 
+
+                    /*
+                     * Tip of the day
+                     */
+                    todayTip?.let { tip ->
+
+                        item {
+
+                            TipOfTheDayCard(
+                                tip =
+                                    tip,
+                                onClick = {
+                                    selectedTip =
+                                        tip
+                                }
+                            )
+                        }
+                    }
+
+
+                    /*
+                     * Category filters
+                     *
+                     * THIS is where the item { ... }
+                     * from the previous message belongs.
+                     */
                     item {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState())
-                                .padding(horizontal = 20.dp, vertical = 12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+
+                        Column(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        top = 8.dp,
+                                        bottom = 4.dp
+                                    )
                         ) {
-                            TipCategory.entries.forEach { cat ->
-                                FilterChip(
-                                    selected = selectedCategory == cat,
-                                    onClick = { selectedCategory = cat },
-                                    label = { Text(cat.label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) },
-                                    shape = RoundedCornerShape(20.dp),
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = navy,
-                                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                                        containerColor = MaterialTheme.colorScheme.surface,
-                                        labelColor = muted
+
+                            Text(
+                                text =
+                                    "Explore by category",
+                                modifier =
+                                    Modifier.padding(
+                                        horizontal =
+                                            20.dp
                                     ),
-                                    border = null
+                                color =
+                                    PatientColors.TextPrimary,
+                                fontSize =
+                                    12.5.sp,
+                                fontWeight =
+                                    FontWeight.Bold
+                            )
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(
+                                        8.dp
+                                    )
+                            )
+
+
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(
+                                            rememberScrollState()
+                                        )
+                                        .padding(
+                                            horizontal =
+                                                20.dp
+                                        ),
+
+                                horizontalArrangement =
+                                    Arrangement.spacedBy(
+                                        8.dp
+                                    )
+                            ) {
+
+                                TipCategory.entries
+                                    .forEach { cat ->
+
+                                        val accent =
+                                            when (cat) {
+
+                                                TipCategory.ALL ->
+                                                    PatientColors.TipsAccent
+
+                                                TipCategory.HOME ->
+                                                    PatientColors.DoctorAccent
+
+                                                TipCategory.DAILY ->
+                                                    PatientColors.AppointmentAccent
+
+                                                TipCategory.MENTAL ->
+                                                    PatientColors.Purple
+
+                                                TipCategory.PREVENTION ->
+                                                    PatientColors.Red
+                                            }
+
+
+                                        val background =
+                                            when (cat) {
+
+                                                TipCategory.ALL ->
+                                                    PatientColors.TipsCard
+
+                                                TipCategory.HOME ->
+                                                    PatientColors.DoctorCard
+
+                                                TipCategory.DAILY ->
+                                                    PatientColors.AppointmentCard
+
+                                                TipCategory.MENTAL ->
+                                                    PatientColors.PurpleSoft
+
+                                                TipCategory.PREVENTION ->
+                                                    PatientColors.RedSoft
+                                            }
+
+
+                                        val selected =
+                                            selectedCategory ==
+                                                    cat
+
+
+                                        FilterChip(
+                                            selected =
+                                                selected,
+
+                                            onClick = {
+                                                selectedCategory =
+                                                    cat
+                                            },
+
+                                            label = {
+
+                                                Text(
+                                                    text =
+                                                        cat.label,
+                                                    fontSize =
+                                                        11.5.sp,
+                                                    fontWeight =
+                                                        if (
+                                                            selected
+                                                        ) {
+                                                            FontWeight.Bold
+                                                        } else {
+                                                            FontWeight.Medium
+                                                        }
+                                                )
+                                            },
+
+                                            shape =
+                                                RoundedCornerShape(
+                                                    22.dp
+                                                ),
+
+                                            colors =
+                                                FilterChipDefaults
+                                                    .filterChipColors(
+
+                                                        selectedContainerColor =
+                                                            accent,
+
+                                                        selectedLabelColor =
+                                                            Color.White,
+
+                                                        containerColor =
+                                                            background,
+
+                                                        labelColor =
+                                                            accent
+                                                    ),
+
+                                            border =
+                                                null
+                                        )
+                                    }
+                            }
+                        }
+                    }
+
+
+                    /*
+                     * Tip sections
+                     */
+                    groupedTips.forEach {
+                            (category, categoryTips) ->
+
+
+                        item {
+
+                            Box(
+                                modifier =
+                                    Modifier.padding(
+                                        horizontal =
+                                            20.dp,
+                                        vertical =
+                                            6.dp
+                                    )
+                            ) {
+
+                                SectionLabel(
+                                    text =
+                                        category.label,
+                                    accent =
+                                        colorForCategory(
+                                            category
+                                        )
+                                )
+                            }
+                        }
+
+
+                        items(
+                            categoryTips,
+                            key = {
+                                it.id
+                            }
+                        ) { tip ->
+
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .animateItem()
+                                        .padding(
+                                            horizontal =
+                                                20.dp,
+                                            vertical =
+                                                6.dp
+                                        )
+                            ) {
+
+                                ExternalTipCard(
+                                    tip =
+                                        tip,
+                                    onClick = {
+                                        selectedTip =
+                                            tip
+                                    }
                                 )
                             }
                         }
                     }
 
-                    groupedTips.forEach { (category, items) ->
-                        item {
-                            Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
-                                SectionLabel(category.label, colorForCategory(category))
-                            }
-                        }
-                        items(items, key = { it.id }) { tip ->
-                            Box(
-                                modifier = Modifier
-                                    .animateItem()
-                                    .padding(horizontal = 20.dp, vertical = 6.dp)
-                            ) {
-                                ExternalTipCard(tip, onClick = { selectedTip = tip })
-                            }
-                        }
-                    }
 
+                    /*
+                     * Safety guidance
+                     */
                     item {
-                        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            SectionLabel("When to seek help", tealDeep)
-                            Spacer(modifier = Modifier.height(12.dp))
+
+                        Column(
+                            modifier =
+                                Modifier.padding(
+                                    horizontal =
+                                        20.dp
+                                )
+                        ) {
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(
+                                        8.dp
+                                    )
+                            )
+
+
+                            SectionLabel(
+                                text =
+                                    "When to seek help",
+                                accent =
+                                    PatientColors.DoctorAccent
+                            )
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(
+                                        12.dp
+                                    )
+                            )
+
+
                             WarningSection()
-                            Spacer(modifier = Modifier.height(20.dp))
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(
+                                        20.dp
+                                    )
+                            )
+
+
                             EmergencyBanner()
-                            Spacer(modifier = Modifier.height(20.dp))
-                            NoteBox(onBookConsultation)
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(
+                                        20.dp
+                                    )
+                            )
+
+
+                            NoteBox(
+                                onBookConsultation =
+                                    onBookConsultation
+                            )
                         }
                     }
                 }
@@ -266,8 +1082,20 @@ fun HealthTipsScreen(
         }
     }
 
+
+    /*
+     * Tip details dialog
+     */
     selectedTip?.let { tip ->
-        TipDetailDialog(tip, onDismiss = { selectedTip = null })
+
+        TipDetailDialog(
+            tip =
+                tip,
+            onDismiss = {
+                selectedTip =
+                    null
+            }
+        )
     }
 }
 
@@ -294,166 +1122,1145 @@ private fun SectionLabel(text: String, accent: Color) {
 }
 
 @Composable
-private fun TipOfTheDayCard(tip: ExternalHealthTip, onClick: () -> Unit) {
-    val visibleState = remember { MutableTransitionState(false).apply { targetState = true } }
-    val context = LocalContext.current
-    val tealSoft = MaterialTheme.colorScheme.primaryContainer
-    val tealDeep = MaterialTheme.colorScheme.primary
-    val ink = MaterialTheme.colorScheme.onSurface
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+private fun TipOfTheDayCard(
+    tip: ExternalHealthTip,
+    onClick: () -> Unit
+) {
 
-    Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
+    val visibleState =
+        remember {
+            MutableTransitionState(false)
+                .apply {
+                    targetState = true
+                }
+        }
+
+    val context =
+        LocalContext.current
+
+    val categoryAccent =
+        colorForCategory(
+            tip.category
+        )
+
+
+    Box(
+        modifier =
+            Modifier.padding(
+                horizontal = 20.dp,
+                vertical = 8.dp
+            )
+    ) {
+
         AnimatedVisibility(
-            visibleState = visibleState,
-            enter = fadeIn() + slideInVertically(initialOffsetY = { it / 3 })
+            visibleState =
+                visibleState,
+            enter =
+                fadeIn() +
+                        slideInVertically(
+                            initialOffsetY = {
+                                it / 3
+                            }
+                        )
         ) {
+
             Card(
-                colors = CardDefaults.cardColors(containerColor = tealSoft),
-                shape = RoundedCornerShape(18.dp),
-                modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
-            ) {
-                Column {
-                    AsyncImage(
-                        model = ImageRequest.Builder(context).data(tip.imageUrl).crossfade(true).build(),
-                        contentDescription = tip.title,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(120.dp)
-                            .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable(
+                            onClick = onClick
+                        ),
+
+                shape =
+                    RoundedCornerShape(
+                        24.dp
+                    ),
+
+                colors =
+                    CardDefaults.cardColors(
+                        containerColor =
+                            PatientColors.TipsCard
+                    ),
+
+                elevation =
+                    CardDefaults.cardElevation(
+                        defaultElevation = 2.dp
                     )
-                    Column(modifier = Modifier.padding(18.dp)) {
+            ) {
+
+                Column {
+
+                    /*
+                     * Tip image
+                     */
+                    Box(
+                        modifier =
+                            Modifier.fillMaxWidth()
+                    ) {
+
+                        AsyncImage(
+                            model =
+                                ImageRequest
+                                    .Builder(context)
+                                    .data(
+                                        tip.imageUrl
+                                    )
+                                    .crossfade(true)
+                                    .build(),
+
+                            contentDescription =
+                                tip.title,
+
+                            contentScale =
+                                ContentScale.Crop,
+
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(
+                                        160.dp
+                                    )
+                                    .clip(
+                                        RoundedCornerShape(
+                                            topStart = 24.dp,
+                                            topEnd = 24.dp
+                                        )
+                                    )
+                        )
+
+
+                        /*
+                         * Tip of the day badge
+                         */
                         Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(Color.White.copy(alpha = 0.7f))
-                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                            modifier =
+                                Modifier
+                                    .align(
+                                        Alignment.TopStart
+                                    )
+                                    .padding(
+                                        12.dp
+                                    )
+                                    .background(
+                                        Color.White.copy(
+                                            alpha = 0.92f
+                                        ),
+                                        RoundedCornerShape(
+                                            20.dp
+                                        )
+                                    )
+                                    .padding(
+                                        horizontal = 10.dp,
+                                        vertical = 6.dp
+                                    )
                         ) {
+
                             Text(
-                                "TIP OF THE DAY",
-                                color = tealDeep,
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 0.6.sp
+                                text =
+                                    "TIP OF THE DAY",
+                                color =
+                                    PatientColors.TipsAccent,
+                                fontSize =
+                                    9.5.sp,
+                                fontWeight =
+                                    FontWeight.ExtraBold,
+                                letterSpacing =
+                                    0.5.sp
                             )
                         }
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(tip.title, color = ink, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(tip.teaser, color = muted, fontSize = 13.sp, lineHeight = 19.sp)
+
+
+                        /*
+                         * Category badge
+                         */
+                        Box(
+                            modifier =
+                                Modifier
+                                    .align(
+                                        Alignment.TopEnd
+                                    )
+                                    .padding(
+                                        12.dp
+                                    )
+                                    .background(
+                                        Color.White.copy(
+                                            alpha = 0.92f
+                                        ),
+                                        RoundedCornerShape(
+                                            20.dp
+                                        )
+                                    )
+                                    .padding(
+                                        horizontal = 9.dp,
+                                        vertical = 6.dp
+                                    )
+                        ) {
+
+                            Text(
+                                text =
+                                    tip.category.label,
+                                color =
+                                    categoryAccent,
+                                fontSize =
+                                    9.sp,
+                                fontWeight =
+                                    FontWeight.Bold
+                            )
+                        }
                     }
-                }
-            }
-        }
-    }
-}
 
-@Composable
-private fun ExternalTipCard(tip: ExternalHealthTip, onClick: () -> Unit) {
-    val context = LocalContext.current
-    val ink = MaterialTheme.colorScheme.onSurface
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .shadow(elevation = 2.dp, shape = RoundedCornerShape(16.dp), spotColor = Color(0x1A0B1828))
-    ) {
-        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            AsyncImage(
-                model = ImageRequest.Builder(context).data(tip.imageUrl).crossfade(true).build(),
-                contentDescription = tip.title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(RoundedCornerShape(12.dp))
-            )
-            Spacer(modifier = Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(tip.title, color = ink, fontSize = 14.5.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(tip.teaser, color = muted, fontSize = 12.5.sp, lineHeight = 17.sp, maxLines = 2)
-            }
-        }
-    }
-}
 
-@Composable
-private fun TipDetailDialog(tip: ExternalHealthTip, onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    val ink = MaterialTheme.colorScheme.onSurface
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val tealDeep = MaterialTheme.colorScheme.primary
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(24.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp)
-                .fillMaxHeight(0.85f)
-        ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                Box {
-                    AsyncImage(
-                        model = ImageRequest.Builder(context).data(tip.imageUrl).crossfade(true).build(),
-                        contentDescription = tip.title,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(180.dp)
-                            .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                    )
-                    IconButton(
-                        onClick = onDismiss,
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(10.dp)
-                            .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.4f))
+                    /*
+                     * Tip information
+                     */
+                    Column(
+                        modifier =
+                            Modifier.padding(
+                                17.dp
+                            )
                     ) {
-                        Icon(Icons.Outlined.Close, contentDescription = "Close", tint = Color.White)
+
+                        Row(
+                            verticalAlignment =
+                                Alignment.CenterVertically
+                        ) {
+
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .size(
+                                            38.dp
+                                        )
+                                        .background(
+                                            PatientColors.TipsAccent
+                                                .copy(
+                                                    alpha = 0.12f
+                                                ),
+                                            RoundedCornerShape(
+                                                12.dp
+                                            )
+                                        ),
+                                contentAlignment =
+                                    Alignment.Center
+                            ) {
+
+                                Icon(
+                                    imageVector =
+                                        Icons.Outlined.LocalHospital,
+                                    contentDescription =
+                                        null,
+                                    tint =
+                                        PatientColors.TipsAccent,
+                                    modifier =
+                                        Modifier.size(
+                                            19.dp
+                                        )
+                                )
+                            }
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.width(
+                                        10.dp
+                                    )
+                            )
+
+
+                            Column(
+                                modifier =
+                                    Modifier.weight(1f)
+                            ) {
+
+                                Text(
+                                    text =
+                                        "Today's wellness tip",
+                                    color =
+                                        PatientColors.TextSecondary,
+                                    fontSize =
+                                        9.5.sp,
+                                    fontWeight =
+                                        FontWeight.SemiBold
+                                )
+
+
+                                Text(
+                                    text =
+                                        tip.title,
+                                    color =
+                                        PatientColors.TextPrimary,
+                                    fontSize =
+                                        15.sp,
+                                    fontWeight =
+                                        FontWeight.ExtraBold,
+                                    lineHeight =
+                                        19.sp
+                                )
+                            }
+                        }
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(
+                                    10.dp
+                                )
+                        )
+
+
+                        Text(
+                            text =
+                                tip.teaser,
+                            color =
+                                PatientColors.TextSecondary,
+                            fontSize =
+                                11.5.sp,
+                            lineHeight =
+                                17.sp,
+                            maxLines =
+                                3
+                        )
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(
+                                    12.dp
+                                )
+                        )
+
+
+                        Row(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        Color.White.copy(
+                                            alpha = 0.72f
+                                        ),
+                                        RoundedCornerShape(
+                                            14.dp
+                                        )
+                                    )
+                                    .padding(
+                                        horizontal = 12.dp,
+                                        vertical = 10.dp
+                                    ),
+                            verticalAlignment =
+                                Alignment.CenterVertically
+                        ) {
+
+                            Text(
+                                text =
+                                    "Tap to read the full tip",
+                                modifier =
+                                    Modifier.weight(1f),
+                                color =
+                                    PatientColors.TipsAccent,
+                                fontSize =
+                                    10.5.sp,
+                                fontWeight =
+                                    FontWeight.Bold
+                            )
+
+
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .size(
+                                            7.dp
+                                        )
+                                        .background(
+                                            PatientColors.TipsAccent,
+                                            CircleShape
+                                        )
+                            )
+                        }
                     }
                 }
+            }
+        }
+    }
+}
 
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
-                        .padding(22.dp)
+@Composable
+private fun ExternalTipCard(
+    tip: ExternalHealthTip,
+    onClick: () -> Unit
+) {
+
+    val context =
+        LocalContext.current
+
+    val accent =
+        colorForCategory(
+            tip.category
+        )
+
+    val background =
+        when (tip.category) {
+
+            TipCategory.HOME ->
+                PatientColors.DoctorCard
+
+            TipCategory.DAILY ->
+                PatientColors.AppointmentCard
+
+            TipCategory.MENTAL ->
+                PatientColors.PurpleSoft
+
+            TipCategory.PREVENTION ->
+                PatientColors.RedSoft
+
+            TipCategory.ALL ->
+                PatientColors.TipsCard
+        }
+
+
+    Card(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(
+                    onClick = onClick
+                ),
+
+        shape =
+            RoundedCornerShape(
+                18.dp
+            ),
+
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    MaterialTheme.colorScheme.surface
+            ),
+
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 1.dp
+            )
+    ) {
+
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        13.dp
+                    ),
+
+            verticalAlignment =
+                Alignment.CenterVertically
+        ) {
+
+            /*
+             * Tip image
+             */
+            Box(
+                modifier =
+                    Modifier
+                        .size(
+                            72.dp
+                        )
+                        .clip(
+                            RoundedCornerShape(
+                                15.dp
+                            )
+                        )
+                        .background(
+                            background
+                        )
+            ) {
+
+                AsyncImage(
+                    model =
+                        ImageRequest
+                            .Builder(context)
+                            .data(
+                                tip.imageUrl
+                            )
+                            .crossfade(true)
+                            .build(),
+
+                    contentDescription =
+                        tip.title,
+
+                    contentScale =
+                        ContentScale.Crop,
+
+                    modifier =
+                        Modifier.fillMaxSize()
+                )
+
+
+                /*
+                 * Category accent
+                 */
+                Box(
+                    modifier =
+                        Modifier
+                            .align(
+                                Alignment.BottomStart
+                            )
+                            .padding(
+                                6.dp
+                            )
+                            .background(
+                                Color.White.copy(
+                                    alpha = 0.92f
+                                ),
+                                RoundedCornerShape(
+                                    12.dp
+                                )
+                            )
+                            .padding(
+                                horizontal = 6.dp,
+                                vertical = 3.dp
+                            )
                 ) {
-                    Text(tip.title, color = ink, fontSize = 19.sp, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(tip.fullSummary, color = muted, fontSize = 13.5.sp, lineHeight = 20.sp)
+
+                    Text(
+                        text =
+                            tip.category.label,
+                        color =
+                            accent,
+                        fontSize =
+                            7.5.sp,
+                        fontWeight =
+                            FontWeight.Bold
+                    )
                 }
+            }
+
+
+            Spacer(
+                modifier =
+                    Modifier.width(
+                        12.dp
+                    )
+            )
+
+
+            /*
+             * Tip content
+             */
+            Column(
+                modifier =
+                    Modifier.weight(1f)
+            ) {
+
+                Text(
+                    text =
+                        tip.title,
+                    color =
+                        PatientColors.TextPrimary,
+                    fontSize =
+                        13.5.sp,
+                    fontWeight =
+                        FontWeight.ExtraBold,
+                    lineHeight =
+                        17.sp,
+                    maxLines =
+                        2
+                )
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            4.dp
+                        )
+                )
+
+
+                Text(
+                    text =
+                        tip.teaser,
+                    color =
+                        PatientColors.TextSecondary,
+                    fontSize =
+                        10.5.sp,
+                    lineHeight =
+                        15.sp,
+                    maxLines =
+                        2
+                )
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            7.dp
+                        )
+                )
+
 
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 22.dp, vertical = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalAlignment =
+                        Alignment.CenterVertically
                 ) {
-                    OutlinedButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.weight(1f).height(48.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    ) { Text("Close", color = ink) }
 
-                    tip.sourceUrl?.let { url ->
-                        Button(
-                            onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri())) },
-                            modifier = Modifier.weight(1f).height(48.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = tealDeep),
-                            shape = RoundedCornerShape(12.dp)
-                        ) { Text("For More Info", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.SemiBold) }
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(
+                                    6.dp
+                                )
+                                .background(
+                                    accent,
+                                    CircleShape
+                                )
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(
+                                5.dp
+                            )
+                    )
+
+
+                    Text(
+                        text =
+                            "Read more",
+                        color =
+                            accent,
+                        fontSize =
+                            9.5.sp,
+                        fontWeight =
+                            FontWeight.Bold
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TipDetailDialog(
+    tip: ExternalHealthTip,
+    onDismiss: () -> Unit
+) {
+
+    val context =
+        LocalContext.current
+
+    val accent =
+        colorForCategory(
+            tip.category
+        )
+
+    val background =
+        when (tip.category) {
+
+            TipCategory.HOME ->
+                PatientColors.DoctorCard
+
+            TipCategory.DAILY ->
+                PatientColors.AppointmentCard
+
+            TipCategory.MENTAL ->
+                PatientColors.PurpleSoft
+
+            TipCategory.PREVENTION ->
+                PatientColors.RedSoft
+
+            TipCategory.ALL ->
+                PatientColors.TipsCard
+        }
+
+
+    Dialog(
+        onDismissRequest =
+            onDismiss,
+
+        properties =
+            DialogProperties(
+                usePlatformDefaultWidth =
+                    false
+            )
+    ) {
+
+        Card(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        18.dp
+                    )
+                    .fillMaxHeight(
+                        0.88f
+                    ),
+
+            shape =
+                RoundedCornerShape(
+                    28.dp
+                ),
+
+            colors =
+                CardDefaults.cardColors(
+                    containerColor =
+                        MaterialTheme.colorScheme.surface
+                ),
+
+            elevation =
+                CardDefaults.cardElevation(
+                    defaultElevation =
+                        5.dp
+                )
+        ) {
+
+            Column(
+                modifier =
+                    Modifier.fillMaxSize()
+            ) {
+
+                /*
+                 * Hero image
+                 */
+                Box(
+                    modifier =
+                        Modifier.fillMaxWidth()
+                ) {
+
+                    AsyncImage(
+                        model =
+                            ImageRequest
+                                .Builder(context)
+                                .data(
+                                    tip.imageUrl
+                                )
+                                .crossfade(true)
+                                .build(),
+
+                        contentDescription =
+                            tip.title,
+
+                        contentScale =
+                            ContentScale.Crop,
+
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .height(
+                                    190.dp
+                                )
+                                .clip(
+                                    RoundedCornerShape(
+                                        topStart = 28.dp,
+                                        topEnd = 28.dp
+                                    )
+                                )
+                    )
+
+
+                    /*
+                     * Category badge
+                     */
+                    Box(
+                        modifier =
+                            Modifier
+                                .align(
+                                    Alignment.TopStart
+                                )
+                                .padding(
+                                    13.dp
+                                )
+                                .background(
+                                    Color.White.copy(
+                                        alpha = 0.93f
+                                    ),
+                                    RoundedCornerShape(
+                                        18.dp
+                                    )
+                                )
+                                .padding(
+                                    horizontal = 10.dp,
+                                    vertical = 6.dp
+                                )
+                    ) {
+
+                        Text(
+                            text =
+                                tip.category.label,
+                            color =
+                                accent,
+                            fontSize =
+                                9.sp,
+                            fontWeight =
+                                FontWeight.Bold
+                        )
                     }
+
+
+                    /*
+                     * Close button
+                     */
+                    IconButton(
+                        onClick =
+                            onDismiss,
+
+                        modifier =
+                            Modifier
+                                .align(
+                                    Alignment.TopEnd
+                                )
+                                .padding(
+                                    10.dp
+                                )
+                                .background(
+                                    Color.Black.copy(
+                                        alpha = 0.38f
+                                    ),
+                                    CircleShape
+                                )
+                    ) {
+
+                        Icon(
+                            imageVector =
+                                Icons.Outlined.Close,
+                            contentDescription =
+                                "Close",
+                            tint =
+                                Color.White
+                        )
+                    }
+                }
+
+
+                /*
+                 * Scrollable content
+                 */
+                Column(
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .verticalScroll(
+                                rememberScrollState()
+                            )
+                            .padding(
+                                horizontal = 20.dp,
+                                vertical = 18.dp
+                            )
+                ) {
+
+                    /*
+                     * Small accent row
+                     */
+                    Row(
+                        verticalAlignment =
+                            Alignment.CenterVertically
+                    ) {
+
+                        Box(
+                            modifier =
+                                Modifier
+                                    .size(
+                                        38.dp
+                                    )
+                                    .background(
+                                        background,
+                                        RoundedCornerShape(
+                                            12.dp
+                                        )
+                                    ),
+                            contentAlignment =
+                                Alignment.Center
+                        ) {
+
+                            Icon(
+                                imageVector =
+                                    Icons.Outlined.LocalHospital,
+                                contentDescription =
+                                    null,
+                                tint =
+                                    accent,
+                                modifier =
+                                    Modifier.size(
+                                        19.dp
+                                    )
+                            )
+                        }
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.width(
+                                    9.dp
+                                )
+                        )
+
+
+                        Column {
+
+                            Text(
+                                text =
+                                    "Health guidance",
+                                color =
+                                    PatientColors.TextSecondary,
+                                fontSize =
+                                    9.5.sp,
+                                fontWeight =
+                                    FontWeight.SemiBold
+                            )
+
+
+                            Text(
+                                text =
+                                    tip.category.label,
+                                color =
+                                    accent,
+                                fontSize =
+                                    10.5.sp,
+                                fontWeight =
+                                    FontWeight.Bold
+                            )
+                        }
+                    }
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                14.dp
+                            )
+                    )
+
+
+                    Text(
+                        text =
+                            tip.title,
+                        color =
+                            PatientColors.TextPrimary,
+                        fontSize =
+                            20.sp,
+                        fontWeight =
+                            FontWeight.ExtraBold,
+                        lineHeight =
+                            25.sp
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                12.dp
+                            )
+                    )
+
+
+                    /*
+                     * Summary
+                     */
+                    Column(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    background,
+                                    RoundedCornerShape(
+                                        18.dp
+                                    )
+                                )
+                                .padding(
+                                    15.dp
+                                )
+                    ) {
+
+                        Text(
+                            text =
+                                "What you should know",
+                            color =
+                                accent,
+                            fontSize =
+                                10.5.sp,
+                            fontWeight =
+                                FontWeight.Bold
+                        )
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(
+                                    7.dp
+                                )
+                        )
+
+
+                        Text(
+                            text =
+                                tip.fullSummary,
+                            color =
+                                PatientColors.TextSecondary,
+                            fontSize =
+                                12.sp,
+                            lineHeight =
+                                19.sp
+                        )
+                    }
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                14.dp
+                            )
+                    )
+
+
+                    /*
+                     * General disclaimer
+                     */
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    PatientColors.NeutralCard,
+                                    RoundedCornerShape(
+                                        15.dp
+                                    )
+                                )
+                                .padding(
+                                    12.dp
+                                ),
+                        verticalAlignment =
+                            Alignment.Top
+                    ) {
+
+                        Icon(
+                            imageVector =
+                                Icons.Outlined.Info,
+                            contentDescription =
+                                null,
+                            tint =
+                                PatientColors.TextSecondary,
+                            modifier =
+                                Modifier.size(
+                                    17.dp
+                                )
+                        )
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.width(
+                                    8.dp
+                                )
+                        )
+
+
+                        Text(
+                            text =
+                                "Health tips are general guidance and do not replace professional medical advice.",
+                            modifier =
+                                Modifier.weight(1f),
+                            color =
+                                PatientColors.TextSecondary,
+                            fontSize =
+                                10.sp,
+                            lineHeight =
+                                14.sp
+                        )
+                    }
+                }
+
+
+                /*
+                 * Bottom actions
+                 */
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                horizontal = 20.dp,
+                                vertical = 15.dp
+                            ),
+
+                    horizontalArrangement =
+                        Arrangement.spacedBy(
+                            9.dp
+                        )
+                ) {
+
+                    OutlinedButton(
+                        onClick =
+                            onDismiss,
+
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .height(
+                                    50.dp
+                                ),
+
+                        shape =
+                            RoundedCornerShape(
+                                14.dp
+                            )
+                    ) {
+
+                        Text(
+                            text =
+                                "Close",
+                            color =
+                                PatientColors.TextPrimary,
+                            fontWeight =
+                                FontWeight.Bold
+                        )
+                    }
+
+
+                    tip.sourceUrl
+                        ?.takeIf {
+                            it.isNotBlank()
+                        }
+                        ?.let { url ->
+
+                            Button(
+                                onClick = {
+
+                                    context.startActivity(
+                                        Intent(
+                                            Intent.ACTION_VIEW,
+                                            url.toUri()
+                                        )
+                                    )
+                                },
+
+                                modifier =
+                                    Modifier
+                                        .weight(1f)
+                                        .height(
+                                            50.dp
+                                        ),
+
+                                shape =
+                                    RoundedCornerShape(
+                                        14.dp
+                                    ),
+
+                                colors =
+                                    ButtonDefaults.buttonColors(
+                                        containerColor =
+                                            accent,
+                                        contentColor =
+                                            Color.White
+                                    )
+                            ) {
+
+                                Text(
+                                    text =
+                                        "Learn more",
+                                    fontWeight =
+                                        FontWeight.Bold
+                                )
+                            }
+                        }
                 }
             }
         }
@@ -462,34 +2269,188 @@ private fun TipDetailDialog(tip: ExternalHealthTip, onDismiss: () -> Unit) {
 
 @Composable
 private fun WarningSection() {
+
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF064E3B)),
-        shape = RoundedCornerShape(18.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier =
+            Modifier.fillMaxWidth(),
+
+        shape =
+            RoundedCornerShape(
+                22.dp
+            ),
+
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    PatientColors.SuccessCard
+            ),
+
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 0.dp
+            )
     ) {
-        Column(modifier = Modifier.padding(22.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier.size(36.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.12f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Outlined.LocalHospital, contentDescription = null, tint = Color(0xFF6EE7B7), modifier = Modifier.size(18.dp))
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    "Seek immediate medical care if you notice:",
-                    color = Color.White, fontSize = 14.5.sp, fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f)
+
+        Column(
+            modifier =
+                Modifier.padding(
+                    17.dp
                 )
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            warningSigns.forEach { sign ->
-                Row(modifier = Modifier.padding(bottom = 10.dp)) {
-                    Box(
-                        modifier = Modifier.padding(top = 7.dp).size(5.dp).clip(CircleShape).background(Color(0xFF6EE7B7))
+        ) {
+
+            Row(
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+
+                Box(
+                    modifier =
+                        Modifier
+                            .size(
+                                44.dp
+                            )
+                            .background(
+                                PatientColors.SuccessAccent
+                                    .copy(alpha = 0.12f),
+                                RoundedCornerShape(
+                                    14.dp
+                                )
+                            ),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+
+                    Icon(
+                        imageVector =
+                            Icons.Outlined.LocalHospital,
+                        contentDescription =
+                            null,
+                        tint =
+                            PatientColors.SuccessAccent,
+                        modifier =
+                            Modifier.size(
+                                21.dp
+                            )
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(sign, color = Color.White.copy(alpha = 0.88f), fontSize = 13.5.sp, lineHeight = 19.sp)
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.width(
+                            11.dp
+                        )
+                )
+
+
+                Column(
+                    modifier =
+                        Modifier.weight(1f)
+                ) {
+
+                    Text(
+                        text =
+                            "Know the warning signs",
+                        color =
+                            PatientColors.TextPrimary,
+                        fontWeight =
+                            FontWeight.ExtraBold,
+                        fontSize =
+                            14.sp
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                2.dp
+                            )
+                    )
+
+
+                    Text(
+                        text =
+                            "Seek medical care if you notice serious symptoms.",
+                        color =
+                            PatientColors.TextSecondary,
+                        fontSize =
+                            10.5.sp,
+                        lineHeight =
+                            15.sp
+                    )
+                }
+            }
+
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        15.dp
+                    )
+            )
+
+
+            warningSigns.forEachIndexed { index, sign ->
+
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                vertical = 5.dp
+                            ),
+                    verticalAlignment =
+                        Alignment.Top
+                ) {
+
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(
+                                    25.dp
+                                )
+                                .background(
+                                    PatientColors.SuccessAccent
+                                        .copy(alpha = 0.10f),
+                                    CircleShape
+                                ),
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+
+                        Text(
+                            text =
+                                "${index + 1}",
+                            color =
+                                PatientColors.SuccessAccent,
+                            fontSize =
+                                9.sp,
+                            fontWeight =
+                                FontWeight.ExtraBold
+                        )
+                    }
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(
+                                9.dp
+                            )
+                    )
+
+
+                    Text(
+                        text =
+                            sign,
+                        modifier =
+                            Modifier.weight(1f),
+                        color =
+                            PatientColors.TextSecondary,
+                        fontSize =
+                            10.5.sp,
+                        lineHeight =
+                            15.sp
+                    )
                 }
             }
         }
@@ -498,74 +2459,460 @@ private fun WarningSection() {
 
 @Composable
 private fun EmergencyBanner() {
+
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF7F1D1D)),
-        shape = RoundedCornerShape(18.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier =
+            Modifier.fillMaxWidth(),
+
+        shape =
+            RoundedCornerShape(
+                22.dp
+            ),
+
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    PatientColors.Red
+            ),
+
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 2.dp
+            )
     ) {
-        Column(modifier = Modifier.padding(22.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier.size(44.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.14f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Outlined.WifiTethering, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
-                }
-                Spacer(modifier = Modifier.width(14.dp))
-                Column {
-                    Text("Life-threatening emergency?", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                    Text("Don't wait — call for help immediately.", color = Color.White.copy(alpha = 0.75f), fontSize = 12.5.sp)
-                }
-            }
-            Spacer(modifier = Modifier.height(18.dp))
+
+        Column(
+            modifier =
+                Modifier.padding(
+                    17.dp
+                )
+        ) {
+
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color.White.copy(alpha = 0.1f))
-                    .padding(vertical = 14.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
+                verticalAlignment =
+                    Alignment.CenterVertically
             ) {
-                EmergencyNumber("112", "Any emergency\n(cell phone)")
-                EmergencyNumber("10177", "Ambulance /\nFire")
-                EmergencyNumber("10111", "Police")
+
+                Box(
+                    modifier =
+                        Modifier
+                            .size(
+                                46.dp
+                            )
+                            .background(
+                                Color.White.copy(
+                                    alpha = 0.14f
+                                ),
+                                RoundedCornerShape(
+                                    14.dp
+                                )
+                            ),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+
+                    Icon(
+                        imageVector =
+                            Icons.Outlined.WifiTethering,
+                        contentDescription =
+                            null,
+                        tint =
+                            Color.White,
+                        modifier =
+                            Modifier.size(
+                                22.dp
+                            )
+                    )
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.width(
+                            11.dp
+                        )
+                )
+
+
+                Column(
+                    modifier =
+                        Modifier.weight(1f)
+                ) {
+
+                    Text(
+                        text =
+                            "Life-threatening emergency?",
+                        color =
+                            Color.White,
+                        fontSize =
+                            14.sp,
+                        fontWeight =
+                            FontWeight.ExtraBold
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                2.dp
+                            )
+                    )
+
+
+                    Text(
+                        text =
+                            "Don't wait — contact emergency services immediately.",
+                        color =
+                            Color.White.copy(
+                                alpha = 0.78f
+                            ),
+                        fontSize =
+                            10.5.sp,
+                        lineHeight =
+                            15.sp
+                    )
+                }
             }
+
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        15.dp
+                    )
+            )
+
+
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Color.White.copy(
+                                alpha = 0.10f
+                            ),
+                            RoundedCornerShape(
+                                16.dp
+                            )
+                        )
+                        .padding(
+                            vertical = 14.dp,
+                            horizontal = 6.dp
+                        ),
+
+                horizontalArrangement =
+                    Arrangement.SpaceEvenly
+            ) {
+
+                EmergencyNumber(
+                    number =
+                        "112",
+                    label =
+                        "Emergency\nfrom mobile"
+                )
+
+
+                EmergencyNumber(
+                    number =
+                        "10177",
+                    label =
+                        "Ambulance /\nFire"
+                )
+
+
+                EmergencyNumber(
+                    number =
+                        "10111",
+                    label =
+                        "Police"
+                )
+            }
+
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        10.dp
+                    )
+            )
+
+
+            Text(
+                text =
+                    "Use emergency services for urgent or life-threatening situations.",
+                modifier =
+                    Modifier.fillMaxWidth(),
+                color =
+                    Color.White.copy(
+                        alpha = 0.68f
+                    ),
+                fontSize =
+                    9.5.sp,
+                lineHeight =
+                    13.sp,
+                textAlign =
+                    TextAlign.Center
+            )
         }
     }
 }
 
 @Composable
-private fun EmergencyNumber(number: String, label: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(number, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Black)
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(label, color = Color.White.copy(alpha = 0.65f), fontSize = 10.sp, textAlign = TextAlign.Center, lineHeight = 13.sp)
+private fun EmergencyNumber(
+    number: String,
+    label: String
+) {
+
+    Column(
+        horizontalAlignment =
+            Alignment.CenterHorizontally
+    ) {
+
+        Box(
+            modifier =
+                Modifier
+                    .background(
+                        Color.White.copy(
+                            alpha = 0.12f
+                        ),
+                        RoundedCornerShape(
+                            12.dp
+                        )
+                    )
+                    .padding(
+                        horizontal = 9.dp,
+                        vertical = 6.dp
+                    )
+        ) {
+
+            Text(
+                text =
+                    number,
+                color =
+                    Color.White,
+                fontSize =
+                    17.sp,
+                fontWeight =
+                    FontWeight.Black
+            )
+        }
+
+
+        Spacer(
+            modifier =
+                Modifier.height(
+                    5.dp
+                )
+        )
+
+
+        Text(
+            text =
+                label,
+            color =
+                Color.White.copy(
+                    alpha = 0.74f
+                ),
+            fontSize =
+                8.5.sp,
+            textAlign =
+                TextAlign.Center,
+            lineHeight =
+                11.sp
+        )
     }
 }
 
 @Composable
-private fun NoteBox(onBookConsultation: () -> Unit) {
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val tealDeep = MaterialTheme.colorScheme.primary
+private fun NoteBox(
+    onBookConsultation: () -> Unit
+) {
+
     Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(18.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.padding(22.dp)) {
-            Text(
-                "If symptoms are severe, you belong to a high-risk group (elderly, pregnant, or have underlying conditions), or symptoms don't improve after a few days — consult a healthcare professional.",
-                color = muted, fontSize = 13.5.sp, lineHeight = 20.sp
+        modifier =
+            Modifier.fillMaxWidth(),
+
+        shape =
+            RoundedCornerShape(
+                22.dp
+            ),
+
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    PatientColors.DoctorCard
+            ),
+
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 0.dp
             )
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(
-                onClick = onBookConsultation,
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = tealDeep),
-                shape = RoundedCornerShape(14.dp)
+    ) {
+
+        Column(
+            modifier =
+                Modifier.padding(
+                    17.dp
+                )
+        ) {
+
+            Row(
+                verticalAlignment =
+                    Alignment.CenterVertically
             ) {
-                Text("Book a Consultation", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+
+                Box(
+                    modifier =
+                        Modifier
+                            .size(
+                                44.dp
+                            )
+                            .background(
+                                PatientColors.DoctorAccent
+                                    .copy(alpha = 0.11f),
+                                RoundedCornerShape(
+                                    14.dp
+                                )
+                            ),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+
+                    Icon(
+                        imageVector =
+                            Icons.Outlined.LocalHospital,
+                        contentDescription =
+                            null,
+                        tint =
+                            PatientColors.DoctorAccent,
+                        modifier =
+                            Modifier.size(
+                                21.dp
+                            )
+                    )
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.width(
+                            11.dp
+                        )
+                )
+
+
+                Column(
+                    modifier =
+                        Modifier.weight(1f)
+                ) {
+
+                    Text(
+                        text =
+                            "Need professional advice?",
+                        color =
+                            PatientColors.TextPrimary,
+                        fontSize =
+                            14.sp,
+                        fontWeight =
+                            FontWeight.ExtraBold
+                    )
+
+
+                    Text(
+                        text =
+                            "Speak to a healthcare professional",
+                        color =
+                            PatientColors.DoctorAccent,
+                        fontSize =
+                            10.sp,
+                        fontWeight =
+                            FontWeight.SemiBold
+                    )
+                }
+            }
+
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        13.dp
+                    )
+            )
+
+
+            Text(
+                text =
+                    "If symptoms are severe, you are in a high-risk group, or your symptoms are not improving, consider speaking to a healthcare professional.",
+                color =
+                    PatientColors.TextSecondary,
+                fontSize =
+                    10.5.sp,
+                lineHeight =
+                    16.sp
+            )
+
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        14.dp
+                    )
+            )
+
+
+            Button(
+                onClick =
+                    onBookConsultation,
+
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(
+                            52.dp
+                        ),
+
+                shape =
+                    RoundedCornerShape(
+                        15.dp
+                    ),
+
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor =
+                            PatientColors.DoctorAccent,
+                        contentColor =
+                            Color.White
+                    )
+            ) {
+
+                Icon(
+                    imageVector =
+                        Icons.Outlined.LocalHospital,
+                    contentDescription =
+                        null,
+                    modifier =
+                        Modifier.size(
+                            18.dp
+                        )
+                )
+
+
+                Spacer(
+                    modifier =
+                        Modifier.width(
+                            7.dp
+                        )
+                )
+
+
+                Text(
+                    text =
+                        "Book a consultation",
+                    fontWeight =
+                        FontWeight.Bold,
+                    fontSize =
+                        13.sp
+                )
             }
         }
     }

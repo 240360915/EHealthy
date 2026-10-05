@@ -62,8 +62,7 @@ fun PatientAvatar(
                 model = avatarUrl,
                 contentDescription = "Profile picture",
                 contentScale = ContentScale.Crop,
-                onError = { Log.e("AvatarLoad", "Failed to load avatar: $avatarUrl", it.result.throwable) },
-                onSuccess = { Log.d("AvatarLoad", "Loaded avatar successfully") },
+                onError = { Log.e("AvatarLoad", "Avatar could not be loaded") },
                 modifier = Modifier
                     .size(size)
                     .clip(CircleShape)

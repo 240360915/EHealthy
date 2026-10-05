@@ -20,16 +20,25 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,6 +47,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -73,6 +83,7 @@ fun PatientLogin(
     onGoToRegister: () -> Unit,
     onContinueWithGoogle: () -> Unit = {}
 ) {
+    var passwordVisible by remember { mutableStateOf(false) }
     val background = Color(0xFFFAF9FF)
     val darkText = Color(0xFF182033)
     val green = Color(0xFF218B78)
@@ -179,7 +190,16 @@ fun PatientLogin(
                         label = { Text("Password", color = Color.Black, fontSize = 16.sp) },
                         singleLine = true,
                         enabled = !isLoading,
-                        visualTransformation = PasswordVisualTransformation(),
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(
+                                    imageVector = if (passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                    contentDescription = if (passwordVisible) "Hide password" else "Show password",
+                                    tint = greyText
+                                )
+                            }
+                        },
                         shape = RoundedCornerShape(16.dp),
                         colors = textFieldColors,
                         modifier = Modifier.fillMaxWidth()
@@ -257,7 +277,7 @@ fun PatientLogin(
 
             errorMessage?.let {
                 Spacer(modifier = Modifier.height(10.dp))
-                Text(it, color = Color(0xFFD64545), fontSize = 13.sp)
+                Text(it, color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
             successMessage?.let {
                 Spacer(modifier = Modifier.height(10.dp))

@@ -21,14 +21,14 @@ import java.util.UUID
  *      ↓
  * patients.user_id
  *      ↓
- * patients.id
+ * patients
  *
  * Relationships such as:
  * appointments.patient_id
  * reviews.patient_id
  * prescriptions.patient_id
  *
- * must use patients.id, NOT auth.uid().
+ * must use patients NOT auth.uid().
  *
  * Secure state-changing operations use the Supabase RPC functions
  * we created instead of direct table UPDATE/INSERT calls.
@@ -68,6 +68,243 @@ object PatientRepository {
             .decodeSingleOrNull<PatientProfile>()
             ?: error("Patient profile was not found for this account.")
     }
+
+
+    // -------------------------------------------------------------------------
+    // PATIENT HEALTH PROFILE / QUESTIONNAIRE
+    // -------------------------------------------------------------------------
+
+    /**
+     * Loads the signed-in patient's medical background and latest
+     * pre-consultation questionnaire answers.
+     *
+     * These values live on the patient's own profile row so the patient
+     * can update them at any time. Doctors should NOT query this row
+     * directly; the doctor portal will use the protected
+     * get_patient_health_profile_for_doctor RPC.
+     */
+    suspend fun getMyHealthProfile(): Result<PatientHealthProfile> =
+        runCatching {
+
+            supabase.auth.awaitInitialization()
+
+            val userId =
+                requireUserId()
+
+            supabase
+                .from("patients")
+                .select(
+                    columns = Columns.list(
+                        "id",
+                        "name",
+                        "surname",
+                        "gender",
+                        "date_of_birth",
+                        "blood_group",
+                        "allergies",
+                        "chronic",
+                        "medication",
+                        "surgeries",
+                        "disability",
+                        "emergency_contact_name",
+                        "emergency_contact_phone",
+                        "emergency_contact_relationship",
+                        "preferred_language",
+                        "smoking_status",
+                        "alcohol_use",
+                        "height_cm",
+                        "weight_kg",
+                        "current_symptoms",
+                        "symptom_duration",
+                        "symptom_severity",
+                        "family_medical_history",
+                        "health_profile_updated_at"
+                    )
+                ) {
+                    filter {
+                        eq(
+                            "user_id",
+                            userId
+                        )
+                    }
+                }
+                .decodeSingleOrNull<PatientHealthProfile>()
+                ?: error(
+                    "Patient health profile could not be found."
+                )
+        }
+
+
+    /**
+     * Saves medical background/questionnaire answers for the signed-in patient.
+     *
+     * The Android app never accepts a patient id here. Ownership is derived
+     * from auth.uid() so one patient cannot update another patient's profile.
+     */
+    suspend fun saveMyHealthProfile(
+        profile: PatientHealthProfile
+    ): Result<Unit> =
+        runCatching {
+
+            supabase.auth.awaitInitialization()
+
+            val userId =
+                requireUserId()
+
+            val severity =
+                profile.symptom_severity
+                    ?.coerceIn(
+                        0,
+                        10
+                    )
+
+            supabase
+                .from("patients")
+                .update(
+                    {
+                        set(
+                            "date_of_birth",
+                            profile.date_of_birth
+                                ?.trim()
+                                ?.ifBlank { null }
+                        )
+
+                        set(
+                            "blood_group",
+                            profile.blood_group
+                                ?.trim()
+                                ?.ifBlank { null }
+                        )
+
+                        set(
+                            "allergies",
+                            profile.allergies
+                                ?.trim()
+                                ?.ifBlank { null }
+                        )
+
+                        set(
+                            "chronic",
+                            profile.chronic
+                                ?.trim()
+                                ?.ifBlank { null }
+                        )
+
+                        set(
+                            "medication",
+                            profile.medication
+                                ?.trim()
+                                ?.ifBlank { null }
+                        )
+
+                        set(
+                            "surgeries",
+                            profile.surgeries
+                                ?.trim()
+                                ?.ifBlank { null }
+                        )
+
+                        set(
+                            "disability",
+                            profile.disability
+                                ?.trim()
+                                ?.ifBlank { null }
+                        )
+
+                        set(
+                            "emergency_contact_name",
+                            profile.emergency_contact_name
+                                ?.trim()
+                                ?.ifBlank { null }
+                        )
+
+                        set(
+                            "emergency_contact_phone",
+                            profile.emergency_contact_phone
+                                ?.trim()
+                                ?.ifBlank { null }
+                        )
+
+                        set(
+                            "emergency_contact_relationship",
+                            profile.emergency_contact_relationship
+                                ?.trim()
+                                ?.ifBlank { null }
+                        )
+
+                        set(
+                            "preferred_language",
+                            profile.preferred_language
+                                ?.trim()
+                                ?.ifBlank { null }
+                        )
+
+                        set(
+                            "smoking_status",
+                            profile.smoking_status
+                                ?.trim()
+                                ?.ifBlank { null }
+                        )
+
+                        set(
+                            "alcohol_use",
+                            profile.alcohol_use
+                                ?.trim()
+                                ?.ifBlank { null }
+                        )
+
+                        set(
+                            "height_cm",
+                            profile.height_cm
+                        )
+
+                        set(
+                            "weight_kg",
+                            profile.weight_kg
+                        )
+
+                        set(
+                            "current_symptoms",
+                            profile.current_symptoms
+                                ?.trim()
+                                ?.ifBlank { null }
+                        )
+
+                        set(
+                            "symptom_duration",
+                            profile.symptom_duration
+                                ?.trim()
+                                ?.ifBlank { null }
+                        )
+
+                        set(
+                            "symptom_severity",
+                            severity
+                        )
+
+                        set(
+                            "family_medical_history",
+                            profile.family_medical_history
+                                ?.trim()
+                                ?.ifBlank { null }
+                        )
+
+                        set(
+                            "health_profile_updated_at",
+                            java.time.Instant
+                                .now()
+                                .toString()
+                        )
+                    }
+                ) {
+                    filter {
+                        eq(
+                            "user_id",
+                            userId
+                        )
+                    }
+                }
+        }
 
     // -------------------------------------------------------------------------
     // APPOINTMENTS
@@ -171,6 +408,84 @@ object PatientRepository {
                 parameters = parameters
             )
             .decodeList<ReserveSlotResult>()
+            .firstOrNull()
+            ?: error(
+                "The booking server returned no appointment."
+            )
+    }
+
+
+    suspend fun bookScheduledAppointment(
+        slotId: String,
+        appointmentType: String,
+        paymentChoice: String,
+        reason: String,
+        idempotencyKey: String = UUID.randomUUID().toString()
+    ): Result<BookScheduledAppointmentResult> = runCatching {
+
+        require(
+            appointmentType == "online" ||
+                    appointmentType == "in_person"
+        ) {
+            "Appointment type must be online or in_person."
+        }
+
+        require(
+            paymentChoice == "demo_pay" ||
+                    paymentChoice == "pay_at_clinic"
+        ) {
+            "Payment choice must be demo_pay or pay_at_clinic."
+        }
+
+        require(
+            appointmentType != "online" ||
+                    paymentChoice == "demo_pay"
+        ) {
+            "Online appointments must use DemoPay."
+        }
+
+        require(slotId.isNotBlank()) {
+            "A time slot is required."
+        }
+
+        require(reason.trim().length >= 3) {
+            "Please provide a short reason for the appointment."
+        }
+
+        val parameters = buildJsonObject {
+
+            put(
+                "p_slot_id",
+                slotId
+            )
+
+            put(
+                "p_appointment_type",
+                appointmentType
+            )
+
+            put(
+                "p_payment_choice",
+                paymentChoice
+            )
+
+            put(
+                "p_reason",
+                reason.trim()
+            )
+
+            put(
+                "p_idempotency_key",
+                idempotencyKey
+            )
+        }
+
+        supabase.postgrest
+            .rpc(
+                function = "book_scheduled_appointment_demo",
+                parameters = parameters
+            )
+            .decodeList<BookScheduledAppointmentResult>()
             .firstOrNull()
             ?: error(
                 "The booking server returned no appointment."
@@ -721,6 +1036,305 @@ object PatientRepository {
                 }
         }
 
+
+
+    // -------------------------------------------------------------------------
+    // PHYSICAL VISIT REQUESTS + INVOICES
+    // -------------------------------------------------------------------------
+
+    suspend fun getMyPhysicalVisitRequests():
+            Result<List<PhysicalVisitRequest>> =
+        runCatching {
+
+            val patientId =
+                requirePatientProfileId()
+
+            supabase
+                .from("physical_visit_requests")
+                .select(
+                    columns = Columns.list(
+                        "id",
+                        "appointment_id",
+                        "patient_id",
+                        "doctor_id",
+                        "patient_name",
+                        "reason",
+                        "status",
+                        "doctor_response_note",
+                        "requested_at",
+                        "decided_at",
+                        "patient_decision_at",
+                        "updated_at"
+                    )
+                ) {
+                    filter {
+                        eq("patient_id", patientId)
+                    }
+                }
+                .decodeList<PhysicalVisitRequest>()
+                .sortedByDescending {
+                    it.requested_at
+                }
+        }
+
+
+    suspend fun getMyPhysicalVisitInvoices():
+            Result<List<PhysicalVisitInvoice>> =
+        runCatching {
+
+            val patientId =
+                requirePatientProfileId()
+
+            supabase
+                .from("in_person_invoices")
+                .select(
+                    columns = Columns.list(
+                        "id",
+                        "request_id",
+                        "appointment_id",
+                        "patient_id",
+                        "doctor_id",
+                        "patient_name",
+                        "service_description",
+                        "amount_minor",
+                        "currency",
+                        "proposed_date",
+                        "proposed_time",
+                        "location",
+                        "location_name",
+                        "location_latitude",
+                        "location_longitude",
+                        "notes",
+                        "status",
+                        "issued_at",
+                        "accepted_at",
+                        "declined_at",
+                        "updated_at"
+                    )
+                ) {
+                    filter {
+                        eq("patient_id", patientId)
+                    }
+                }
+                .decodeList<PhysicalVisitInvoice>()
+                .sortedByDescending {
+                    it.issued_at
+                }
+        }
+
+
+    suspend fun requestPhysicalVisit(
+        appointmentId: String,
+        reason: String
+    ): Result<PhysicalVisitRequestResult> =
+        runCatching {
+
+            require(appointmentId.isNotBlank()) {
+                "Appointment ID is required."
+            }
+
+            require(reason.trim().length >= 3) {
+                "Please provide a short reason for the physical visit."
+            }
+
+            val parameters =
+                buildJsonObject {
+
+                    put(
+                        "p_appointment_id",
+                        appointmentId
+                    )
+
+                    put(
+                        "p_reason",
+                        reason.trim()
+                    )
+                }
+
+            supabase
+                .postgrest
+                .rpc(
+                    function =
+                        "patient_request_physical_visit",
+                    parameters =
+                        parameters
+                )
+                .decodeList<PhysicalVisitRequestResult>()
+                .firstOrNull()
+                ?: error(
+                    "The server returned no physical visit request."
+                )
+        }
+
+
+    suspend fun respondToPhysicalVisitInvoice(
+        invoiceId: String,
+        decision: String
+    ): Result<PhysicalVisitInvoiceDecisionResult> =
+        runCatching {
+
+            require(invoiceId.isNotBlank()) {
+                "Invoice ID is required."
+            }
+
+            require(
+                decision == "accepted" ||
+                        decision == "declined"
+            ) {
+                "Invoice decision must be accepted or declined."
+            }
+
+            val parameters =
+                buildJsonObject {
+
+                    put(
+                        "p_invoice_id",
+                        invoiceId
+                    )
+
+                    put(
+                        "p_decision",
+                        decision
+                    )
+                }
+
+            supabase
+                .postgrest
+                .rpc(
+                    function =
+                        "patient_respond_physical_visit_invoice",
+                    parameters =
+                        parameters
+                )
+                .decodeList<PhysicalVisitInvoiceDecisionResult>()
+                .firstOrNull()
+                ?: error(
+                    "The server returned no invoice decision result."
+                )
+        }
+
+
+    // -------------------------------------------------------------------------
+// PATIENT NOTIFICATIONS
+// -------------------------------------------------------------------------
+
+    suspend fun getMyNotifications():
+            Result<List<PatientNotification>> =
+        runCatching {
+
+            val patientId =
+                requirePatientProfileId()
+
+            supabase
+                .from("patient_notifications")
+                .select(
+                    columns = Columns.list(
+                        "id",
+                        "patient_id",
+                        "notification_type",
+                        "title",
+                        "message",
+                        "related_entity_type",
+                        "related_entity_id",
+                        "is_read",
+                        "created_at",
+                        "read_at"
+                    )
+                ) {
+                    filter {
+                        eq(
+                            "patient_id",
+                            patientId
+                        )
+                    }
+                }
+                .decodeList<PatientNotification>()
+                .sortedByDescending {
+                    it.created_at
+                }
+        }
+
+
+    suspend fun markNotificationAsRead(
+        notificationId: String
+    ): Result<Unit> =
+        runCatching {
+
+            val patientId =
+                requirePatientProfileId()
+
+            supabase
+                .from("patient_notifications")
+                .update(
+                    {
+                        set(
+                            "is_read",
+                            true
+                        )
+
+                        set(
+                            "read_at",
+                            java.time.Instant
+                                .now()
+                                .toString()
+                        )
+                    }
+                ) {
+                    filter {
+
+                        eq(
+                            "id",
+                            notificationId
+                        )
+
+                        eq(
+                            "patient_id",
+                            patientId
+                        )
+                    }
+                }
+        }
+
+
+    suspend fun markAllNotificationsAsRead():
+            Result<Unit> =
+        runCatching {
+
+            val patientId =
+                requirePatientProfileId()
+
+            supabase
+                .from("patient_notifications")
+                .update(
+                    {
+                        set(
+                            "is_read",
+                            true
+                        )
+
+                        set(
+                            "read_at",
+                            java.time.Instant
+                                .now()
+                                .toString()
+                        )
+                    }
+                ) {
+                    filter {
+
+                        eq(
+                            "patient_id",
+                            patientId
+                        )
+
+                        eq(
+                            "is_read",
+                            false
+                        )
+                    }
+                }
+        }
+
     // -------------------------------------------------------------------------
     // PATIENT AVATAR
     // -------------------------------------------------------------------------
@@ -856,6 +1470,159 @@ data class PatientProfile(
                 }
 }
 
+@Serializable
+data class PatientHealthProfile(
+
+    val id: String = "",
+
+    val name: String? = null,
+
+    val surname: String? = null,
+
+    val gender: String? = null,
+
+    val date_of_birth: String? = null,
+
+    val blood_group: String? = null,
+
+    val allergies: String? = null,
+
+    val chronic: String? = null,
+
+    val medication: String? = null,
+
+    val surgeries: String? = null,
+
+    val disability: String? = null,
+
+    val emergency_contact_name: String? = null,
+
+    val emergency_contact_phone: String? = null,
+
+    val emergency_contact_relationship: String? = null,
+
+    val preferred_language: String? = null,
+
+    val smoking_status: String? = null,
+
+    val alcohol_use: String? = null,
+
+    val height_cm: Double? = null,
+
+    val weight_kg: Double? = null,
+
+    val current_symptoms: String? = null,
+
+    val symptom_duration: String? = null,
+
+    val symptom_severity: Int? = null,
+
+    val family_medical_history: String? = null,
+
+    val health_profile_updated_at: String? = null
+) {
+
+    val patientName: String
+        get() =
+            listOfNotNull(
+                name?.takeIf {
+                    it.isNotBlank()
+                },
+                surname?.takeIf {
+                    it.isNotBlank()
+                }
+            )
+                .joinToString(" ")
+                .ifBlank {
+                    "Patient"
+                }
+}
+
+
+@Serializable
+data class PhysicalVisitRequest(
+    val id: String,
+    val appointment_id: String,
+    val patient_id: String,
+    val doctor_id: String,
+    val patient_name: String,
+    val reason: String,
+    val status: String,
+    val doctor_response_note: String? = null,
+    val requested_at: String,
+    val decided_at: String? = null,
+    val patient_decision_at: String? = null,
+    val updated_at: String? = null
+)
+
+
+@Serializable
+data class PhysicalVisitInvoice(
+    val id: String,
+    val request_id: String,
+    val appointment_id: String,
+    val patient_id: String,
+    val doctor_id: String,
+    val patient_name: String,
+    val service_description: String,
+    val amount_minor: Int,
+    val currency: String = "ZAR",
+    val proposed_date: String,
+    val proposed_time: String,
+    val location: String,
+    val location_name: String? = null,
+    val location_latitude: Double? = null,
+    val location_longitude: Double? = null,
+    val notes: String? = null,
+    val status: String,
+    val issued_at: String,
+    val accepted_at: String? = null,
+    val declined_at: String? = null,
+    val updated_at: String? = null
+)
+
+
+@Serializable
+data class PhysicalVisitRequestResult(
+    val request_id: String,
+    val request_status: String,
+    val doctor_id: String,
+    val appointment_id: String,
+    val requested_at: String
+)
+
+
+@Serializable
+data class PhysicalVisitInvoiceDecisionResult(
+    val invoice_id: String,
+    val invoice_status: String,
+    val request_status: String
+)
+
+
+@Serializable
+data class PatientNotification(
+
+    val id: String,
+
+    val patient_id: String,
+
+    val notification_type: String,
+
+    val title: String,
+
+    val message: String,
+
+    val related_entity_type: String? = null,
+
+    val related_entity_id: String? = null,
+
+    val is_read: Boolean = false,
+
+    val created_at: String,
+
+    val read_at: String? = null
+)
 @Serializable
 data class PatientAppointment(
 
@@ -1025,6 +1792,27 @@ data class ReserveSlotResult(
     val payment_currency: String
 )
 
+@Serializable
+data class BookScheduledAppointmentResult(
+
+    val appointment_id: String,
+
+    val payment_id: String,
+
+    val payment_reference: String,
+
+    val appointment_status: String,
+
+    val payment_status: String,
+
+    val amount: Double,
+
+    val currency: String,
+
+    val appointment_kind: String,
+
+    val payment_method: String
+)
 @Serializable
 data class CancelAppointmentResult(
 

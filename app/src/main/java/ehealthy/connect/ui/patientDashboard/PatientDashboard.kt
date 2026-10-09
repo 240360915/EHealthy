@@ -254,6 +254,7 @@ fun PatientDashboard(
     onNavigatePrescriptions: () -> Unit,
     onNavigateHealthTips: () -> Unit,
     onNavigateSettings: () -> Unit,
+    onNavigateNotifications: () -> Unit,
     onUploadPhoto: () -> Unit,
     onLogout: () -> Unit,
     fetchAppointments: suspend () -> Result<List<Appointment>>,
@@ -268,6 +269,9 @@ fun PatientDashboard(
     var selectedTab by remember { mutableStateOf(PatientTab.HOME) }
     var appointments by remember { mutableStateOf<List<Appointment>>(emptyList()) }
     var reviews by remember { mutableStateOf<List<ReviewDisplay>>(emptyList()) }
+    var unreadNotificationCount by remember {
+        mutableStateOf(0)
+    }
     var isLoading by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf<String?>(null) }
     var selectedAppointment by remember { mutableStateOf<Appointment?>(null) }
@@ -278,18 +282,56 @@ fun PatientDashboard(
     var dismissedReminderIds by remember { mutableStateOf(setOf<String>()) }
 
     suspend fun refreshDashboard() {
+
         isLoading = true
         loadError = null
 
-        val appointmentsResult = PatientRepository.getMyAppointments()
-        val reviewsResult = PatientRepository.getMyReviews()
+
+        val appointmentsResult =
+            PatientRepository.getMyAppointments()
+
+        val reviewsResult =
+            PatientRepository.getMyReviews()
+
+        val notificationsResult =
+            PatientRepository.getMyNotifications()
+
 
         appointmentsResult
-            .onSuccess { appointments = it.map { appointment -> appointment.toUiAppointment() } }
-            .onFailure { loadError = it.message ?: "We could not load your appointments." }
+            .onSuccess {
+
+                appointments =
+                    it.map { appointment ->
+                        appointment.toUiAppointment()
+                    }
+            }
+            .onFailure {
+
+                loadError =
+                    it.message
+                        ?: "We could not load your appointments."
+            }
+
 
         reviewsResult
-            .onSuccess { reviews = it.map { review -> review.toUiReview() } }
+            .onSuccess {
+
+                reviews =
+                    it.map { review ->
+                        review.toUiReview()
+                    }
+            }
+
+
+        notificationsResult
+            .onSuccess { notifications ->
+
+                unreadNotificationCount =
+                    notifications.count {
+                        !it.is_read
+                    }
+            }
+
 
         isLoading = false
     }
@@ -328,9 +370,24 @@ fun PatientDashboard(
             PatientTopBar(
                 patientName = patientName,
                 patientAvatarUrl = patientAvatarUrl,
-                onAvatarClick = { selectedTab = PatientTab.PROFILE },
-                onRefresh = { refreshKey++ },
-                refreshing = isLoading
+
+                onAvatarClick = {
+                    selectedTab =
+                        PatientTab.PROFILE
+                },
+
+                onNotificationsClick =
+                    onNavigateNotifications,
+
+                hasUnreadNotifications =
+                    unreadNotificationCount > 0,
+
+                onRefresh = {
+                    refreshKey++
+                },
+
+                refreshing =
+                    isLoading
             )
         },
         bottomBar = {
@@ -516,6 +573,8 @@ private fun PatientTopBar(
     patientName: String,
     patientAvatarUrl: String?,
     onAvatarClick: () -> Unit,
+    onNotificationsClick: () -> Unit,
+    hasUnreadNotifications: Boolean,
     onRefresh: () -> Unit,
     refreshing: Boolean
 ) {
@@ -600,6 +659,10 @@ private fun PatientTopBar(
                         .background(
                             PatientColors
                                 .AppointmentCard
+                        )
+                        .clickable(
+                            onClick =
+                                onNotificationsClick
                         ),
                 contentAlignment =
                     Alignment.Center
@@ -623,26 +686,29 @@ private fun PatientTopBar(
                 /*
                  * Notification indicator
                  */
-                Box(
-                    modifier =
-                        Modifier
-                            .align(
-                                Alignment.TopEnd
-                            )
-                            .padding(
-                                top = 7.dp,
-                                end = 7.dp
-                            )
-                            .size(
-                                7.dp
-                            )
-                            .clip(
-                                CircleShape
-                            )
-                            .background(
-                                PatientColors.Red
-                            )
-                )
+                if (hasUnreadNotifications) {
+
+                    Box(
+                        modifier =
+                            Modifier
+                                .align(
+                                    Alignment.TopEnd
+                                )
+                                .padding(
+                                    top = 7.dp,
+                                    end = 7.dp
+                                )
+                                .size(
+                                    7.dp
+                                )
+                                .clip(
+                                    CircleShape
+                                )
+                                .background(
+                                    PatientColors.Red
+                                )
+                    )
+                }
             }
 
 

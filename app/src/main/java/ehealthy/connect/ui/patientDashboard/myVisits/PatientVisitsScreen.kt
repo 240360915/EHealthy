@@ -71,6 +71,8 @@ import androidx.compose.ui.unit.sp
 import ehealthy.connect.data.patient.PatientAppointment
 import ehealthy.connect.data.patient.PatientDoctorSummary
 import ehealthy.connect.data.patient.PatientRepository
+import ehealthy.connect.data.patient.PhysicalVisitInvoice
+import ehealthy.connect.data.patient.PhysicalVisitRequest
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -93,6 +95,7 @@ private val VisitCancelled = Color(0xFFB91C1C)
 @Composable
 fun PatientVisitsScreen(
     onBack: () -> Unit,
+    onOpenInvoices: () -> Unit,
     onReschedule: (appointmentId: String) -> Unit,
     onMessageDoctor: (doctorId: String) -> Unit,
     onJoinScheduledCall: (appointment: PatientAppointment) -> Unit,
@@ -145,6 +148,45 @@ fun PatientVisitsScreen(
 
     var isCancelling by remember {
         mutableStateOf(false)
+    }
+
+
+    var physicalVisitRequests by remember {
+        mutableStateOf<List<PhysicalVisitRequest>>(
+            emptyList()
+        )
+    }
+
+    var physicalVisitInvoices by remember {
+        mutableStateOf<List<PhysicalVisitInvoice>>(
+            emptyList()
+        )
+    }
+
+    var requestingPhysicalVisit by remember {
+        mutableStateOf<PatientAppointment?>(
+            null
+        )
+    }
+
+    var physicalVisitReason by remember {
+        mutableStateOf("")
+    }
+
+    var physicalVisitError by remember {
+        mutableStateOf<String?>(
+            null
+        )
+    }
+
+    var isSubmittingPhysicalVisit by remember {
+        mutableStateOf(false)
+    }
+
+    var invoiceDecisionId by remember {
+        mutableStateOf<String?>(
+            null
+        )
     }
 
     suspend fun loadAppointments(
@@ -202,8 +244,117 @@ fun PatientVisitsScreen(
                         ?: "Unable to load your appointments."
             }
 
+        PatientRepository
+            .getMyPhysicalVisitRequests()
+            .onSuccess {
+                physicalVisitRequests =
+                    it
+            }
+            .onFailure {
+                physicalVisitRequests =
+                    emptyList()
+            }
+
+        PatientRepository
+            .getMyPhysicalVisitInvoices()
+            .onSuccess {
+                physicalVisitInvoices =
+                    it
+            }
+            .onFailure {
+                physicalVisitInvoices =
+                    emptyList()
+            }
+
         isLoading = false
         isRefreshing = false
+    }
+
+
+    suspend fun submitPhysicalVisitRequest(
+        appointment: PatientAppointment
+    ) {
+
+        if (
+            physicalVisitReason
+                .trim()
+                .length < 3
+        ) {
+
+            physicalVisitError =
+                "Please briefly explain why you need an in-person visit."
+
+            return
+        }
+
+        isSubmittingPhysicalVisit =
+            true
+
+        physicalVisitError =
+            null
+
+        PatientRepository
+            .requestPhysicalVisit(
+                appointmentId =
+                    appointment.id,
+                reason =
+                    physicalVisitReason.trim()
+            )
+            .onSuccess {
+
+                requestingPhysicalVisit =
+                    null
+
+                physicalVisitReason =
+                    ""
+
+                loadAppointments(
+                    refreshing = true
+                )
+            }
+            .onFailure {
+
+                physicalVisitError =
+                    friendlyPhysicalVisitError(
+                        it.message
+                    )
+            }
+
+        isSubmittingPhysicalVisit =
+            false
+    }
+
+
+    suspend fun respondToPhysicalInvoice(
+        invoice: PhysicalVisitInvoice,
+        decision: String
+    ) {
+
+        invoiceDecisionId =
+            invoice.id
+
+        PatientRepository
+            .respondToPhysicalVisitInvoice(
+                invoiceId =
+                    invoice.id,
+                decision =
+                    decision
+            )
+            .onSuccess {
+
+                loadAppointments(
+                    refreshing = true
+                )
+            }
+            .onFailure {
+
+                errorMessage =
+                    it.message
+                        ?: "Could not update the physical visit invoice."
+            }
+
+        invoiceDecisionId =
+            null
     }
 
     suspend fun performCancellation(
@@ -344,6 +495,61 @@ fun PatientVisitsScreen(
             )
         }
 
+
+    requestingPhysicalVisit
+        ?.let { appointment ->
+
+            PhysicalVisitRequestDialog(
+                appointment =
+                    appointment,
+                reason =
+                    physicalVisitReason,
+                error =
+                    physicalVisitError,
+                isSubmitting =
+                    isSubmittingPhysicalVisit,
+                onReasonChange = {
+
+                    if (
+                        it.length <= 500
+                    ) {
+
+                        physicalVisitReason =
+                            it
+
+                        physicalVisitError =
+                            null
+                    }
+                },
+                onDismiss = {
+
+                    if (
+                        !isSubmittingPhysicalVisit
+                    ) {
+
+                        requestingPhysicalVisit =
+                            null
+
+                        physicalVisitReason =
+                            ""
+
+                        physicalVisitError =
+                            null
+                    }
+                },
+                onSubmit = {
+
+                    scope.launch {
+
+                        submitPhysicalVisitRequest(
+                            appointment
+                        )
+                    }
+                }
+            )
+        }
+
+
     Scaffold(
 
         containerColor =
@@ -397,6 +603,20 @@ fun PatientVisitsScreen(
                 },
 
                 actions = {
+
+                    IconButton(
+                        onClick =
+                            onOpenInvoices
+                    ) {
+
+                        Icon(
+                            imageVector =
+                                Icons.Outlined.Payments,
+                            contentDescription =
+                                "My invoices"
+                        )
+                    }
+
 
                     IconButton(
                         enabled =
@@ -586,6 +806,85 @@ fun PatientVisitsScreen(
                                     onRateAppointment(
                                         appointment
                                     )
+                                },
+
+                                physicalRequest =
+                                    physicalVisitRequests
+                                        .firstOrNull {
+                                            it.appointment_id ==
+                                                    appointment.id
+                                        },
+
+                                physicalInvoice =
+                                    physicalVisitRequests
+                                        .firstOrNull {
+                                            it.appointment_id ==
+                                                    appointment.id
+                                        }
+                                        ?.let { request ->
+
+                                            physicalVisitInvoices
+                                                .firstOrNull {
+                                                    it.request_id ==
+                                                            request.id
+                                                }
+                                        },
+
+                                invoiceDecisionInProgress =
+                                    physicalVisitRequests
+                                        .firstOrNull {
+                                            it.appointment_id ==
+                                                    appointment.id
+                                        }
+                                        ?.let { request ->
+
+                                            physicalVisitInvoices
+                                                .firstOrNull {
+                                                    it.request_id ==
+                                                            request.id
+                                                }
+                                        }
+                                        ?.id ==
+                                            invoiceDecisionId,
+
+                                onRequestPhysicalVisit = {
+
+                                    physicalVisitReason =
+                                        ""
+
+                                    physicalVisitError =
+                                        null
+
+                                    requestingPhysicalVisit =
+                                        appointment
+                                },
+
+                                onAcceptPhysicalInvoice = {
+                                        invoice ->
+
+                                    scope.launch {
+
+                                        respondToPhysicalInvoice(
+                                            invoice =
+                                                invoice,
+                                            decision =
+                                                "accepted"
+                                        )
+                                    }
+                                },
+
+                                onDeclinePhysicalInvoice = {
+                                        invoice ->
+
+                                    scope.launch {
+
+                                        respondToPhysicalInvoice(
+                                            invoice =
+                                                invoice,
+                                            decision =
+                                                "declined"
+                                        )
+                                    }
                                 }
                             )
                         }
@@ -820,7 +1119,13 @@ private fun VisitCard(
     onReschedule: () -> Unit,
     onCancel: () -> Unit,
     onJoinCall: () -> Unit,
-    onRate: () -> Unit
+    onRate: () -> Unit,
+    physicalRequest: PhysicalVisitRequest?,
+    physicalInvoice: PhysicalVisitInvoice?,
+    invoiceDecisionInProgress: Boolean,
+    onRequestPhysicalVisit: () -> Unit,
+    onAcceptPhysicalInvoice: (PhysicalVisitInvoice) -> Unit,
+    onDeclinePhysicalInvoice: (PhysicalVisitInvoice) -> Unit
 ) {
 
     val status =
@@ -1130,6 +1435,35 @@ private fun VisitCard(
                     )
             )
 
+            if (
+                isCompleted &&
+                isOnline
+            ) {
+
+                PhysicalVisitWorkflowCard(
+                    request =
+                        physicalRequest,
+                    invoice =
+                        physicalInvoice,
+                    invoiceDecisionInProgress =
+                        invoiceDecisionInProgress,
+                    onRequestPhysicalVisit =
+                        onRequestPhysicalVisit,
+                    onAcceptInvoice =
+                        onAcceptPhysicalInvoice,
+                    onDeclineInvoice =
+                        onDeclinePhysicalInvoice
+                )
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            12.dp
+                        )
+                )
+            }
+
+
             when {
 
                 isActive -> {
@@ -1183,6 +1517,657 @@ private fun VisitCard(
         }
     }
 }
+
+@Composable
+private fun PhysicalVisitWorkflowCard(
+    request: PhysicalVisitRequest?,
+    invoice: PhysicalVisitInvoice?,
+    invoiceDecisionInProgress: Boolean,
+    onRequestPhysicalVisit: () -> Unit,
+    onAcceptInvoice: (PhysicalVisitInvoice) -> Unit,
+    onDeclineInvoice: (PhysicalVisitInvoice) -> Unit
+) {
+
+    Surface(
+        modifier =
+            Modifier.fillMaxWidth(),
+        shape =
+            RoundedCornerShape(
+                14.dp
+            ),
+        color =
+            MaterialTheme
+                .colorScheme
+                .secondaryContainer
+                .copy(
+                    alpha =
+                        0.42f
+                )
+    ) {
+
+        Column(
+            modifier =
+                Modifier.padding(
+                    13.dp
+                ),
+            verticalArrangement =
+                Arrangement.spacedBy(
+                    8.dp
+                )
+        ) {
+
+            Row(
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+
+                Icon(
+                    imageVector =
+                        Icons.Outlined.LocationOn,
+                    contentDescription =
+                        null,
+                    modifier =
+                        Modifier.size(
+                            18.dp
+                        ),
+                    tint =
+                        MaterialTheme
+                            .colorScheme
+                            .primary
+                )
+
+                Spacer(
+                    modifier =
+                        Modifier.width(
+                            7.dp
+                        )
+                )
+
+                Text(
+                    text =
+                        "Physical follow-up",
+                    fontWeight =
+                        FontWeight.Bold,
+                    fontSize =
+                        12.5.sp
+                )
+            }
+
+
+            when {
+
+                request == null -> {
+
+                    Text(
+                        text =
+                            "Need an in-person follow-up after this online consultation? Send a request to this doctor.",
+                        fontSize =
+                            10.5.sp,
+                        color =
+                            MaterialTheme
+                                .colorScheme
+                                .onSurfaceVariant
+                    )
+
+                    Button(
+                        onClick =
+                            onRequestPhysicalVisit,
+                        modifier =
+                            Modifier.fillMaxWidth(),
+                        shape =
+                            RoundedCornerShape(
+                                12.dp
+                            )
+                    ) {
+
+                        Icon(
+                            imageVector =
+                                Icons.Outlined.LocationOn,
+                            contentDescription =
+                                null
+                        )
+
+                        Spacer(
+                            modifier =
+                                Modifier.width(
+                                    6.dp
+                                )
+                        )
+
+                        Text(
+                            "Request physical visit"
+                        )
+                    }
+                }
+
+
+                request.status.equals(
+                    "pending",
+                    ignoreCase = true
+                ) -> {
+
+                    PhysicalStatusText(
+                        title =
+                            "Request sent",
+                        body =
+                            "Waiting for the doctor to accept or decline your physical visit request.",
+                        color =
+                            VisitWarning
+                    )
+                }
+
+
+                request.status.equals(
+                    "accepted",
+                    ignoreCase = true
+                ) -> {
+
+                    PhysicalStatusText(
+                        title =
+                            "Doctor accepted your request",
+                        body =
+                            "The doctor is preparing the invoice and proposed physical visit arrangement.",
+                        color =
+                            VisitSuccess
+                    )
+                }
+
+
+                request.status.equals(
+                    "declined",
+                    ignoreCase = true
+                ) -> {
+
+                    PhysicalStatusText(
+                        title =
+                            "Physical visit declined",
+                        body =
+                            request.doctor_response_note
+                                ?.takeIf {
+                                    it.isNotBlank()
+                                }
+                                ?: "The doctor declined this physical visit request.",
+                        color =
+                            VisitCancelled
+                    )
+                }
+
+
+                request.status.equals(
+                    "patient_accepted",
+                    ignoreCase = true
+                ) &&
+                        invoice != null -> {
+
+                    PhysicalStatusText(
+                        title =
+                            "Physical visit approved",
+                        body =
+                            "You accepted the invoice and physical visit arrangement.",
+                        color =
+                            VisitSuccess
+                    )
+
+                    PhysicalInvoiceDetails(
+                        invoice =
+                            invoice
+                    )
+                }
+
+
+                request.status.equals(
+                    "patient_declined",
+                    ignoreCase = true
+                ) &&
+                        invoice != null -> {
+
+                    PhysicalStatusText(
+                        title =
+                            "Invoice declined",
+                        body =
+                            "You declined this physical visit arrangement.",
+                        color =
+                            VisitCancelled
+                    )
+
+                    PhysicalInvoiceDetails(
+                        invoice =
+                            invoice
+                    )
+                }
+
+
+                invoice != null -> {
+
+                    PhysicalStatusText(
+                        title =
+                            "Invoice received",
+                        body =
+                            "Review the service, amount, date, time and location before accepting.",
+                        color =
+                            MaterialTheme
+                                .colorScheme
+                                .primary
+                    )
+
+                    PhysicalInvoiceDetails(
+                        invoice =
+                            invoice
+                    )
+
+                    if (
+                        invoice.status.equals(
+                            "sent",
+                            ignoreCase = true
+                        )
+                    ) {
+
+                        Row(
+                            modifier =
+                                Modifier.fillMaxWidth(),
+                            horizontalArrangement =
+                                Arrangement.spacedBy(
+                                    8.dp
+                                )
+                        ) {
+
+                            OutlinedButton(
+                                onClick = {
+                                    onDeclineInvoice(
+                                        invoice
+                                    )
+                                },
+                                enabled =
+                                    !invoiceDecisionInProgress,
+                                modifier =
+                                    Modifier.weight(
+                                        1f
+                                    ),
+                                shape =
+                                    RoundedCornerShape(
+                                        12.dp
+                                    )
+                            ) {
+
+                                Text(
+                                    "Decline"
+                                )
+                            }
+
+                            Button(
+                                onClick = {
+                                    onAcceptInvoice(
+                                        invoice
+                                    )
+                                },
+                                enabled =
+                                    !invoiceDecisionInProgress,
+                                modifier =
+                                    Modifier.weight(
+                                        1f
+                                    ),
+                                shape =
+                                    RoundedCornerShape(
+                                        12.dp
+                                    )
+                            ) {
+
+                                if (
+                                    invoiceDecisionInProgress
+                                ) {
+
+                                    CircularProgressIndicator(
+                                        modifier =
+                                            Modifier.size(
+                                                16.dp
+                                            ),
+                                        strokeWidth =
+                                            2.dp
+                                    )
+
+                                    Spacer(
+                                        modifier =
+                                            Modifier.width(
+                                                6.dp
+                                            )
+                                    )
+                                }
+
+                                Text(
+                                    "Accept"
+                                )
+                            }
+                        }
+                    }
+                }
+
+
+                else -> {
+
+                    PhysicalStatusText(
+                        title =
+                            "Physical visit update",
+                        body =
+                            request.status
+                                .replace(
+                                    "_",
+                                    " "
+                                )
+                                .replaceFirstChar {
+                                    it.uppercase()
+                                },
+                        color =
+                            MaterialTheme
+                                .colorScheme
+                                .primary
+                    )
+                }
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun PhysicalStatusText(
+    title: String,
+    body: String,
+    color: Color
+) {
+
+    Column(
+        verticalArrangement =
+            Arrangement.spacedBy(
+                3.dp
+            )
+    ) {
+
+        Text(
+            text =
+                title,
+            color =
+                color,
+            fontWeight =
+                FontWeight.Bold,
+            fontSize =
+                12.sp
+        )
+
+        Text(
+            text =
+                body,
+            fontSize =
+                10.5.sp,
+            color =
+                MaterialTheme
+                    .colorScheme
+                    .onSurfaceVariant
+        )
+    }
+}
+
+
+@Composable
+private fun PhysicalInvoiceDetails(
+    invoice: PhysicalVisitInvoice
+) {
+
+    Surface(
+        modifier =
+            Modifier.fillMaxWidth(),
+        shape =
+            RoundedCornerShape(
+                11.dp
+            ),
+        color =
+            MaterialTheme
+                .colorScheme
+                .surface
+    ) {
+
+        Column(
+            modifier =
+                Modifier.padding(
+                    11.dp
+                ),
+            verticalArrangement =
+                Arrangement.spacedBy(
+                    5.dp
+                )
+        ) {
+
+            Text(
+                text =
+                    invoice.service_description,
+                fontWeight =
+                    FontWeight.Bold,
+                fontSize =
+                    12.sp
+            )
+
+            Text(
+                text =
+                    formatVisitPrice(
+                        invoice.amount_minor,
+                        invoice.currency
+                    ),
+                color =
+                    MaterialTheme
+                        .colorScheme
+                        .primary,
+                fontWeight =
+                    FontWeight.ExtraBold,
+                fontSize =
+                    15.sp
+            )
+
+            Text(
+                text =
+                    "${invoice.proposed_date} • ${
+                        formatVisitTime(
+                            invoice.proposed_time
+                        )
+                    }",
+                fontSize =
+                    11.sp
+            )
+
+            Text(
+                text =
+                    invoice.location,
+                fontSize =
+                    11.sp,
+                color =
+                    MaterialTheme
+                        .colorScheme
+                        .onSurfaceVariant
+            )
+
+            invoice.notes
+                ?.takeIf {
+                    it.isNotBlank()
+                }
+                ?.let {
+
+                    Text(
+                        text =
+                            it,
+                        fontSize =
+                            10.5.sp,
+                        color =
+                            MaterialTheme
+                                .colorScheme
+                                .onSurfaceVariant
+                    )
+                }
+        }
+    }
+}
+
+
+@Composable
+private fun PhysicalVisitRequestDialog(
+    appointment: PatientAppointment,
+    reason: String,
+    error: String?,
+    isSubmitting: Boolean,
+    onReasonChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onSubmit: () -> Unit
+) {
+
+    AlertDialog(
+        onDismissRequest =
+            onDismiss,
+        title = {
+
+            Text(
+                "Request physical visit"
+            )
+        },
+        text = {
+
+            Column {
+
+                Text(
+                    text =
+                        "This request is linked to your completed online consultation. Explain why an in-person follow-up is needed."
+                )
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            12.dp
+                        )
+                )
+
+                appointment.reason
+                    ?.takeIf {
+                        it.isNotBlank()
+                    }
+                    ?.let {
+
+                        Text(
+                            text =
+                                "Online consultation: $it",
+                            fontSize =
+                                10.5.sp,
+                            color =
+                                MaterialTheme
+                                    .colorScheme
+                                    .onSurfaceVariant
+                        )
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(
+                                    8.dp
+                                )
+                        )
+                    }
+
+                OutlinedTextField(
+                    value =
+                        reason,
+                    onValueChange =
+                        onReasonChange,
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    label = {
+                        Text(
+                            "Reason for physical visit"
+                        )
+                    },
+                    minLines =
+                        3,
+                    maxLines =
+                        6,
+                    enabled =
+                        !isSubmitting
+                )
+
+                if (
+                    error != null
+                ) {
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                8.dp
+                            )
+                    )
+
+                    Text(
+                        text =
+                            error,
+                        color =
+                            MaterialTheme
+                                .colorScheme
+                                .error,
+                        fontSize =
+                            11.5.sp
+                    )
+                }
+            }
+        },
+        confirmButton = {
+
+            Button(
+                onClick =
+                    onSubmit,
+                enabled =
+                    !isSubmitting
+            ) {
+
+                if (
+                    isSubmitting
+                ) {
+
+                    CircularProgressIndicator(
+                        modifier =
+                            Modifier.size(
+                                16.dp
+                            ),
+                        strokeWidth =
+                            2.dp
+                    )
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(
+                                6.dp
+                            )
+                    )
+                }
+
+                Text(
+                    if (
+                        isSubmitting
+                    ) {
+                        "Sending..."
+                    } else {
+                        "Send request"
+                    }
+                )
+            }
+        },
+        dismissButton = {
+
+            TextButton(
+                onClick =
+                    onDismiss,
+                enabled =
+                    !isSubmitting
+            ) {
+
+                Text(
+                    "Cancel"
+                )
+            }
+        }
+    )
+}
+
 
 @Composable
 private fun ActiveVisitActions(
@@ -2111,6 +3096,42 @@ private fun formatVisitPrice(
         )
     }
 }
+
+private fun friendlyPhysicalVisitError(
+    message: String?
+): String {
+
+    val value =
+        message.orEmpty()
+
+    return when {
+
+        value.contains(
+            "must be completed",
+            ignoreCase = true
+        ) ->
+            "The online consultation must be completed before requesting a physical visit."
+
+        value.contains(
+            "only be requested after an online",
+            ignoreCase = true
+        ) ->
+            "Physical visits can only be requested after an online consultation."
+
+        value.contains(
+            "already",
+            ignoreCase = true
+        ) ->
+            "A physical visit request already exists for this consultation."
+
+        value.isNotBlank() ->
+            value
+
+        else ->
+            "We couldn't send the physical visit request. Please try again."
+    }
+}
+
 
 private fun friendlyCancellationError(
     message: String?

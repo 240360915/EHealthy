@@ -1,35 +1,19 @@
 package ehealthy.connect.ui.doctor
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.MedicalServices
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -38,17 +22,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import ehealthy.connect.ui.common.AuthColors
+import ehealthy.connect.ui.common.AuthErrorMessage
+import ehealthy.connect.ui.common.AuthHeader
+import ehealthy.connect.ui.common.AuthHeroIcon
+import ehealthy.connect.ui.common.AuthPage
+import ehealthy.connect.ui.common.AuthPrimaryButton
+import ehealthy.connect.ui.common.authTextFieldColors
+import ehealthy.connect.ui.common.isValidEmail
 
 @Composable
 fun DoctorLogin(
@@ -57,281 +44,107 @@ fun DoctorLogin(
     onEmailChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
     isLoading: Boolean = false,
-    isGoogleLoading: Boolean = false,
     errorMessage: String? = null,
     onLogin: () -> Unit,
     onForgotPassword: () -> Unit,
-    onRegister: () -> Unit,
-    onContinueWithGoogle: () -> Unit
+    onRegister: () -> Unit
 ) {
-    val background = Color(0xFFFAF9FF)
-    val darkText = Color(0xFF182033)
-    val blue = Color(0xFF385A9E)
-    val lightBlue = Color(0xFFEFF1FF)
-    val greyText = Color(0xFF4F555C)
-    val navyButton = Color(0xFF293147)
-    val borderGrey = Color(0xFFE2E5EC)
-
-    // Explicit text field colors so typed text is always visible,
-    // regardless of the app's overall Material theme (light/dark).
-    val textFieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = blue,
-        unfocusedBorderColor = borderGrey,
-        focusedTextColor = darkText,
-        unfocusedTextColor = darkText,
-        disabledTextColor = greyText,
-        cursorColor = blue,
-        focusedLabelColor = blue,
-        unfocusedLabelColor = greyText,
-        focusedContainerColor = Color.White,
-        unfocusedContainerColor = Color.White,
-        focusedPlaceholderColor = greyText,
-        unfocusedPlaceholderColor = greyText
-    )
-
+    val accent = AuthColors.DoctorAccent
+    val textFieldColors = authTextFieldColors(accent)
     var passwordVisible by remember { mutableStateOf(false) }
 
-    Scaffold { paddingValues ->
-        Column(
+    AuthPage {
+        AuthHeroIcon(
+            icon = Icons.Outlined.MedicalServices,
+            accent = accent,
+            background = AuthColors.DoctorSoft
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        AuthHeader(
+            title = "Doctor sign in",
+            subtitle = "Access appointments, patient consultations, prescriptions, and your professional account."
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        OutlinedTextField(
+            value = email,
+            onValueChange = onEmailChange,
+            label = { Text("Email address") },
+            singleLine = true,
+            enabled = !isLoading,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+            colors = textFieldColors,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        OutlinedTextField(
+            value = password,
+            onValueChange = onPasswordChange,
+            label = { Text("Password") },
+            singleLine = true,
+            enabled = !isLoading,
+            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            trailingIcon = {
+                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                    Icon(
+                        imageVector = if (passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                        contentDescription = if (passwordVisible) "Hide password" else "Show password",
+                        tint = AuthColors.TextSecondary
+                    )
+                }
+            },
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+            colors = textFieldColors,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Text(
+            text = "Forgot password?",
+            color = accent,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
             modifier = Modifier
-                .fillMaxSize()
-                .background(background)
-                .verticalScroll(rememberScrollState())
-                .imePadding()
-                .padding(horizontal = 28.dp)
-                .padding(paddingValues),
-            verticalArrangement = Arrangement.Center
-        ) {
+                .align(Alignment.End)
+                .clickable(enabled = !isLoading) { onForgotPassword() }
+        )
 
-            // ------------------------------------------------
-            // BRAND MARK
-            // ------------------------------------------------
-
-            Box(
-                modifier = Modifier
-                    .size(84.dp)
-                    .align(Alignment.CenterHorizontally)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(lightBlue),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.MedicalServices,
-                    contentDescription = null,
-                    tint = blue,
-                    modifier = Modifier.size(36.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(28.dp))
-
-            Text(
-                text = "Welcome back, doctor",
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center,
-                color = darkText,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Text(
-                text = "Sign in with your practice email to manage\nappointments and patients.",
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center,
-                color = greyText,
-                fontSize = 15.sp,
-                lineHeight = 22.sp
-            )
-
-            Spacer(modifier = Modifier.height(36.dp))
-
-            // ------------------------------------------------
-            // EMAIL
-            // ------------------------------------------------
-
-            OutlinedTextField(
-                value = email,
-                onValueChange = onEmailChange,
-                label = { Text("Email") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                shape = RoundedCornerShape(16.dp),
-                colors = textFieldColors,
-                modifier = Modifier.fillMaxWidth()
-            )
-
+        if (!errorMessage.isNullOrBlank()) {
             Spacer(modifier = Modifier.height(14.dp))
+            AuthErrorMessage(errorMessage, modifier = Modifier.fillMaxWidth())
+        }
 
-            // ------------------------------------------------
-            // PASSWORD
-            // ------------------------------------------------
+        Spacer(modifier = Modifier.height(26.dp))
 
-            OutlinedTextField(
-                value = password,
-                onValueChange = onPasswordChange,
-                label = { Text("Password") },
-                singleLine = true,
-                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                trailingIcon = {
-                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                        Icon(
-                            imageVector = if (passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                            contentDescription = if (passwordVisible) "Hide password" else "Show password",
-                            tint = greyText
-                        )
-                    }
-                },
-                shape = RoundedCornerShape(16.dp),
-                colors = textFieldColors,
-                modifier = Modifier.fillMaxWidth()
-            )
+        AuthPrimaryButton(
+            text = "Sign in",
+            onClick = onLogin,
+            enabled = isValidEmail(email) && password.isNotBlank(),
+            isLoading = isLoading
+        )
 
-            Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(22.dp))
 
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text("New to e-Health Connect? ", color = AuthColors.TextSecondary, fontSize = 14.sp)
             Text(
-                text = "Forgot password?",
-                color = blue,
+                text = "Apply as a doctor",
+                color = accent,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
-                modifier = Modifier
-                    .align(Alignment.End)
-                    .clickable { onForgotPassword() }
+                modifier = Modifier.clickable(enabled = !isLoading) { onRegister() }
             )
-
-            if (errorMessage != null) {
-                Spacer(modifier = Modifier.height(14.dp))
-                Text(
-                    text = errorMessage,
-                    color = Color(0xFFD64545),
-                    fontSize = 13.sp
-                )
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // ------------------------------------------------
-            // LOGIN
-            // ------------------------------------------------
-
-            Button(
-                onClick = onLogin,
-                enabled = !isLoading && !isGoogleLoading && email.isNotBlank() && password.isNotBlank(),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(58.dp),
-                shape = RoundedCornerShape(30.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = navyButton)
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = Color.White
-                    )
-                } else {
-                    Text(
-                        "Log in",
-                        color = Color.White,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // ------------------------------------------------
-            // OR DIVIDER
-            // ------------------------------------------------
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(1.dp)
-                        .background(borderGrey)
-                )
-                Text(
-                    text = "  or  ",
-                    color = greyText,
-                    fontSize = 13.sp
-                )
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(1.dp)
-                        .background(borderGrey)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // ------------------------------------------------
-            // CONTINUE WITH GOOGLE
-            // ------------------------------------------------
-
-            Button(
-                onClick = onContinueWithGoogle,
-                enabled = false,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(58.dp),
-                shape = RoundedCornerShape(30.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.White,
-                    contentColor = darkText
-                ),
-                border = BorderStroke(1.dp, borderGrey)
-            ) {
-                if (isGoogleLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = blue
-                    )
-                } else {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(20.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFF4285F4))
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "Google sign-in unavailable — use email",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = "New here? ",
-                    color = greyText,
-                    fontSize = 14.sp
-                )
-                Text(
-                    text = "Register as a doctor",
-                    color = blue,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.clickable { onRegister() }
-                )
-            }
         }
     }
 }

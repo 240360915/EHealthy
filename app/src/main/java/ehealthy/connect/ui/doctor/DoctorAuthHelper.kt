@@ -1,5 +1,8 @@
 package ehealthy.connect.ui.doctor
 
+import ehealthy.connect.ui.common.isValidEmail
+import ehealthy.connect.ui.common.isPasswordValid
+import ehealthy.connect.ui.common.normalizeEmail
 import ehealthy.connect.ui.doctorDashboard.DoctorRegistrationFiles
 import ehealthy.connect.ui.doctorDashboard.PrescriptionPatient
 import ehealthy.connect.ui.doctorDashboard.PrescribedMedicine
@@ -42,9 +45,17 @@ data class DoctorRegistrationInfo(
 )
 
 suspend fun signInDoctorWithEmail(email: String, password: String): Result<Unit> {
+    val cleanedEmail = normalizeEmail(email)
+    if (!isValidEmail(cleanedEmail)) {
+        return Result.failure(Exception("Please enter a valid email address."))
+    }
+    if (password.isBlank()) {
+        return Result.failure(Exception("Please enter your password."))
+    }
+
     return try {
         SupabaseClientProvider.client.auth.signInWith(Email) {
-            this.email = email
+            this.email = cleanedEmail
             this.password = password
         }
         Result.success(Unit)
@@ -75,9 +86,9 @@ suspend fun registerDoctor(
         val auth = SupabaseClientProvider.client.auth
         val existingUser = auth.currentUserOrNull()
         if (existingUser == null) {
-            auth.signUpWith(Email) { email = info.email.trim(); password = info.password }
+            auth.signUpWith(Email) { email = normalizeEmail(info.email); password = info.password }
         } else {
-            check(existingUser.email.equals(info.email.trim(), ignoreCase = true)) {
+            check(existingUser.email.equals(normalizeEmail(info.email), ignoreCase = true)) {
                 "Sign out before registering a different email address."
             }
         }
@@ -147,7 +158,7 @@ suspend fun registerDoctor(
             put("surname", info.surname)
             put("id_number", info.idNumber)
             put("phone", info.cellNumber)
-            put("email", info.email.trim())
+            put("email", normalizeEmail(info.email))
             put("language", info.languagesSpoken)
             put("gender", info.gender)
             put("province", info.province)
@@ -177,8 +188,13 @@ suspend fun registerDoctor(
 }
 
 suspend fun sendDoctorPasswordResetEmail(email: String): Result<Unit> {
+    val cleanedEmail = normalizeEmail(email)
+    if (!isValidEmail(cleanedEmail)) {
+        return Result.failure(Exception("Please enter a valid email address."))
+    }
+
     return try {
-        SupabaseClientProvider.client.auth.resetPasswordForEmail(email = email)
+        SupabaseClientProvider.client.auth.resetPasswordForEmail(email = cleanedEmail)
         Result.success(Unit)
     } catch (e: kotlinx.coroutines.CancellationException) { throw e
     } catch (e: Exception) {
@@ -191,10 +207,21 @@ suspend fun verifyDoctorResetCodeAndSetPassword(
     code: String,
     newPassword: String
 ): Result<Unit> {
+    val cleanedEmail = normalizeEmail(email)
+    if (!isValidEmail(cleanedEmail)) {
+        return Result.failure(Exception("Please enter a valid email address."))
+    }
+    if (code.length != 6 || !code.all(Char::isDigit)) {
+        return Result.failure(Exception("Please enter the 6-digit reset code."))
+    }
+    if (!isPasswordValid(newPassword)) {
+        return Result.failure(Exception("Password doesn't meet the security requirements."))
+    }
+
     return try {
         SupabaseClientProvider.client.auth.verifyEmailOtp(
             type = OtpType.Email.RECOVERY,
-            email = email,
+            email = cleanedEmail,
             token = code
         )
         SupabaseClientProvider.client.auth.updateUser {

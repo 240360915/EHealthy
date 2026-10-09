@@ -1,39 +1,22 @@
 package ehealthy.connect.ui.patient
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Email
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,19 +24,25 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import ehealthy.connect.R
-import ehealthy.connect.ui.common.PasswordStrengthChecklist
-import ehealthy.connect.ui.common.isPasswordStrong
+import ehealthy.connect.ui.common.AuthColors
+import ehealthy.connect.ui.common.AuthErrorMessage
+import ehealthy.connect.ui.common.AuthHeader
+import ehealthy.connect.ui.common.AuthHeroIcon
+import ehealthy.connect.ui.common.AuthPage
+import ehealthy.connect.ui.common.AuthPrimaryButton
+import ehealthy.connect.ui.common.AuthSuccessMessage
+import ehealthy.connect.ui.common.PasswordRequirementsChecklist
+import ehealthy.connect.ui.common.PasswordStrengthMeter
+import ehealthy.connect.ui.common.authTextFieldColors
+import ehealthy.connect.ui.common.isPasswordValid
+import ehealthy.connect.ui.common.isValidEmail
 
 enum class LoginMode { LOGIN, FORGOT_REQUEST, FORGOT_VERIFY, FORGOT_RESET }
 
@@ -61,7 +50,6 @@ enum class LoginMode { LOGIN, FORGOT_REQUEST, FORGOT_VERIFY, FORGOT_RESET }
 fun PatientLogin(
     mode: LoginMode,
     isLoading: Boolean,
-    isGoogleLoading: Boolean = false,
     email: String,
     password: String,
     otp: String,
@@ -80,350 +68,247 @@ fun PatientLogin(
     onVerifyResetCode: () -> Unit,
     onResetPassword: () -> Unit,
     onBackToLogin: () -> Unit,
-    onGoToRegister: () -> Unit,
-    onContinueWithGoogle: () -> Unit = {}
+    onGoToRegister: () -> Unit
 ) {
+    val accent = AuthColors.PatientAccent
+    val textFieldColors = authTextFieldColors(accent)
+
     var passwordVisible by remember { mutableStateOf(false) }
-    val background = Color(0xFFFAF9FF)
-    val darkText = Color(0xFF182033)
-    val green = Color(0xFF218B78)
-    val lightGreen = Color(0xFFDFF5F1)
-    val greyText = Color(0xFF4F555C)
-    val navy = Color(0xFF293147)
-    val textFieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = navy,
-        unfocusedBorderColor = green,
-        focusedTextColor = darkText,
-        unfocusedTextColor = darkText,
-        disabledTextColor = greyText,
-        cursorColor = green,
-        focusedLabelColor = green,
-        unfocusedLabelColor = greyText,
-        focusedContainerColor = Color.White,
-        unfocusedContainerColor = Color.White,
-        focusedPlaceholderColor = greyText,
-        unfocusedPlaceholderColor = greyText
-    )
-    Scaffold { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(background)
-                .verticalScroll(rememberScrollState())
-                .imePadding()
-                .padding(horizontal = 28.dp)
-                .padding(paddingValues)
-                .padding(vertical = 24.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+    var newPasswordVisible by remember { mutableStateOf(false) }
+    var confirmPasswordVisible by remember { mutableStateOf(false) }
 
-            // ---- PATIENT ILLUSTRATION ----
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(150.dp)
-                        .clip(CircleShape)
-                        .background(lightGreen),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Image(
-                        painter = painterResource(R.drawable.patient),
-                        contentDescription = null,
+    val emailValid = isValidEmail(email)
+    val passwordsMatch = confirmPassword.isEmpty() || newPassword == confirmPassword
 
-                        )
-                }
-            }
-            Spacer(modifier = Modifier.height(20.dp))
+    val heroIcon: ImageVector = when (mode) {
+        LoginMode.LOGIN -> Icons.Outlined.Person
+        LoginMode.FORGOT_REQUEST -> Icons.Outlined.Security
+        LoginMode.FORGOT_VERIFY -> Icons.Outlined.Email
+        LoginMode.FORGOT_RESET -> Icons.Outlined.Security
+    }
 
-            Text(
-                when (mode) {
-                    LoginMode.LOGIN -> "Welcome Back"
-                    LoginMode.FORGOT_REQUEST -> "Reset your password"
-                    LoginMode.FORGOT_VERIFY -> "Check your email"
-                    LoginMode.FORGOT_RESET -> "Choose a new password"
-                },
-                color = darkText,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                when (mode) {
-                    LoginMode.LOGIN -> "Sign in to your patient account to book appointments,\nconsult with your doctor, and manage your \nhealth records."
-                    LoginMode.FORGOT_REQUEST -> "Enter your email and we'll send you a code."
-                    LoginMode.FORGOT_VERIFY -> "Enter the 6-digit code we sent to $email"
-                    LoginMode.FORGOT_RESET -> "Set a new password for your account."
-                },
-                color = Color(0xFF595757),
-                fontSize = 16.sp,
-                lineHeight = 22.sp,
-                textAlign = TextAlign.Center,
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(modifier = Modifier.height(28.dp))
+    val title = when (mode) {
+        LoginMode.LOGIN -> "Patient sign in"
+        LoginMode.FORGOT_REQUEST -> "Reset your password"
+        LoginMode.FORGOT_VERIFY -> "Check your email"
+        LoginMode.FORGOT_RESET -> "Choose a new password"
+    }
 
-            when (mode) {
+    val subtitle = when (mode) {
+        LoginMode.LOGIN -> "Access appointments, consultations, prescriptions, and your health information."
+        LoginMode.FORGOT_REQUEST -> "Enter your account email and we'll send you a 6-digit reset code."
+        LoginMode.FORGOT_VERIFY -> "Enter the 6-digit code sent to ${email.trim()}."
+        LoginMode.FORGOT_RESET -> "Create a strong new password for your patient account."
+    }
 
-                // ---- LOGIN: email + password together ----
-                LoginMode.LOGIN -> {
-                    OutlinedTextField(
-                        value = email,
-                        onValueChange = onEmailChange,
-                        label = { Text("Email address", color = Color.Black, fontSize = 16.sp) },
-                        singleLine = true,
-                        enabled = !isLoading,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = textFieldColors,
+    AuthPage {
+        AuthHeroIcon(
+            icon = heroIcon,
+            accent = accent,
+            background = AuthColors.PatientSoft
+        )
 
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    OutlinedTextField(
-                        value = password,
-                        onValueChange = onPasswordChange,
-                        label = { Text("Password", color = Color.Black, fontSize = 16.sp) },
-                        singleLine = true,
-                        enabled = !isLoading,
-                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        trailingIcon = {
-                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                                Icon(
-                                    imageVector = if (passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                                    contentDescription = if (passwordVisible) "Hide password" else "Show password",
-                                    tint = greyText
-                                )
-                            }
-                        },
-                        shape = RoundedCornerShape(16.dp),
-                        colors = textFieldColors,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    TextButton(onClick = onForgotPasswordClick) {
-                        Text(
-                            "Forgot password?",
-                            color = green,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
+        Spacer(modifier = Modifier.height(24.dp))
 
-                // ---- FORGOT: step 1, request code ----
-                LoginMode.FORGOT_REQUEST -> {
-                    OutlinedTextField(
-                        value = email,
-                        onValueChange = onEmailChange,
-                        label = { Text("Email address") },
-                        singleLine = true,
-                        enabled = !isLoading,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = green),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+        AuthHeader(title = title, subtitle = subtitle)
 
-                // ---- FORGOT: step 2, enter code ----
-                LoginMode.FORGOT_VERIFY -> {
-                    OutlinedTextField(
-                        value = otp,
-                        onValueChange = { if (it.length <= 6) onOtpChange(it) },
-                        label = { Text("6-digit code") },
-                        singleLine = true,
-                        enabled = !isLoading,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = green),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+        Spacer(modifier = Modifier.height(32.dp))
 
-                // ---- FORGOT: step 3, set new password ----
-                LoginMode.FORGOT_RESET -> {
-                    OutlinedTextField(
-                        value = newPassword,
-                        onValueChange = onNewPasswordChange,
-                        label = { Text("New password") },
-                        singleLine = true,
-                        enabled = !isLoading,
-                        visualTransformation = PasswordVisualTransformation(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = green),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    PasswordStrengthChecklist(newPassword)
-                    Spacer(modifier = Modifier.height(14.dp))
-                    OutlinedTextField(
-                        value = confirmPassword,
-                        onValueChange = onConfirmPasswordChange,
-                        label = { Text("Confirm new password") },
-                        singleLine = true,
-                        enabled = !isLoading,
-                        visualTransformation = PasswordVisualTransformation(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = green),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
+        when (mode) {
+            LoginMode.LOGIN -> {
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = onEmailChange,
+                    label = { Text("Email address") },
+                    singleLine = true,
+                    enabled = !isLoading,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                    colors = textFieldColors,
+                    modifier = Modifier.fillMaxWidth()
+                )
 
-            errorMessage?.let {
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(it, color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-            }
-            successMessage?.let {
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(it, color = green, fontSize = 13.sp)
-            }
+                Spacer(modifier = Modifier.height(14.dp))
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Button(
-                onClick = when (mode) {
-                    LoginMode.LOGIN -> onLogin
-                    LoginMode.FORGOT_REQUEST -> onSendResetCode
-                    LoginMode.FORGOT_VERIFY -> onVerifyResetCode
-                    LoginMode.FORGOT_RESET -> onResetPassword
-                },
-                enabled = !isLoading && !isGoogleLoading && when (mode) {
-                    LoginMode.LOGIN -> email.isNotBlank() && password.isNotBlank()
-                    LoginMode.FORGOT_REQUEST -> email.isNotBlank()
-                    LoginMode.FORGOT_VERIFY -> otp.length == 6
-                    LoginMode.FORGOT_RESET -> isPasswordStrong(newPassword) && newPassword == confirmPassword
-                },
-
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(58.dp),
-                shape = RoundedCornerShape(30.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = navy)
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(
-                        color = Color.White,
-                        modifier = Modifier.height(22.dp),
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Text(
-                        when (mode) {
-                            LoginMode.LOGIN -> "Login"
-                            LoginMode.FORGOT_REQUEST -> "Send code"
-                            LoginMode.FORGOT_VERIFY -> "Verify code"
-                            LoginMode.FORGOT_RESET -> "Reset password"
-                        },
-                        color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-
-            if (mode == LoginMode.LOGIN) {
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // ------------------------------------------------
-                // OR DIVIDER
-                // ------------------------------------------------
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(1.dp)
-                            .background(green)
-                    )
-                    Text(
-                        text = "  or  ",
-                        color = greyText,
-                        fontSize = 13.sp
-                    )
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(1.dp)
-                            .background(green)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // ------------------------------------------------
-                // CONTINUE WITH GOOGLE
-                // ------------------------------------------------
-                Button(
-                    onClick = onContinueWithGoogle,
-                    enabled = false,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(58.dp),
-                    shape = RoundedCornerShape(30.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.White,
-                        contentColor = darkText
-                    ),
-                    border = BorderStroke(1.dp, green)
-                ) {
-                    if (isGoogleLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                            color = green
-                        )
-                    } else {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(20.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF4285F4))
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = "Google sign-in unavailable — use email",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.SemiBold
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = onPasswordChange,
+                    label = { Text("Password") },
+                    singleLine = true,
+                    enabled = !isLoading,
+                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    trailingIcon = {
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Icon(
+                                imageVector = if (passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                contentDescription = if (passwordVisible) "Hide password" else "Show password",
+                                tint = AuthColors.TextSecondary
                             )
                         }
-                    }
-                }
+                    },
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                    colors = textFieldColors,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = "Forgot password?",
+                    color = accent,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .align(Alignment.End)
+                        .clickable(enabled = !isLoading) { onForgotPasswordClick() }
+                )
             }
 
-            if (mode != LoginMode.LOGIN) {
-                Spacer(modifier = Modifier.height(16.dp))
-                TextButton(onClick = onBackToLogin) {
-                    Text(
-                        "Back to login",
-                        color = greyText,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
+            LoginMode.FORGOT_REQUEST -> {
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = onEmailChange,
+                    label = { Text("Email address") },
+                    singleLine = true,
+                    enabled = !isLoading,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                    colors = textFieldColors,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
-            if (mode == LoginMode.LOGIN) {
-                Spacer(modifier = Modifier.height(20.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Text("Don't have an account? ", color = greyText, fontSize = 14.sp)
-                    Text(
-                        "Register here",
-                        color = green,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable { onGoToRegister() }
-                    )
-                }
+            LoginMode.FORGOT_VERIFY -> {
+                OutlinedTextField(
+                    value = otp,
+                    onValueChange = { raw -> onOtpChange(raw.filter(Char::isDigit).take(6)) },
+                    label = { Text("6-digit code") },
+                    singleLine = true,
+                    enabled = !isLoading,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                    colors = textFieldColors,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            LoginMode.FORGOT_RESET -> {
+                OutlinedTextField(
+                    value = newPassword,
+                    onValueChange = onNewPasswordChange,
+                    label = { Text("New password") },
+                    singleLine = true,
+                    enabled = !isLoading,
+                    visualTransformation = if (newPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    trailingIcon = {
+                        IconButton(onClick = { newPasswordVisible = !newPasswordVisible }) {
+                            Icon(
+                                imageVector = if (newPasswordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                contentDescription = if (newPasswordVisible) "Hide password" else "Show password",
+                                tint = AuthColors.TextSecondary
+                            )
+                        }
+                    },
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                    colors = textFieldColors,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+                PasswordStrengthMeter(password = newPassword)
+                Spacer(modifier = Modifier.height(10.dp))
+                PasswordRequirementsChecklist(password = newPassword)
+                Spacer(modifier = Modifier.height(14.dp))
+
+                OutlinedTextField(
+                    value = confirmPassword,
+                    onValueChange = onConfirmPasswordChange,
+                    label = { Text("Confirm new password") },
+                    singleLine = true,
+                    enabled = !isLoading,
+                    isError = !passwordsMatch,
+                    supportingText = {
+                        if (!passwordsMatch) {
+                            Text("Passwords don't match", color = AuthColors.Error)
+                        }
+                    },
+                    visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    trailingIcon = {
+                        IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
+                            Icon(
+                                imageVector = if (confirmPasswordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                contentDescription = if (confirmPasswordVisible) "Hide password" else "Show password",
+                                tint = AuthColors.TextSecondary
+                            )
+                        }
+                    },
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                    colors = textFieldColors,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+
+        if (!errorMessage.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(14.dp))
+            AuthErrorMessage(errorMessage, modifier = Modifier.fillMaxWidth())
+        }
+
+        if (!successMessage.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(14.dp))
+            AuthSuccessMessage(successMessage, accent, modifier = Modifier.fillMaxWidth())
+        }
+
+        Spacer(modifier = Modifier.height(26.dp))
+
+        AuthPrimaryButton(
+            text = when (mode) {
+                LoginMode.LOGIN -> "Sign in"
+                LoginMode.FORGOT_REQUEST -> "Send reset code"
+                LoginMode.FORGOT_VERIFY -> "Verify code"
+                LoginMode.FORGOT_RESET -> "Reset password"
+            },
+            onClick = when (mode) {
+                LoginMode.LOGIN -> onLogin
+                LoginMode.FORGOT_REQUEST -> onSendResetCode
+                LoginMode.FORGOT_VERIFY -> onVerifyResetCode
+                LoginMode.FORGOT_RESET -> onResetPassword
+            },
+            enabled = when (mode) {
+                LoginMode.LOGIN -> emailValid && password.isNotBlank()
+                LoginMode.FORGOT_REQUEST -> emailValid
+                LoginMode.FORGOT_VERIFY -> otp.length == 6 && otp.all(Char::isDigit)
+                LoginMode.FORGOT_RESET -> isPasswordValid(newPassword) && newPassword == confirmPassword
+            },
+            isLoading = isLoading
+        )
+
+        if (mode != LoginMode.LOGIN) {
+            Spacer(modifier = Modifier.height(18.dp))
+            Text(
+                text = "Back to sign in",
+                color = AuthColors.TextSecondary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clickable(enabled = !isLoading) { onBackToLogin() }
+            )
+        } else {
+            Spacer(modifier = Modifier.height(22.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text("New to e-Health Connect? ", color = AuthColors.TextSecondary, fontSize = 14.sp)
+                Text(
+                    text = "Create account",
+                    color = accent,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clickable(enabled = !isLoading) { onGoToRegister() }
+                )
             }
         }
     }

@@ -31,7 +31,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -45,7 +44,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import ehealthy.connect.ui.patientDashboard.PatientColors
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -67,14 +65,14 @@ fun ContactUsScreen(
 
                         Text(
                             text = "Contact Us",
-                            color = PatientColors.TextPrimary,
+                            color = AuthColors.TextPrimary,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 18.sp
                         )
 
                         Text(
                             text = "We're here when you need help",
-                            color = PatientColors.TextSecondary,
+                            color = AuthColors.TextSecondary,
                             fontSize = 10.sp
                         )
                     }
@@ -91,7 +89,7 @@ fun ContactUsScreen(
                                 Modifier
                                     .size(36.dp)
                                     .background(
-                                        PatientColors.DoctorCard,
+                                        AuthColors.DoctorSoft,
                                         CircleShape
                                     ),
                             contentAlignment =
@@ -102,7 +100,7 @@ fun ContactUsScreen(
                                 imageVector =
                                     Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "Back",
-                                tint = PatientColors.DoctorAccent,
+                                tint = AuthColors.DoctorAccent,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -112,13 +110,13 @@ fun ContactUsScreen(
                 colors =
                     TopAppBarDefaults.topAppBarColors(
                         containerColor =
-                            MaterialTheme.colorScheme.surface
+                            AuthColors.Background
                     )
             )
         },
 
         containerColor =
-            MaterialTheme.colorScheme.background
+            AuthColors.Background
 
     ) { paddingValues ->
 
@@ -154,7 +152,7 @@ fun ContactUsScreen(
                 colors =
                     CardDefaults.cardColors(
                         containerColor =
-                            PatientColors.DoctorCard
+                            AuthColors.DoctorSoft
                     ),
 
                 elevation =
@@ -178,7 +176,7 @@ fun ContactUsScreen(
                             Modifier
                                 .size(68.dp)
                                 .background(
-                                    PatientColors.DoctorAccent
+                                    AuthColors.DoctorAccent
                                         .copy(alpha = 0.12f),
                                     CircleShape
                                 ),
@@ -192,7 +190,7 @@ fun ContactUsScreen(
                                 Icons.Outlined.SupportAgent,
                             contentDescription = null,
                             tint =
-                                PatientColors.DoctorAccent,
+                                AuthColors.DoctorAccent,
                             modifier =
                                 Modifier.size(33.dp)
                         )
@@ -209,7 +207,7 @@ fun ContactUsScreen(
                         text =
                             "How can we help?",
                         color =
-                            PatientColors.TextPrimary,
+                            AuthColors.TextPrimary,
                         fontSize =
                             17.sp,
                         fontWeight =
@@ -227,7 +225,7 @@ fun ContactUsScreen(
                         text =
                             "Contact the EHealthy support team for help with your account, appointments, consultations or technical problems.",
                         color =
-                            PatientColors.TextSecondary,
+                            AuthColors.TextSecondary,
                         fontSize =
                             11.sp,
                         lineHeight =
@@ -249,7 +247,7 @@ fun ContactUsScreen(
                 text =
                     "CONTACT SUPPORT",
                 color =
-                    PatientColors.TextSecondary,
+                    AuthColors.TextSecondary,
                 fontSize =
                     10.sp,
                 fontWeight =
@@ -279,10 +277,10 @@ fun ContactUsScreen(
                     "Send us a message about your account or service.",
 
                 accent =
-                    PatientColors.AppointmentAccent,
+                    AuthColors.DoctorAccent,
 
                 background =
-                    PatientColors.AppointmentCard,
+                    AuthColors.DoctorSoft,
 
                 onClick =
                     onEmailSupport
@@ -309,10 +307,10 @@ fun ContactUsScreen(
                     "Speak directly with the EHealthy support team.",
 
                 accent =
-                    PatientColors.SuccessAccent,
+                    AuthColors.PatientAccent,
 
                 background =
-                    PatientColors.SuccessCard,
+                    AuthColors.PatientSoft,
 
                 onClick =
                     onCallSupport
@@ -339,10 +337,10 @@ fun ContactUsScreen(
                     "Tell us if something in the app isn't working correctly.",
 
                 accent =
-                    PatientColors.Purple,
+                    AuthColors.DoctorAccent,
 
                 background =
-                    PatientColors.PurpleSoft,
+                    AuthColors.DoctorSoft,
 
                 onClick =
                     onReportProblem
@@ -368,7 +366,7 @@ fun ContactUsScreen(
                 colors =
                     CardDefaults.cardColors(
                         containerColor =
-                            PatientColors.TipsCard
+                            AuthColors.PatientSoft
                     ),
 
                 elevation =
@@ -390,7 +388,7 @@ fun ContactUsScreen(
                             Modifier
                                 .size(43.dp)
                                 .background(
-                                    PatientColors.TipsAccent
+                                    AuthColors.PatientAccent
                                         .copy(alpha = 0.12f),
                                     RoundedCornerShape(13.dp)
                                 ),
@@ -404,7 +402,7 @@ fun ContactUsScreen(
                                 Icons.Outlined.HelpOutline,
                             contentDescription = null,
                             tint =
-                                PatientColors.TipsAccent,
+                                AuthColors.PatientAccent,
                             modifier =
                                 Modifier.size(21.dp)
                         )
@@ -426,7 +424,7 @@ fun ContactUsScreen(
                             text =
                                 "Before contacting support",
                             color =
-                                PatientColors.TextPrimary,
+                                AuthColors.TextPrimary,
                             fontWeight =
                                 FontWeight.ExtraBold,
                             fontSize =
@@ -444,7 +442,7 @@ fun ContactUsScreen(
                             text =
                                 "When reporting a problem, explain what you were trying to do and what happened. Avoid including passwords or other sensitive login information.",
                             color =
-                                PatientColors.TextSecondary,
+                                AuthColors.TextSecondary,
                             fontSize =
                                 10.5.sp,
                             lineHeight =
@@ -474,14 +472,14 @@ fun ContactUsScreen(
                 colors =
                     CardDefaults.cardColors(
                         containerColor =
-                            PatientColors.RedSoft
+                            AuthColors.ErrorSoft
                     ),
 
                 border =
                     BorderStroke(
                         width = 1.dp,
                         color =
-                            PatientColors.Red
+                            AuthColors.Error
                                 .copy(alpha = 0.12f)
                     ),
 
@@ -504,7 +502,7 @@ fun ContactUsScreen(
                             Modifier
                                 .size(43.dp)
                                 .background(
-                                    PatientColors.Red
+                                    AuthColors.Error
                                         .copy(alpha = 0.10f),
                                     RoundedCornerShape(13.dp)
                                 ),
@@ -518,7 +516,7 @@ fun ContactUsScreen(
                                 Icons.Outlined.Warning,
                             contentDescription = null,
                             tint =
-                                PatientColors.Red,
+                                AuthColors.Error,
                             modifier =
                                 Modifier.size(21.dp)
                         )
@@ -540,7 +538,7 @@ fun ContactUsScreen(
                             text =
                                 "Medical emergency?",
                             color =
-                                PatientColors.Red,
+                                AuthColors.Error,
                             fontWeight =
                                 FontWeight.ExtraBold,
                             fontSize =
@@ -558,7 +556,7 @@ fun ContactUsScreen(
                             text =
                                 "EHealthy support is not an emergency service. For life-threatening situations, contact emergency services immediately.",
                             color =
-                                PatientColors.TextSecondary,
+                                AuthColors.TextSecondary,
                             fontSize =
                                 10.5.sp,
                             lineHeight =
@@ -602,7 +600,7 @@ private fun SupportActionCard(
         colors =
             CardDefaults.cardColors(
                 containerColor =
-                    MaterialTheme.colorScheme.surface
+                    AuthColors.Background
             ),
 
         border =
@@ -668,7 +666,7 @@ private fun SupportActionCard(
                     text =
                         title,
                     color =
-                        PatientColors.TextPrimary,
+                        AuthColors.TextPrimary,
                     fontWeight =
                         FontWeight.Bold,
                     fontSize =
@@ -686,7 +684,7 @@ private fun SupportActionCard(
                     text =
                         description,
                     color =
-                        PatientColors.TextSecondary,
+                        AuthColors.TextSecondary,
                     fontSize =
                         9.5.sp,
                     lineHeight =

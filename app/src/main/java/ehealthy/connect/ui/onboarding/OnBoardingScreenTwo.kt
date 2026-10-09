@@ -159,7 +159,7 @@ fun OnboardingScreenTwo(
                     Spacer(modifier = Modifier.width(9.dp))
 
                     Text(
-                        text = "Rated & Verified Doctors",
+                        text = "Find doctors with availability",
                         color = darkText,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
@@ -190,7 +190,7 @@ fun OnboardingScreenTwo(
             // ------------------------------------------------
 
             Text(
-                text = "Search by specialty or location and see\nverified doctors with real availability —\nno guesswork.",
+                text = "Search by specialty or location and compare\ndoctors with available booking times before\nyou choose.",
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center,
                 color = greyText,
@@ -332,12 +332,12 @@ fun OnboardingScreenTwo(
                 onClick = onContinue,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(66.dp),
-                shape = RoundedCornerShape(35.dp),
+                    .height(56.dp),
+                shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = navyButton)
             ) {
                 Text(
-                    text = "Continue  →",
+                    text = "Continue",
                     color = Color.White,
                     fontSize = 19.sp,
                     fontWeight = FontWeight.Bold

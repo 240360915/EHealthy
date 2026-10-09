@@ -145,20 +145,16 @@ fun PatientPrescriptionsScreen(
                         )
                         ?.use { output ->
 
-                            PrescriptionPdfExporter
-                                .writePrescriptionPdf(
-                                    prescription =
-                                        prescription,
-                                    fallbackDoctorName =
-                                        fallbackDoctorName,
-                                    output =
-                                        output
-                                )
+                            PrescriptionPdfExporter.writePrescriptionPdf(
+                                context = context,
+                                prescription = prescription,
+                                fallbackDoctorName = fallbackDoctorName,
+                                output = output
+                            )
                         }
                         ?: error(
                             "Could not open the selected file."
                         )
-
                 }.onSuccess {
 
                     Toast

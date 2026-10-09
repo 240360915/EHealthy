@@ -92,6 +92,8 @@ import androidx.compose.ui.window.DialogProperties
 import ehealthy.connect.data.patient.PatientAppointment
 import ehealthy.connect.data.patient.PatientRepository
 import ehealthy.connect.data.patient.PatientReviewDisplay
+import ehealthy.connect.ml.DoctorRecommendation
+import ehealthy.connect.ml.DoctorRecommendationEngine
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
@@ -105,6 +107,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.material.icons.outlined.Medication
+import androidx.compose.material.icons.outlined.Payments
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.AutoAwesome
 
 
 /**
@@ -173,7 +178,10 @@ private fun Appointment.dateTimeOrNull(): LocalDateTime? {
 
 @RequiresApi(Build.VERSION_CODES.O)
 private fun Appointment.isUpcoming(now: LocalDateTime = LocalDateTime.now()): Boolean {
-    if (status.equals("cancelled", ignoreCase = true)) return false
+    if (status.equals("cancelled", ignoreCase = true) ||
+        status.equals("completed", ignoreCase = true) ||
+        status.equals("declined", ignoreCase = true)
+    ) return false
     val appointmentDateTime = dateTimeOrNull() ?: return date?.let {
         runCatching { LocalDate.parse(it) >= now.toLocalDate() }.getOrDefault(false)
     } ?: false
@@ -261,7 +269,11 @@ fun PatientDashboard(
     fetchReviews: suspend () -> Result<List<ReviewDisplay>>,
     onRescheduleAppointment: (String) -> Unit,
     cancelAppointment: suspend (String) -> Result<Unit>,
-    onStartCall: (String) -> Unit = {}
+    onStartCall: (String) -> Unit = {},
+    // Existing MainActivity callers continue compiling; wire these to the
+    // dedicated routes for direct dashboard shortcuts (see README).
+    onNavigateHealthProfile: () -> Unit = onNavigateSettings,
+    onNavigateInvoices: () -> Unit = onNavigateSettings
 ) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -281,11 +293,17 @@ fun PatientDashboard(
     var now by remember { mutableStateOf(LocalDateTime.now()) }
     var dismissedReminderIds by remember { mutableStateOf(setOf<String>()) }
 
+    // Reuse the SAME on-device Decision Tree classifier as Find Doctors.
+    // Never manufacture a recommendation when the saved profile has no symptoms.
+    var recommendation by remember { mutableStateOf<DoctorRecommendation?>(null) }
+    var recommendationLoading by remember { mutableStateOf(true) }
+    var healthProfileHasSymptoms by remember { mutableStateOf(false) }
+    var recommendationLoadError by remember { mutableStateOf(false) }
+
     suspend fun refreshDashboard() {
 
         isLoading = true
         loadError = null
-
 
         val appointmentsResult =
             PatientRepository.getMyAppointments()
@@ -336,8 +354,31 @@ fun PatientDashboard(
         isLoading = false
     }
 
+    suspend fun refreshSmartRecommendation() {
+        recommendationLoading = true
+        recommendationLoadError = false
+        // Independent of appointment loading: a profile error must not hide visits.
+        PatientRepository.getMyHealthProfile()
+            .onSuccess { profile ->
+                healthProfileHasSymptoms = !profile.current_symptoms.isNullOrBlank()
+                val result = runCatching {
+                    DoctorRecommendationEngine.recommend(profile)
+                }
+                recommendation = result.getOrNull()
+                recommendationLoadError = result.isFailure
+            }
+            .onFailure {
+                recommendation = null
+                healthProfileHasSymptoms = false
+                recommendationLoadError = true
+            }
+        recommendationLoading = false
+    }
+
     LaunchedEffect(refreshKey) {
-        refreshDashboard()
+        // Load profile and appointments concurrently for a responsive home screen.
+        launch { refreshDashboard() }
+        launch { refreshSmartRecommendation() }
     }
 
     LaunchedEffect(Unit) {
@@ -413,6 +454,10 @@ fun PatientDashboard(
                 reviews = reviews,
                 isLoading = isLoading,
                 loadError = loadError,
+                recommendation = recommendation,
+                recommendationLoading = recommendationLoading,
+                healthProfileHasSymptoms = healthProfileHasSymptoms,
+                recommendationLoadError = recommendationLoadError,
                 onRetry = { refreshKey++ },
                 onNavigateFindDoctors = onNavigateFindDoctors,
                 onNavigateConsultations = onNavigateConsultations,
@@ -420,6 +465,9 @@ fun PatientDashboard(
                 onNavigateMedicalRecords = onNavigateMedicalRecords,
                 onNavigatePrescriptions = onNavigatePrescriptions,
                 onNavigateHealthTips = onNavigateHealthTips,
+                onNavigateHealthProfile = onNavigateHealthProfile,
+                onNavigateInvoices = onNavigateInvoices,
+                onNavigateNotifications = onNavigateNotifications,
                 onAppointmentClick = { selectedAppointment = it },
                 onStartCall = onStartCall
             )
@@ -940,6 +988,10 @@ private fun ModernHomeTab(
     reviews: List<ReviewDisplay>,
     isLoading: Boolean,
     loadError: String?,
+    recommendation: DoctorRecommendation?,
+    recommendationLoading: Boolean,
+    healthProfileHasSymptoms: Boolean,
+    recommendationLoadError: Boolean,
     onRetry: () -> Unit,
     onNavigateFindDoctors: () -> Unit,
     onNavigateConsultations: () -> Unit,
@@ -947,38 +999,106 @@ private fun ModernHomeTab(
     onNavigateMedicalRecords: () -> Unit,
     onNavigatePrescriptions: () -> Unit,
     onNavigateHealthTips: () -> Unit,
+    onNavigateHealthProfile: () -> Unit,
+    onNavigateInvoices: () -> Unit,
+    onNavigateNotifications: () -> Unit,
     onAppointmentClick: (Appointment) -> Unit,
     onStartCall: (String) -> Unit
 ) {
     val firstName = patientName.trim().substringBefore(" ").ifBlank { "there" }
 
+    // Fixed, accessible two-column layout: no sideways swipe to find an invoice.
+    val actions = listOf(
+        QuickAction(
+            label = "Find doctors",
+            description = "Explore verified professionals",
+            icon = Icons.Outlined.Search,
+            accentColor = PatientColors.DoctorAccent,
+            backgroundColor = PatientColors.DoctorCard,
+            onClick = onNavigateFindDoctors
+        ),
+        QuickAction(
+            label = "Appointments",
+            description = "Bookings and visits",
+            icon = Icons.Outlined.CalendarMonth,
+            accentColor = PatientColors.AppointmentAccent,
+            backgroundColor = PatientColors.AppointmentCard,
+            onClick = onNavigateAppointments
+        ),
+        QuickAction(
+            label = "Health profile",
+            description = "Update your questionnaire",
+            icon = Icons.Outlined.HealthAndSafety,
+            accentColor = PatientColors.TipsAccent,
+            backgroundColor = PatientColors.TipsCard,
+            onClick = onNavigateHealthProfile
+        ),
+        QuickAction(
+            label = "Prescriptions",
+            description = "View and export PDFs",
+            icon = Icons.Outlined.Medication,
+            accentColor = PatientColors.SuccessAccent,
+            backgroundColor = PatientColors.SuccessCard,
+            onClick = onNavigatePrescriptions
+        ),
+        QuickAction(
+            label = "My invoices",
+            description = "Visit fees and PDF copies",
+            icon = Icons.Outlined.Payments,
+            accentColor = PatientColors.Primary,
+            backgroundColor = PatientColors.AppointmentCard,
+            onClick = onNavigateInvoices
+        ),
+        QuickAction(
+            label = "Medical records",
+            description = "Your healthcare history",
+            icon = Icons.Outlined.Description,
+            accentColor = PatientColors.RecordsAccent,
+            backgroundColor = PatientColors.RecordsCard,
+            onClick = onNavigateMedicalRecords
+        ),
+        QuickAction(
+            label = "Notifications",
+            description = "Latest care updates",
+            icon = Icons.Outlined.NotificationsActive,
+            accentColor = PatientColors.ReviewAccent,
+            backgroundColor = PatientColors.ReviewCard,
+            onClick = onNavigateNotifications
+        ),
+        QuickAction(
+            label = "Health tips",
+            description = "Daily wellness guidance",
+            icon = Icons.Outlined.Lightbulb,
+            accentColor = PatientColors.TipsAccent,
+            backgroundColor = PatientColors.TipsCard,
+            onClick = onNavigateHealthTips
+        )
+    )
+
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 28.dp),
+        contentPadding = PaddingValues(top = 10.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         item {
-            Column(
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp)
-            ) {
+            Column(Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
                 Text(
                     text = "${greetingForNow()}, $firstName",
-                    fontSize = 28.sp,
+                    fontSize = 27.sp,
+                    lineHeight = 32.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Spacer(Modifier.height(5.dp))
                 Text(
-                    text = "What can we help you with today?",
+                    text = "Your health, made simpler.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp
+                    fontSize = 13.sp
                 )
             }
         }
 
-        item {
-            OnDemandCareHero(onClick = onNavigateConsultations)
-        }
+        item { OnDemandCareHero(onClick = onNavigateConsultations) }
 
         item {
             DashboardStatsRow(
@@ -992,92 +1112,57 @@ private fun ModernHomeTab(
 
         item {
             SectionHeader(
-                title = "Quick actions",
-                subtitle = "Everything you need, one tap away"
+                title = "Smart Care",
+                subtitle = "Guidance from your saved health profile"
+            )
+        }
+        item {
+            SmartCareRecommendationCard(
+                recommendation = recommendation,
+                loading = recommendationLoading,
+                hasSymptoms = healthProfileHasSymptoms,
+                hasError = recommendationLoadError,
+                onFindDoctors = onNavigateFindDoctors,
+                onHealthProfile = onNavigateHealthProfile
             )
         }
 
         item {
-            val actions = listOf(
-
-                QuickAction(
-                    label = "Find a doctor",
-                    description = "Search approved doctors",
-                    icon = Icons.Outlined.Search,
-                    accentColor = PatientColors.DoctorAccent,
-                    backgroundColor = PatientColors.DoctorCard,
-                    onClick = onNavigateFindDoctors
-                ),
-
-                QuickAction(
-                    label = "Appointments",
-                    description = "Manage your visits",
-                    icon = Icons.Outlined.CalendarMonth,
-                    accentColor = PatientColors.AppointmentAccent,
-                    backgroundColor = PatientColors.AppointmentCard,
-                    onClick = onNavigateAppointments
-                ),
-
-                QuickAction(
-                    label = "Medical records",
-                    description = "Your care history",
-                    icon = Icons.Outlined.Description,
-                    accentColor = PatientColors.RecordsAccent,
-                    backgroundColor = PatientColors.RecordsCard,
-                    onClick = onNavigateMedicalRecords
-                ),
-
-                QuickAction(
-                    label = "Prescriptions",
-                    description = "Medication & refills",
-                    icon = Icons.Outlined.Medication,
-                    accentColor = PatientColors.SuccessAccent,
-                    backgroundColor = PatientColors.SuccessCard,
-                    onClick = onNavigatePrescriptions
-                ),
-
-                QuickAction(
-                    label = "Health tips",
-                    description = "Helpful wellness guidance",
-                    icon = Icons.Outlined.Lightbulb,
-                    accentColor = PatientColors.TipsAccent,
-                    backgroundColor = PatientColors.TipsCard,
-                    onClick = onNavigateHealthTips
-                )
+            SectionHeader(
+                title = "Quick access",
+                subtitle = "All your healthcare tools in one place"
             )
-
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 18.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(actions) { action ->
-                    QuickActionCard(action)
+        }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                actions.chunked(2).forEach { pair ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        pair.forEach { action ->
+                            QuickActionCard(action = action, modifier = Modifier.weight(1f))
+                        }
+                        if (pair.size == 1) Spacer(Modifier.weight(1f))
+                    }
                 }
             }
         }
 
         item {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 18.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text(
-                        "Next appointment",
-                        fontSize = 19.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text("Next appointment", fontSize = 19.sp, fontWeight = FontWeight.Bold)
                     Text(
                         "Your upcoming care",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp
                     )
                 }
-                TextButton(onClick = onNavigateAppointments) {
-                    Text("See all")
-                }
+                TextButton(onClick = onNavigateAppointments) { Text("See all") }
             }
         }
 
@@ -1107,7 +1192,6 @@ private fun ModernHomeTab(
                     subtitle = "Your next ${minOf(3, upcomingAppointments.size - 1)} visits"
                 )
             }
-
             items(upcomingAppointments.drop(1).take(3), key = { it.id }) { appointment ->
                 Box(Modifier.padding(horizontal = 18.dp)) {
                     CompactAppointmentCard(
@@ -1118,9 +1202,7 @@ private fun ModernHomeTab(
             }
         }
 
-        item {
-            HealthTrustCard(onHealthTips = onNavigateHealthTips)
-        }
+        item { HealthTrustCard(onHealthTips = onNavigateHealthTips) }
 
         if (reviews.isNotEmpty()) {
             item {
@@ -1129,12 +1211,138 @@ private fun ModernHomeTab(
                     subtitle = "Recent doctor reviews"
                 )
             }
-
             items(reviews.take(2), key = { it.review.id }) { review ->
-                Box(Modifier.padding(horizontal = 18.dp)) {
-                    ReviewCard(review)
+                Box(Modifier.padding(horizontal = 18.dp)) { ReviewCard(review) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SmartCareRecommendationCard(
+    recommendation: DoctorRecommendation?,
+    loading: Boolean,
+    hasSymptoms: Boolean,
+    hasError: Boolean,
+    onFindDoctors: () -> Unit,
+    onHealthProfile: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
+        shape = RoundedCornerShape(23.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, PatientColors.Primary.copy(alpha = 0.19f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(19.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier.size(43.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(PatientColors.DoctorCard),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Outlined.AutoAwesome,
+                        contentDescription = null,
+                        tint = PatientColors.DoctorAccent,
+                        modifier = Modifier.size(23.dp)
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "SMART SPECIALTY ROUTING",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PatientColors.DoctorAccent,
+                        letterSpacing = 0.6.sp
+                    )
+                    Text(
+                        "Find the right kind of doctor",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
             }
+            Spacer(Modifier.height(15.dp))
+
+            val action = when {
+                loading -> "Find doctors"
+                recommendation != null -> "Explore doctors"
+                !hasSymptoms && !hasError -> "Update health profile"
+                else -> "Find doctors"
+            }
+            when {
+                loading -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(17.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(11.dp))
+                    Text(
+                        "Checking your saved questionnaire...",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                recommendation != null -> {
+                    Text(
+                        recommendation.specialty,
+                        color = PatientColors.Primary,
+                        fontSize = 23.sp,
+                        lineHeight = 27.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    Spacer(Modifier.height(5.dp))
+                    Text(
+                        "Suggested from your health questionnaire. Browse doctors with this specialty in Find Doctors.",
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                hasError -> {
+                    Text(
+                        "Recommendations are temporarily unavailable.",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "You can still browse verified doctors.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                else -> {
+                    Text("Make it personal", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(5.dp))
+                    Text(
+                        "Add your current symptoms to your Health Profile to get a suggested specialty.",
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(15.dp))
+            Button(
+                modifier = Modifier.fillMaxWidth().height(46.dp),
+                shape = RoundedCornerShape(14.dp),
+                onClick = if (action == "Update health profile") onHealthProfile else onFindDoctors,
+                colors = ButtonDefaults.buttonColors(containerColor = PatientColors.Primary)
+            ) {
+                Text(action, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.width(6.dp))
+                Icon(Icons.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(17.dp))
+            }
+            Spacer(Modifier.height(9.dp))
+            Text(
+                "Educational specialty guidance only — not a diagnosis. If symptoms are urgent, seek immediate medical help.",
+                fontSize = 10.5.sp,
+                lineHeight = 14.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -1216,7 +1424,7 @@ private fun OnDemandCareHero(
             elevation =
                 CardDefaults.cardElevation(
                     defaultElevation =
-                        8.dp
+                        0.dp
                 )
         ) {
 
@@ -1294,7 +1502,7 @@ private fun OnDemandCareHero(
 
                         Text(
                             text =
-                                "DOCTORS AVAILABLE",
+                                "ONLINE HEALTHCARE",
                             color =
                                 Color.White
                                     .copy(
@@ -1319,7 +1527,7 @@ private fun OnDemandCareHero(
 
                     Text(
                         text =
-                            "Need medical\nadvice now?",
+                            "Healthcare,\non your terms.",
                         color =
                             Color.White,
                         fontSize =
@@ -1339,7 +1547,7 @@ private fun OnDemandCareHero(
 
                     Text(
                         text =
-                            "Connect with an available healthcare professional for an online consultation.",
+                            "Find a healthcare professional and schedule a convenient online consultation.",
                         color =
                             Color.White
                                 .copy(
@@ -1894,7 +2102,8 @@ private fun SectionHeader(title: String, subtitle: String) {
 
 @Composable
 private fun QuickActionCard(
-    action: QuickAction
+    action: QuickAction,
+    modifier: Modifier = Modifier
 ) {
 
     val interactionSource =
@@ -1904,8 +2113,8 @@ private fun QuickActionCard(
 
     Card(
         modifier =
-            Modifier
-                .width(170.dp)
+            modifier
+                .fillMaxWidth()
                 .patientPressAnimation(
                     interactionSource
                 )
@@ -1937,8 +2146,8 @@ private fun QuickActionCard(
             ),
         elevation =
             CardDefaults.cardElevation(
-                defaultElevation = 2.dp,
-                pressedElevation = 5.dp
+                defaultElevation = 0.dp,
+                pressedElevation = 0.dp
             )
     ) {
 
@@ -1998,6 +2207,8 @@ private fun QuickActionCard(
                     PatientColors.TextPrimary,
                 fontSize =
                     14.sp,
+                maxLines = 2,
+                lineHeight = 17.sp,
                 fontWeight =
                     FontWeight.Bold
             )

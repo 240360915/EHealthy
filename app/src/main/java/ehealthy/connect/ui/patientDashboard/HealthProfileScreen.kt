@@ -32,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -55,7 +56,8 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HealthProfileScreen(
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onOpenCareFile: () -> Unit = {}
 ) {
 
     val scope =
@@ -237,6 +239,14 @@ fun HealthProfileScreen(
                     patientName =
                         profile.patientName
                 )
+            }
+
+            item {
+                OutlinedButton(
+                    onClick = onOpenCareFile,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp)
+                ) { Text("Open My Care File") }
             }
 
 
@@ -1223,5 +1233,3 @@ private fun MessageCard(
         }
     }
 }
-
-

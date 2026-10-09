@@ -148,7 +148,8 @@ fun DoctorDashboard(
     onNavigateTimeSlots: () -> Unit,
     onNavigateAvailability: () -> Unit = {},
     onStartCall: (appointmentId: String) -> Unit = {},
-    onVerifyCompletionCode: suspend (appointmentId: String, code: String) -> Result<Unit> = { _, _ -> Result.failure(Exception("Not available")) }
+    onVerifyCompletionCode: suspend (appointmentId: String, code: String) -> Result<Unit> = { _, _ -> Result.failure(Exception("Not available")) },
+    onOpenPatientFile: (appointmentId: String) -> Unit = {}
 ) {
     val background = MaterialTheme.colorScheme.background
     val navy = MaterialTheme.colorScheme.onBackground
@@ -272,7 +273,8 @@ fun DoctorDashboard(
                     loadError = loadError,
                     onUpdateStatus = handleStatusUpdate,
                     onStartCall = onStartCall,
-                    onVerifyCompletionCode = onVerifyCompletionCode
+                    onVerifyCompletionCode = onVerifyCompletionCode,
+                    onOpenPatientFile = onOpenPatientFile
                 )
 
                 DoctorTab.PATIENTS -> PatientsTabContent(

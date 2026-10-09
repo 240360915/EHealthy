@@ -1,5 +1,6 @@
 package ehealthy.connect.ui.patientDashboard
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -9,6 +10,7 @@ import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import android.util.Base64
+import ehealthy.connect.R
 import java.io.OutputStream
 
 /**
@@ -44,10 +46,17 @@ object PrescriptionPdfExporter {
 
 
     fun writePrescriptionPdf(
+        context: Context,
         prescription: Prescription,
         fallbackDoctorName: String?,
         output: OutputStream
     ) {
+
+        // Load the actual drawable logo once for all pages.
+        // Android compiles R.drawable.logo from res/drawable/logo.png.
+        val logoBitmap = runCatching {
+            BitmapFactory.decodeResource(context.resources, R.drawable.logo)
+        }.getOrNull()
 
         val pdf =
             PdfDocument()
@@ -66,13 +75,11 @@ object PrescriptionPdfExporter {
         var canvas =
             page.canvas
 
-        var y =
-            drawHeader(
-                canvas =
-                    canvas,
-                prescription =
-                    prescription
-            )
+        var y = drawHeader(
+            canvas = canvas,
+            prescription = prescription,
+            logoBitmap = logoBitmap
+        )
 
 
         y =
@@ -183,10 +190,9 @@ object PrescriptionPdfExporter {
 
                 y =
                     drawContinuationHeader(
-                        canvas =
-                            canvas,
-                        prescription =
-                            prescription
+                        canvas = canvas,
+                        prescription = prescription,
+                        logoBitmap = logoBitmap
                     )
 
                 y =
@@ -258,10 +264,9 @@ object PrescriptionPdfExporter {
 
                     y =
                         drawContinuationHeader(
-                            canvas =
-                                canvas,
-                            prescription =
-                                prescription
+                            canvas = canvas,
+                            prescription = prescription,
+                            logoBitmap = logoBitmap
                         )
                 }
 
@@ -331,10 +336,9 @@ object PrescriptionPdfExporter {
 
             y =
                 drawContinuationHeader(
-                    canvas =
-                        canvas,
-                    prescription =
-                        prescription
+                    canvas = canvas,
+                    prescription = prescription,
+                    logoBitmap = logoBitmap
                 )
         }
 
@@ -394,326 +398,164 @@ object PrescriptionPdfExporter {
     }
 
 
+    /**
+     * White document header: the real logo.png has a white background, so it
+     * should blend into the page instead of sitting on a coloured banner.
+     */
     private fun drawHeader(
         canvas: Canvas,
-        prescription: Prescription
+        prescription: Prescription,
+        logoBitmap: Bitmap?
     ): Float {
-
-        val headerPaint =
-            Paint(
-                Paint.ANTI_ALIAS_FLAG
-            ).apply {
-
-                color =
-                    Color.rgb(
-                        18,
-                        73,
-                        126
-                    )
-            }
-
-
+        // Explicitly keep the entire header pure white (no blue banner/panel).
+        val headerBackground = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+        }
         canvas.drawRect(
-            0f,
-            0f,
-            PAGE_WIDTH.toFloat(),
-            115f,
-            headerPaint
+            0f, 0f, PAGE_WIDTH.toFloat(), 115f, headerBackground
         )
 
-
-        // EHealthy logo mark
-        val markPaint =
-            Paint(
-                Paint.ANTI_ALIAS_FLAG
-            ).apply {
-
-                color =
-                    Color.rgb(
-                        20,
-                        184,
-                        166
-                    )
+        // Left: original EHealthy PNG, scaled without stretching or cropping.
+        if (logoBitmap != null) {
+            drawBitmapFitCenter(
+                canvas = canvas,
+                bitmap = logoBitmap,
+                bounds = RectF(LEFT, 15f, LEFT + 230f, 99f)
+            )
+        } else {
+            val fallback = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.rgb(18, 73, 126)
+                textSize = 24f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             }
+            canvas.drawText("EHealthy", LEFT, 61f, fallback)
+        }
 
+        // Right: dark-blue title with muted reference/date.
+        val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(18, 73, 126)
+            textSize = 18f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textAlign = Paint.Align.RIGHT
+        }
+        canvas.drawText("PRESCRIPTION", RIGHT, 44f, titlePaint)
 
-        canvas.drawRoundRect(
-            RectF(
-                LEFT,
-                27f,
-                LEFT +
-                        54f,
-                81f
-            ),
-            13f,
-            13f,
-            markPaint
+        val detailPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(100, 116, 139)
+            textSize = 9.5f
+            textAlign = Paint.Align.RIGHT
+        }
+        val reference = prescription.prescription_reference
+            ?.takeIf { it.isNotBlank() }
+            ?: prescription.id
+        drawHeaderDetail(
+            canvas = canvas,
+            text = "Ref: $reference",
+            x = RIGHT,
+            y = 65f,
+            maxWidth = 225f,
+            paint = detailPaint
         )
-
-
-        val crossPaint =
-            Paint(
-                Paint.ANTI_ALIAS_FLAG
-            ).apply {
-
-                color =
-                    Color.WHITE
-            }
-
-
-        canvas.drawRoundRect(
-            RectF(
-                LEFT +
-                        23f,
-                37f,
-                LEFT +
-                        31f,
-                71f
-            ),
-            3f,
-            3f,
-            crossPaint
-        )
-
-
-        canvas.drawRoundRect(
-            RectF(
-                LEFT +
-                        10f,
-                50f,
-                LEFT +
-                        44f,
-                58f
-            ),
-            3f,
-            3f,
-            crossPaint
-        )
-
-
-        val logoPaint =
-            Paint(
-                Paint.ANTI_ALIAS_FLAG
-            ).apply {
-
-                color =
-                    Color.WHITE
-
-                textSize =
-                    24f
-
-                typeface =
-                    Typeface.create(
-                        Typeface.DEFAULT,
-                        Typeface.BOLD
-                    )
-            }
-
-
         canvas.drawText(
-            "EHealthy",
-            LEFT +
-                    68f,
-            53f,
-            logoPaint
-        )
-
-
-        val subLogo =
-            Paint(
-                Paint.ANTI_ALIAS_FLAG
-            ).apply {
-
-                color =
-                    Color.rgb(
-                        207,
-                        231,
-                        255
-                    )
-
-                textSize =
-                    10.5f
-
-                typeface =
-                    Typeface.create(
-                        Typeface.DEFAULT,
-                        Typeface.NORMAL
-                    )
-            }
-
-
-        canvas.drawText(
-            "CONNECT - DIGITAL HEALTHCARE",
-            LEFT +
-                    69f,
-            71f,
-            subLogo
-        )
-
-
-        val titlePaint =
-            Paint(
-                Paint.ANTI_ALIAS_FLAG
-            ).apply {
-
-                color =
-                    Color.WHITE
-
-                textSize =
-                    18f
-
-                typeface =
-                    Typeface.create(
-                        Typeface.DEFAULT,
-                        Typeface.BOLD
-                    )
-
-                textAlign =
-                    Paint.Align.RIGHT
-            }
-
-
-        canvas.drawText(
-            "PRESCRIPTION",
+            formatDate(prescription.created_at),
             RIGHT,
-            48f,
-            titlePaint
+            84f,
+            detailPaint
         )
 
-
-        val smallRight =
-            Paint(
-                Paint.ANTI_ALIAS_FLAG
-            ).apply {
-
-                color =
-                    Color.rgb(
-                        219,
-                        234,
-                        254
-                    )
-
-                textSize =
-                    9.5f
-
-                textAlign =
-                    Paint.Align.RIGHT
-            }
-
-
-        val reference =
-            prescription
-                .prescription_reference
-                ?.takeIf {
-                    it.isNotBlank()
-                }
-                ?: prescription.id
-
-
-        canvas.drawText(
-            "Ref: $reference",
-            RIGHT,
-            67f,
-            smallRight
-        )
-
-
-        canvas.drawText(
-            formatDate(
-                prescription.created_at
-            ),
-            RIGHT,
-            83f,
-            smallRight
-        )
-
-
+        drawHeaderDivider(canvas, 113f)
+        // Leave breathing room below the divider before PATIENT.
         return 140f
     }
 
 
+    /** Same white design on pages after the first. */
     private fun drawContinuationHeader(
         canvas: Canvas,
-        prescription: Prescription
+        prescription: Prescription,
+        logoBitmap: Bitmap?
     ): Float {
-
-        val paint =
-            Paint(
-                Paint.ANTI_ALIAS_FLAG
-            ).apply {
-
-                color =
-                    Color.rgb(
-                        18,
-                        73,
-                        126
-                    )
-            }
-
-
+        val headerBackground = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+        }
         canvas.drawRect(
-            0f,
-            0f,
-            PAGE_WIDTH.toFloat(),
-            67f,
-            paint
+            0f, 0f, PAGE_WIDTH.toFloat(), 73f, headerBackground
         )
 
-
-        val title =
-            Paint(
-                Paint.ANTI_ALIAS_FLAG
-            ).apply {
-
-                color =
-                    Color.WHITE
-
-                textSize =
-                    17f
-
-                typeface =
-                    Typeface.create(
-                        Typeface.DEFAULT,
-                        Typeface.BOLD
-                    )
+        if (logoBitmap != null) {
+            drawBitmapFitCenter(
+                canvas = canvas,
+                bitmap = logoBitmap,
+                bounds = RectF(LEFT, 8f, LEFT + 205f, 59f)
+            )
+        } else {
+            val fallback = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.rgb(18, 73, 126)
+                textSize = 17f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             }
+            canvas.drawText("EHealthy", LEFT, 38f, fallback)
+        }
 
+        val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(18, 73, 126)
+            textSize = 15f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textAlign = Paint.Align.RIGHT
+        }
+        canvas.drawText("PRESCRIPTION", RIGHT, 28f, titlePaint)
 
-        canvas.drawText(
-            "EHealthy - Prescription",
-            LEFT,
-            35f,
-            title
+        val detailPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(100, 116, 139)
+            textSize = 9f
+            textAlign = Paint.Align.RIGHT
+        }
+        val reference = prescription.prescription_reference
+            ?.takeIf { it.isNotBlank() }
+            ?: prescription.id
+        drawHeaderDetail(
+            canvas = canvas,
+            text = "Ref: $reference",
+            x = RIGHT,
+            y = 48f,
+            maxWidth = 225f,
+            paint = detailPaint
         )
 
-
-        val refPaint =
-            Paint(
-                Paint.ANTI_ALIAS_FLAG
-            ).apply {
-
-                color =
-                    Color.WHITE
-
-                textSize =
-                    9f
-
-                textAlign =
-                    Paint.Align.RIGHT
-            }
+        drawHeaderDivider(canvas, 73f)
+        return 96f
+    }
 
 
-        canvas.drawText(
-            prescription
-                .prescription_reference
-                ?: prescription.id,
-            RIGHT,
-            35f,
-            refPaint
-        )
+    private fun drawHeaderDivider(canvas: Canvas, y: Float) {
+        val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(20, 143, 186)
+            strokeWidth = 2f
+            strokeCap = Paint.Cap.ROUND
+        }
+        canvas.drawLine(LEFT, y, RIGHT, y, linePaint)
+    }
 
 
-        return 92f
+    /** Prevent long prescription references from overlapping the logo. */
+    private fun drawHeaderDetail(
+        canvas: Canvas,
+        text: String,
+        x: Float,
+        y: Float,
+        maxWidth: Float,
+        paint: Paint
+    ) {
+        if (paint.measureText(text) <= maxWidth) {
+            canvas.drawText(text, x, y, paint)
+            return
+        }
+
+        var count = text.length
+        while (count > 0 && paint.measureText(text.take(count) + "…") > maxWidth) {
+            count--
+        }
+        canvas.drawText(text.take(count) + "…", x, y, paint)
     }
 
 
@@ -1713,6 +1555,11 @@ object PrescriptionPdfExporter {
                     2f
 
 
+        val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            isFilterBitmap = true
+            isDither = true
+        }
+
         canvas.drawBitmap(
             bitmap,
             null,
@@ -1724,7 +1571,7 @@ object PrescriptionPdfExporter {
                 top +
                         height
             ),
-            null
+            bitmapPaint
         )
     }
 

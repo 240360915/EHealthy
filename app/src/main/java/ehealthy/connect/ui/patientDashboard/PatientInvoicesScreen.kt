@@ -5,6 +5,10 @@ import android.content.Intent
 import android.net.Uri
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -88,6 +92,40 @@ fun PatientInvoicesScreen(
     onBack: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    // Export the invoice currently selected by the patient.
+    var pendingPdfInvoice by remember { mutableStateOf<PhysicalVisitInvoice?>(null) }
+    var pendingPdfDoctor by remember { mutableStateOf<PatientDoctorSummary?>(null) }
+
+    val createPdfLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri ->
+        val invoice = pendingPdfInvoice
+        if (uri != null && invoice != null) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { stream ->
+                    InvoicePdfExporter.writeInvoicePdf(
+                        context = context,
+                        invoice = invoice,
+                        doctor = pendingPdfDoctor,
+                        output = stream
+                    )
+                } ?: error("Could not open the selected PDF file.")
+            }.onSuccess {
+                Toast.makeText(context, "Invoice PDF saved", Toast.LENGTH_LONG).show()
+            }.onFailure { error ->
+                Toast.makeText(
+                    context,
+                    error.message ?: "Could not save invoice PDF.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+        pendingPdfInvoice = null
+        pendingPdfDoctor = null
+    }
+
 
     var invoices by remember { mutableStateOf<List<PhysicalVisitInvoice>>(emptyList()) }
     var doctors by remember { mutableStateOf<Map<String, PatientDoctorSummary>>(emptyMap()) }
@@ -183,7 +221,7 @@ fun PatientInvoicesScreen(
                     Column {
                         Text("My invoices", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
                         Text(
-                            "Physical visits, maps and directions",
+                            "Physical visits, maps and PDF invoices",
                             fontSize = 10.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -266,6 +304,13 @@ fun PatientInvoicesScreen(
                                 onDecline = {
                                     decisionInvoice = invoice
                                     decisionType = "declined"
+                                },
+                                onDownloadPdf = {
+                                    pendingPdfInvoice = invoice
+                                    pendingPdfDoctor = doctors[invoice.doctor_id]
+                                    createPdfLauncher.launch(
+                                        "EHealthy_Invoice_${invoice.id.take(8)}.pdf"
+                                    )
                                 }
                             )
                         }
@@ -283,7 +328,8 @@ private fun InvoiceCard(
     highlighted: Boolean,
     busy: Boolean,
     onAccept: () -> Unit,
-    onDecline: () -> Unit
+    onDecline: () -> Unit,
+    onDownloadPdf: () -> Unit
 ) {
     val context = LocalContext.current
 
@@ -391,6 +437,19 @@ private fun InvoiceCard(
                         Text("Directions")
                     }
                 }
+            }
+
+            // Available for every issued status, including accepted/declined.
+            // This remains an invoice copy, not a paid receipt.
+            OutlinedButton(
+                onClick = onDownloadPdf,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                enabled = !busy
+            ) {
+                Icon(Icons.Outlined.FileDownload, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Download invoice PDF", fontWeight = FontWeight.SemiBold)
             }
 
             if (invoice.status.equals("sent", true)) {
@@ -625,5 +684,3 @@ private fun openInvoiceDirections(
         )
     )
 }
-
-

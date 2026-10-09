@@ -1,5 +1,5 @@
 package ehealthy.connect.ui.patientDashboard
-
+import ehealthy.connect.data.patient.BookScheduledAppointmentResult
 import android.app.DatePickerDialog
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -30,7 +30,6 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.Schedule
@@ -40,7 +39,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
@@ -73,7 +71,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ehealthy.connect.data.patient.AvailableSlot
 import ehealthy.connect.data.patient.PatientRepository
-import ehealthy.connect.data.patient.ReserveSlotResult
+
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import java.util.Calendar
@@ -122,8 +120,8 @@ enum class AppointmentType {
 /**
  * Kept temporarily because MainActivity still references it.
  *
- * New bookings no longer use this object to write appointments.
- * The secure reserve_slot() RPC performs the booking.
+ * New scheduled bookings no longer use this object to write appointments.
+ * The secure book_scheduled_appointment_demo() RPC performs the booking.
  */
 data class BookingSubmission(
     val date: String,
@@ -149,25 +147,11 @@ private enum class BookingStep(
         "Time"
     ),
 
-    TYPE(
-        3,
-        "Visit"
-    ),
-
     DETAILS(
-        4,
+        3,
         "Details"
     )
 }
-
-private val BookingHeroStart =
-    Color(0xFF0B3B60)
-
-private val BookingHeroEnd =
-    Color(0xFF087F8C)
-
-private val SuccessGreen =
-    Color(0xFF15803D)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Suppress("UNUSED_PARAMETER")
@@ -232,10 +216,8 @@ fun BookAppointmentScreen(
         mutableStateOf<String?>(null)
     }
 
-    var appointmentType by rememberSaveable {
-        mutableStateOf<AppointmentType?>(
-            null
-        )
+    var dateConflictMessage by remember {
+        mutableStateOf<String?>(null)
     }
 
     var reason by rememberSaveable {
@@ -251,7 +233,7 @@ fun BookAppointmentScreen(
     }
 
     var bookingResult by remember {
-        mutableStateOf<ReserveSlotResult?>(
+        mutableStateOf<BookScheduledAppointmentResult?>(
             null
         )
     }
@@ -262,6 +244,7 @@ fun BookAppointmentScreen(
                 .toString()
         )
     }
+
 
     suspend fun loadDoctor() {
 
@@ -294,6 +277,7 @@ fun BookAppointmentScreen(
         isLoadingAlternatives = false
 
         slotError = null
+        dateConflictMessage = null
         selectedSlot = null
 
         availableSlots =
@@ -302,6 +286,38 @@ fun BookAppointmentScreen(
         alternativeSlots =
             emptyList()
 
+
+        val alreadyHasAppointment =
+            PatientRepository
+                .getMyAppointments()
+                .getOrNull()
+                ?.any { appointment ->
+
+                    appointment.date == date &&
+
+                            (
+                                    appointment.status
+                                        ?.lowercase()
+                                        ?: ""
+                                    ) !in setOf(
+                        "cancelled",
+                        "canceled"
+                    )
+                }
+                ?: false
+
+        if (alreadyHasAppointment) {
+
+            dateConflictMessage =
+                "You already have an appointment on $date. " +
+                        "EHealthy allows only one appointment per patient per day. " +
+                        "Please choose another date."
+
+            isLoadingSlots =
+                false
+
+            return
+        }
 
         PatientRepository
             .getAvailableSlots(
@@ -312,7 +328,8 @@ fun BookAppointmentScreen(
 
                 val openSlots =
                     slots.filter {
-                        !it.is_booked
+                        !it.is_booked &&
+                                isFutureSlot(it)
                     }
 
                 availableSlots =
@@ -343,6 +360,7 @@ fun BookAppointmentScreen(
                                     .filter { slot ->
 
                                         !slot.is_booked &&
+                                                isFutureSlot(slot) &&
 
                                                 /*
                                                  * YYYY-MM-DD strings can be
@@ -415,14 +433,15 @@ fun BookAppointmentScreen(
         selectedDate =
             value
 
-        appointmentType =
-            null
-
         reason =
             ""
 
         bookingError =
             null
+
+        bookingRequestId =
+            UUID.randomUUID()
+                .toString()
 
         scope.launch {
 
@@ -437,25 +456,10 @@ fun BookAppointmentScreen(
         val slot =
             selectedSlot
 
-        val type =
-            appointmentType
-
-        if (
-            slot == null
-        ) {
+        if (slot == null) {
 
             bookingError =
                 "Choose an available time."
-
-            return
-        }
-
-        if (
-            type == null
-        ) {
-
-            bookingError =
-                "Choose whether this will be online or in person."
 
             return
         }
@@ -480,12 +484,16 @@ fun BookAppointmentScreen(
         scope.launch {
 
             PatientRepository
-                .reserveSlot(
+                .bookScheduledAppointment(
+
                     slotId =
                         slot.id,
 
                     appointmentType =
-                        type.databaseValue,
+                        AppointmentType.ONLINE.databaseValue,
+
+                    paymentChoice =
+                        "demo_pay",
 
                     reason =
                         reason.trim(),
@@ -504,15 +512,6 @@ fun BookAppointmentScreen(
                         friendlyBookingError(
                             it.message
                         )
-
-                    /*
-                     * Generate a new key only if the server rejected
-                     * the request and the patient changes/retries the
-                     * booking.
-                     *
-                     * A retry of an uncertain network request should
-                     * keep the same key.
-                     */
                 }
 
             isBooking =
@@ -537,10 +536,6 @@ fun BookAppointmentScreen(
             selectedSlot == null ->
 
                 BookingStep.TIME
-
-            appointmentType == null ->
-
-                BookingStep.TYPE
 
             else ->
 
@@ -623,20 +618,16 @@ fun BookAppointmentScreen(
 
                 BookingBottomBar(
 
-                    doctor =
-                        doctor!!,
+                    doctor = doctor!!,
 
-                    selectedSlot =
-                        selectedSlot,
+                    selectedSlot = selectedSlot,
 
-                    appointmentType =
-                        appointmentType,
+                    reasonIsValid =
+                        reason.trim().length >= 3,
 
-                    isBooking =
-                        isBooking,
+                    isBooking = isBooking,
 
-                    onBook =
-                        ::submitBooking
+                    onBook = ::submitBooking
                 )
             }
         }
@@ -691,9 +682,7 @@ fun BookAppointmentScreen(
                     modifier =
                         Modifier
                             .fillMaxSize()
-                            .padding(
-                                innerPadding
-                            ),
+                            .padding(innerPadding),
 
                     doctor =
                         doctor!!,
@@ -701,10 +690,11 @@ fun BookAppointmentScreen(
                     result =
                         bookingResult!!,
 
-                    appointmentType =
-                        appointmentType
-                            ?: AppointmentType
-                                .IN_PERSON,
+                    appointmentDate =
+                        selectedSlot?.date.orEmpty(),
+
+                    appointmentTime =
+                        selectedSlot?.time.orEmpty(),
 
                     onDone =
                         onBack,
@@ -723,13 +713,16 @@ fun BookAppointmentScreen(
                         availableSlots =
                             emptyList()
 
-                        appointmentType =
-                            null
+                        alternativeSlots =
+                            emptyList()
 
                         reason =
                             ""
 
                         bookingError =
+                            null
+
+                        dateConflictMessage =
                             null
 
                         bookingRequestId =
@@ -823,6 +816,9 @@ fun BookAppointmentScreen(
                                 error =
                                     slotError,
 
+                                blockedMessage =
+                                    dateConflictMessage,
+
                                 onRetry = {
 
                                     scope.launch {
@@ -833,16 +829,17 @@ fun BookAppointmentScreen(
                                     }
                                 },
 
-                                onSelect = {
+                                onSelect = { slot ->
 
                                     selectedSlot =
-                                        it
-
-                                    appointmentType =
-                                        null
+                                        slot
 
                                     bookingError =
                                         null
+
+                                    bookingRequestId =
+                                        UUID.randomUUID()
+                                            .toString()
                                 },
 
                                 onSelectAlternative = { slot ->
@@ -865,11 +862,12 @@ fun BookAppointmentScreen(
                                     alternativeSlots =
                                         emptyList()
 
-                                    appointmentType =
-                                        null
-
                                     bookingError =
                                         null
+
+                                    bookingRequestId =
+                                        UUID.randomUUID()
+                                            .toString()
                                 }
                             )
                         }
@@ -882,20 +880,7 @@ fun BookAppointmentScreen(
                                 selectedSlot != null
                         ) {
 
-                            VisitTypeSection(
-
-                                selected =
-                                    appointmentType,
-
-                                onSelect = {
-
-                                    appointmentType =
-                                        it
-
-                                    bookingError =
-                                        null
-                                }
-                            )
+                            OnlineConsultationNotice()
                         }
                     }
 
@@ -903,8 +888,7 @@ fun BookAppointmentScreen(
 
                         AnimatedVisibility(
                             visible =
-                                appointmentType !=
-                                        null
+                                selectedSlot != null
                         ) {
 
                             ReasonSection(
@@ -923,6 +907,10 @@ fun BookAppointmentScreen(
 
                                         bookingError =
                                             null
+
+                                        bookingRequestId =
+                                            UUID.randomUUID()
+                                                .toString()
                                     }
                                 }
                             )
@@ -933,8 +921,7 @@ fun BookAppointmentScreen(
 
                         AnimatedVisibility(
                             visible =
-                                appointmentType !=
-                                        null
+                                selectedSlot != null
                         ) {
 
                             PriceInformationCard(
@@ -1437,7 +1424,7 @@ private fun BookingProgress(
 
                 Text(
                     text =
-                        "Complete the steps below to reserve your visit.",
+                        "Complete the steps below to reserve your online consultation.",
                     color =
                         PatientColors.TextSecondary,
                     fontSize = 10.5.sp
@@ -1467,7 +1454,7 @@ private fun BookingProgress(
 
                 Text(
                     text =
-                        "${activeStep.number}/4",
+                        "${activeStep.number}/${BookingStep.entries.size}",
                     color =
                         PatientColors.AppointmentAccent,
                     fontSize = 10.sp,
@@ -1699,9 +1686,6 @@ private fun BookingProgress(
                     BookingStep.TIME ->
                         "Now select an available time."
 
-                    BookingStep.TYPE ->
-                        "Choose how you would like to attend."
-
                     BookingStep.DETAILS ->
                         "Almost done — add your visit details."
                 },
@@ -1739,7 +1723,7 @@ private fun DateSection(
         title =
             "Choose a date",
         subtitle =
-            "Select when you would like to see the doctor."
+            "Choose a date for your online consultation. Only one appointment is allowed per day."
     ) {
 
         Card(
@@ -1916,12 +1900,8 @@ private fun DateSection(
 
                     Text(
                         text =
-                            if (
-                                selectedDate.isBlank()
-                            ) {
+                            selectedDate.ifBlank {
                                 "Select appointment date"
-                            } else {
-                                selectedDate
                             },
                         color =
                             PatientColors
@@ -1997,6 +1977,7 @@ private fun SlotSection(
     isLoading: Boolean,
     isLoadingAlternatives: Boolean,
     error: String?,
+    blockedMessage: String?,
     onRetry: () -> Unit,
     onSelect: (AvailableSlot) -> Unit,
     onSelectAlternative: (AvailableSlot) -> Unit
@@ -2056,6 +2037,98 @@ private fun SlotSection(
                         fontSize =
                             11.5.sp
                     )
+                }
+            }
+
+
+            blockedMessage != null -> {
+
+                Card(
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    shape =
+                        RoundedCornerShape(
+                            17.dp
+                        ),
+                    colors =
+                        CardDefaults.cardColors(
+                            containerColor =
+                                PatientColors.AppointmentCard
+                        ),
+                    border =
+                        BorderStroke(
+                            1.dp,
+                            PatientColors.AppointmentAccent
+                                .copy(
+                                    alpha = 0.16f
+                                )
+                        )
+                ) {
+
+                    Column(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    15.dp
+                                ),
+                        horizontalAlignment =
+                            Alignment.CenterHorizontally
+                    ) {
+
+                        Icon(
+                            imageVector =
+                                Icons.Outlined.Info,
+                            contentDescription =
+                                null,
+                            tint =
+                                PatientColors.AppointmentAccent,
+                            modifier =
+                                Modifier.size(
+                                    27.dp
+                                )
+                        )
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(
+                                    8.dp
+                                )
+                        )
+
+                        Text(
+                            text =
+                                "One appointment per day",
+                            color =
+                                PatientColors.TextPrimary,
+                            fontWeight =
+                                FontWeight.Bold,
+                            fontSize =
+                                13.sp,
+                            textAlign =
+                                TextAlign.Center
+                        )
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(
+                                    5.dp
+                                )
+                        )
+
+                        Text(
+                            text =
+                                blockedMessage,
+                            color =
+                                PatientColors.TextSecondary,
+                            fontSize =
+                                11.sp,
+                            lineHeight =
+                                16.sp,
+                            textAlign =
+                                TextAlign.Center
+                        )
+                    }
                 }
             }
 
@@ -2748,291 +2821,54 @@ private fun SlotOption(
 }
 
 @Composable
-private fun VisitTypeSection(
-    selected: AppointmentType?,
-    onSelect: (AppointmentType) -> Unit
-) {
+private fun OnlineConsultationNotice() {
 
     BookingSectionCard(
         icon =
             Icons.Outlined.VideoCall,
         title =
-            "How will you attend?",
+            "Online consultation",
         subtitle =
-            "Choose the consultation format that works for you."
+            "All initial EHealthy appointments start online."
     ) {
 
         Column(
             verticalArrangement =
                 Arrangement.spacedBy(
-                    11.dp
+                    10.dp
                 )
         ) {
 
-            VisitTypeOption(
-                icon =
-                    Icons.Outlined.LocationOn,
-
-                title =
-                    "In-person visit",
-
-                description =
-                    "Attend the doctor's practice at your selected date and time.",
-
-                badge =
-                    "AT PRACTICE",
-
-                selected =
-                    selected ==
-                            AppointmentType.IN_PERSON,
-
-                accent =
-                    PatientColors.DoctorAccent,
-
-                background =
-                    PatientColors.DoctorCard,
-
-                onClick = {
-                    onSelect(
-                        AppointmentType.IN_PERSON
-                    )
-                }
-            )
-
-
-            VisitTypeOption(
-                icon =
-                    Icons.Outlined.VideoCall,
-
-                title =
-                    "Online consultation",
-
-                description =
-                    "Join your scheduled video consultation directly from EHealthy.",
-
-                badge =
-                    "VIDEO CALL",
-
-                selected =
-                    selected ==
-                            AppointmentType.ONLINE,
-
-                accent =
-                    PatientColors.AppointmentAccent,
-
-                background =
-                    PatientColors.AppointmentCard,
-
-                onClick = {
-                    onSelect(
-                        AppointmentType.ONLINE
-                    )
-                }
-            )
-        }
-    }
-}
-
-@Composable
-private fun VisitTypeOption(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    title: String,
-    description: String,
-    badge: String,
-    selected: Boolean,
-    accent: Color,
-    background: Color,
-    onClick: () -> Unit
-) {
-
-    Card(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .clickable(
-                    onClick = onClick
-                ),
-        shape =
-            RoundedCornerShape(
-                18.dp
-            ),
-        colors =
-            CardDefaults.cardColors(
-                containerColor =
-                    if (selected) {
-                        background
-                    } else {
-                        MaterialTheme
-                            .colorScheme
-                            .surface
-                    }
-            ),
-        border =
-            BorderStroke(
-                width =
-                    if (selected) {
-                        1.5.dp
-                    } else {
-                        1.dp
-                    },
-                color =
-                    if (selected) {
-                        accent
-                    } else {
-                        accent.copy(
-                            alpha = 0.10f
-                        )
-                    }
-            ),
-        elevation =
-            CardDefaults.cardElevation(
-                defaultElevation =
-                    if (selected) {
-                        2.dp
-                    } else {
-                        0.dp
-                    }
-            )
-    ) {
-
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        14.dp
-                    ),
-            verticalAlignment =
-                Alignment.CenterVertically
-        ) {
-
-            /*
-             * Consultation icon
-             */
-            Box(
-                modifier =
-                    Modifier
-                        .size(
-                            47.dp
-                        )
-                        .clip(
-                            RoundedCornerShape(
-                                14.dp
-                            )
-                        )
-                        .background(
-                            accent.copy(
-                                alpha =
-                                    if (selected) {
-                                        0.16f
-                                    } else {
-                                        0.09f
-                                    }
-                            )
-                        ),
-                contentAlignment =
-                    Alignment.Center
+            Row(
+                verticalAlignment =
+                    Alignment.Top
             ) {
 
                 Icon(
                     imageVector =
-                        icon,
+                        Icons.Outlined.VideoCall,
                     contentDescription =
                         null,
                     tint =
-                        accent,
+                        PatientColors.AppointmentAccent,
                     modifier =
                         Modifier.size(
-                            23.dp
+                            18.dp
                         )
                 )
-            }
-
-
-            Spacer(
-                modifier =
-                    Modifier.width(
-                        12.dp
-                    )
-            )
-
-
-            Column(
-                modifier =
-                    Modifier.weight(
-                        1f
-                    )
-            ) {
-
-                Row(
-                    modifier =
-                        Modifier.fillMaxWidth(),
-                    verticalAlignment =
-                        Alignment.CenterVertically
-                ) {
-
-                    Text(
-                        text =
-                            title,
-                        color =
-                            PatientColors.TextPrimary,
-                        fontWeight =
-                            FontWeight.ExtraBold,
-                        fontSize =
-                            13.5.sp,
-                        modifier =
-                            Modifier.weight(
-                                1f
-                            )
-                    )
-
-
-                    Box(
-                        modifier =
-                            Modifier
-                                .clip(
-                                    RoundedCornerShape(
-                                        20.dp
-                                    )
-                                )
-                                .background(
-                                    accent.copy(
-                                        alpha = 0.10f
-                                    )
-                                )
-                                .padding(
-                                    horizontal = 7.dp,
-                                    vertical = 4.dp
-                                )
-                    ) {
-
-                        Text(
-                            text =
-                                badge,
-                            color =
-                                accent,
-                            fontSize =
-                                8.sp,
-                            fontWeight =
-                                FontWeight.ExtraBold,
-                            letterSpacing =
-                                0.4.sp
-                        )
-                    }
-                }
-
 
                 Spacer(
                     modifier =
-                        Modifier.height(
-                            5.dp
+                        Modifier.width(
+                            9.dp
                         )
                 )
 
-
                 Text(
                     text =
-                        description,
+                        "You will meet the doctor online at the selected date and time.",
+                    modifier =
+                        Modifier.weight(1f),
                     color =
                         PatientColors.TextSecondary,
                     fontSize =
@@ -3042,73 +2878,82 @@ private fun VisitTypeOption(
                 )
             }
 
-
-            Spacer(
-                modifier =
-                    Modifier.width(
-                        9.dp
-                    )
-            )
-
-
-            /*
-             * Selection indicator
-             */
-            Box(
-                modifier =
-                    Modifier
-                        .size(
-                            25.dp
-                        )
-                        .clip(
-                            CircleShape
-                        )
-                        .background(
-                            if (selected) {
-                                accent
-                            } else {
-                                accent.copy(
-                                    alpha = 0.08f
-                                )
-                            }
-                        ),
-                contentAlignment =
-                    Alignment.Center
+            Row(
+                verticalAlignment =
+                    Alignment.Top
             ) {
 
-                if (selected) {
+                Icon(
+                    imageVector =
+                        Icons.Outlined.Info,
+                    contentDescription =
+                        null,
+                    tint =
+                        PatientColors.DoctorAccent,
+                    modifier =
+                        Modifier.size(
+                            18.dp
+                        )
+                )
 
-                    Icon(
-                        imageVector =
-                            Icons.Filled.CheckCircle,
-                        contentDescription =
-                            "Selected",
-                        tint =
-                            Color.White,
-                        modifier =
-                            Modifier.size(
-                                17.dp
-                            )
-                    )
+                Spacer(
+                    modifier =
+                        Modifier.width(
+                            9.dp
+                        )
+                )
 
-                } else {
+                Text(
+                    text =
+                        "If a physical examination is needed after the online consultation, you can request an in-person follow-up from the doctor.",
+                    modifier =
+                        Modifier.weight(1f),
+                    color =
+                        PatientColors.TextSecondary,
+                    fontSize =
+                        11.sp,
+                    lineHeight =
+                        16.sp
+                )
+            }
 
-                    Box(
-                        modifier =
-                            Modifier
-                                .size(
-                                    8.dp
-                                )
-                                .clip(
-                                    CircleShape
-                                )
-                                .background(
-                                    accent.copy(
-                                        alpha = 0.30f
-                                    )
-                                )
-                    )
-                }
+            Row(
+                verticalAlignment =
+                    Alignment.Top
+            ) {
+
+                Icon(
+                    imageVector =
+                        Icons.Outlined.Payments,
+                    contentDescription =
+                        null,
+                    tint =
+                        PatientColors.Purple,
+                    modifier =
+                        Modifier.size(
+                            18.dp
+                        )
+                )
+
+                Spacer(
+                    modifier =
+                        Modifier.width(
+                            9.dp
+                        )
+                )
+
+                Text(
+                    text =
+                        "This project currently uses EHealthy DemoPay for the online booking. No real money is charged.",
+                    modifier =
+                        Modifier.weight(1f),
+                    color =
+                        PatientColors.TextSecondary,
+                    fontSize =
+                        11.sp,
+                    lineHeight =
+                        16.sp
+                )
             }
         }
     }
@@ -3745,7 +3590,7 @@ private fun SecureBookingNotice() {
 
                 Text(
                     text =
-                        "When you reserve, the server locks the selected slot before creating your appointment so two patients cannot book the same time.",
+                        "When you reserve, the server locks the selected slot and checks that you do not already have another appointment on that day.",
                     color =
                         PatientColors.TextSecondary,
                     fontSize =
@@ -3762,14 +3607,14 @@ private fun SecureBookingNotice() {
 private fun BookingBottomBar(
     doctor: DoctorBookingInfo,
     selectedSlot: AvailableSlot?,
-    appointmentType: AppointmentType?,
+    reasonIsValid: Boolean,
     isBooking: Boolean,
     onBook: () -> Unit
-) {
+){
 
     val readyToReserve =
         selectedSlot != null &&
-                appointmentType != null
+                reasonIsValid
 
 
     Surface(
@@ -3861,31 +3706,16 @@ private fun BookingBottomBar(
 
                     Text(
                         text =
-                            when {
-
-                                selectedSlot == null ->
-                                    "Choose an appointment time"
-
-                                appointmentType == null ->
+                            if (
+                                selectedSlot == null
+                            ) {
+                                "Choose an appointment time"
+                            } else {
+                                "${
                                     displayTime(
                                         selectedSlot.time
                                     )
-
-                                else ->
-                                    "${
-                                        displayTime(
-                                            selectedSlot.time
-                                        )
-                                    } • ${
-                                        if (
-                                            appointmentType ==
-                                            AppointmentType.ONLINE
-                                        ) {
-                                            "Online"
-                                        } else {
-                                            "In person"
-                                        }
-                                    }"
+                                } • Online"
                             },
                         color =
                             PatientColors.TextPrimary,
@@ -4024,7 +3854,7 @@ private fun BookingBottomBar(
 
                     Text(
                         text =
-                            "Reserving your appointment...",
+                            "Reserving your online appointment...",
                         fontWeight =
                             FontWeight.Bold,
                         fontSize =
@@ -4056,7 +3886,7 @@ private fun BookingBottomBar(
                     Text(
                         text =
                             if (readyToReserve) {
-                                "Reserve appointment"
+                                "Reserve online appointment"
                             } else {
                                 "Complete appointment details"
                             },
@@ -4100,8 +3930,9 @@ private fun BookingBottomBar(
 private fun BookingSuccessScreen(
     modifier: Modifier,
     doctor: DoctorBookingInfo,
-    result: ReserveSlotResult,
-    appointmentType: AppointmentType,
+    result: BookScheduledAppointmentResult,
+    appointmentDate: String,
+    appointmentTime: String,
     onDone: () -> Unit,
     onBookAnother: () -> Unit
 ) {
@@ -4215,7 +4046,7 @@ private fun BookingSuccessScreen(
 
                 Text(
                     text =
-                        "Appointment reserved",
+                        "Online appointment reserved",
                     color =
                         PatientColors.TextPrimary,
                     fontSize =
@@ -4237,7 +4068,7 @@ private fun BookingSuccessScreen(
 
                 Text(
                     text =
-                        "Your appointment slot with ${doctor.fullName} has been secured.",
+                        "Your online appointment with ${doctor.fullName} has been secured.",
                     color =
                         PatientColors.TextSecondary,
                     fontSize =
@@ -4459,7 +4290,7 @@ private fun BookingSuccessScreen(
                             label =
                                 "Date",
                             value =
-                                result.appointment_date
+                                appointmentDate
                         )
 
 
@@ -4468,7 +4299,7 @@ private fun BookingSuccessScreen(
                                 "Time",
                             value =
                                 displayTime(
-                                    result.appointment_time
+                                    appointmentTime
                                 )
                         )
 
@@ -4477,14 +4308,7 @@ private fun BookingSuccessScreen(
                             label =
                                 "Visit",
                             value =
-                                if (
-                                    appointmentType ==
-                                    AppointmentType.ONLINE
-                                ) {
-                                    "Online consultation"
-                                } else {
-                                    "In-person appointment"
-                                }
+                                "Online consultation"
                         )
 
 
@@ -4503,10 +4327,14 @@ private fun BookingSuccessScreen(
                             label =
                                 "Server price",
                             value =
-                                formatMinorAmount(
-                                    result.amount_minor,
-                                    result.payment_currency
-                                )
+                                if (
+                                    result.currency.uppercase() == "ZAR"
+                                ) {
+                                    "R %.2f".format(result.amount)
+                                } else {
+                                    "${result.currency} %.2f".format(result.amount)
+                                }
+
                         )
                     }
                 }
@@ -4528,16 +4356,13 @@ private fun BookingSuccessScreen(
                         Modifier
                             .fillMaxWidth()
                             .clip(
-                                RoundedCornerShape(
-                                    16.dp
-                                )
+                                RoundedCornerShape(16.dp)
                             )
                             .background(
                                 PatientColors.PurpleSoft
                             )
-                            .padding(
-                                13.dp
-                            ),
+                            .padding(13.dp),
+
                     verticalAlignment =
                         Alignment.Top
                 ) {
@@ -4545,12 +4370,8 @@ private fun BookingSuccessScreen(
                     Box(
                         modifier =
                             Modifier
-                                .size(
-                                    31.dp
-                                )
-                                .clip(
-                                    CircleShape
-                                )
+                                .size(31.dp)
+                                .clip(CircleShape)
                                 .background(
                                     PatientColors.Purple
                                         .copy(alpha = 0.11f)
@@ -4567,18 +4388,13 @@ private fun BookingSuccessScreen(
                             tint =
                                 PatientColors.Purple,
                             modifier =
-                                Modifier.size(
-                                    16.dp
-                                )
+                                Modifier.size(16.dp)
                         )
                     }
 
-
                     Spacer(
                         modifier =
-                            Modifier.width(
-                                9.dp
-                            )
+                            Modifier.width(9.dp)
                     )
 
 
@@ -4589,31 +4405,49 @@ private fun BookingSuccessScreen(
 
                         Text(
                             text =
-                                "Payment not processed yet",
+                                if (
+                                    result.payment_status.equals(
+                                        "paid",
+                                        ignoreCase = true
+                                    )
+                                ) {
+                                    "Demo payment successful"
+                                } else {
+                                    "Payment status: ${
+                                        result.payment_status
+                                            .replaceFirstChar {
+                                                it.uppercase()
+                                            }
+                                    }"
+                                },
+
                             color =
                                 PatientColors.TextPrimary,
+
                             fontWeight =
                                 FontWeight.Bold,
+
                             fontSize =
                                 11.5.sp
                         )
 
-
                         Spacer(
                             modifier =
-                                Modifier.height(
-                                    2.dp
-                                )
+                                Modifier.height(2.dp)
                         )
-
 
                         Text(
                             text =
-                                "This reservation does not mean a payment has been processed. Payment will be handled separately when the payment provider is connected.",
+                                "Payment reference: ${result.payment_reference}. " +
+                                        "This is an EHealthy DemoPay test transaction. " +
+                                        "No real money was charged.",
+
                             color =
                                 PatientColors.TextSecondary,
+
                             fontSize =
                                 10.5.sp,
+
                             lineHeight =
                                 15.sp
                         )
@@ -5368,6 +5202,91 @@ private fun BookingErrorScreen(
     }
 }
 
+private fun isFutureSlot(
+    slot: AvailableSlot
+): Boolean {
+
+    val dateParts =
+        slot.date
+            .trim()
+            .split("-")
+
+    val timeParts =
+        slot.time
+            .trim()
+            .split(":")
+
+    if (
+        dateParts.size < 3 ||
+        timeParts.size < 2
+    ) {
+        // Do not hide a slot if its format is unexpected.
+        // The server still performs the final time validation.
+        return true
+    }
+
+    val year =
+        dateParts[0]
+            .toIntOrNull()
+            ?: return true
+
+    val month =
+        dateParts[1]
+            .toIntOrNull()
+            ?: return true
+
+    val day =
+        dateParts[2]
+            .toIntOrNull()
+            ?: return true
+
+    val hour =
+        timeParts[0]
+            .toIntOrNull()
+            ?: return true
+
+    val minute =
+        timeParts[1]
+            .toIntOrNull()
+            ?: return true
+
+    val second =
+        timeParts
+            .getOrNull(2)
+            ?.toIntOrNull()
+            ?: 0
+
+    val johannesburgTimeZone =
+        java.util.TimeZone.getTimeZone(
+            "Africa/Johannesburg"
+        )
+
+    val slotCalendar =
+        Calendar.getInstance(
+            johannesburgTimeZone
+        ).apply {
+
+            clear()
+
+            set(
+                year,
+                month - 1,
+                day,
+                hour,
+                minute,
+                second
+            )
+        }
+
+    val now =
+        Calendar.getInstance(
+            johannesburgTimeZone
+        )
+
+    return slotCalendar.timeInMillis >
+            now.timeInMillis
+}
+
 private fun displayTime(
     value: String
 ): String {
@@ -5423,29 +5342,6 @@ private fun displayTime(
     return "$twelveHour:$minute $period"
 }
 
-private fun formatMinorAmount(
-    amountMinor: Int,
-    currency: String
-): String {
-
-    val amount =
-        amountMinor / 100.0
-
-    return when (
-        currency.uppercase()
-    ) {
-
-        "ZAR" ->
-            "R %.2f".format(
-                amount
-            )
-
-        else ->
-            "$currency %.2f".format(
-                amount
-            )
-    }
-}
 
 private fun friendlyBookingError(
     message: String?
@@ -5492,6 +5388,19 @@ private fun friendlyBookingError(
         ) ->
 
             "Your patient profile could not be found. Sign in again and retry."
+
+        original.contains(
+            "one appointment per day",
+            ignoreCase = true
+        ) ||
+                original.contains(
+                    "already have an appointment",
+                    ignoreCase = true
+                ) ->
+
+            "You already have an appointment on this date. " +
+                    "You can only have one appointment per day. " +
+                    "Please choose another date."
 
         original.isNotBlank() ->
             original

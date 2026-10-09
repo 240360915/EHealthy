@@ -14,3 +14,7 @@
 .cxx
 local.properties
 .kotlin/
+
+.gradle-user-home/
+.vscode/
+app/src/main/java/ehealthy/connect.zip

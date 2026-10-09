@@ -636,423 +636,491 @@ fun FindDoctorsScreen(
 
     ) { innerPadding ->
 
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .background(
-                        MaterialTheme
-                            .colorScheme
-                            .background
-                    )
-                    .padding(
-                        innerPadding
-                    )
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    MaterialTheme.colorScheme.background
+                )
+                .padding(innerPadding),
+
+            contentPadding = PaddingValues(
+                bottom = 28.dp
+            )
         ) {
 
-            DoctorDiscoveryHeader(
-                doctorCount =
-                    visibleDoctors.size
-            )
+            // ---------------------------------------------------------
+            // FIND CARE HEADER
+            // ---------------------------------------------------------
+            item {
 
-            DoctorRecommendationCard(
-                recommendation =
-                    recommendation,
-                isLoading =
-                    recommendationLoading,
-                questionnaireHasSymptoms =
-                    questionnaireHasSymptoms,
-                matchingDoctorCount =
-                    recommendedMatchCount,
-                showingRecommendedOnly =
-                    showRecommendedOnly,
-                onShowRecommended = {
+                DoctorDiscoveryHeader(
+                    doctorCount = visibleDoctors.size
+                )
+            }
 
-                    selectedSpecialty =
-                        null
 
-                    searchQuery =
-                        ""
+            // ---------------------------------------------------------
+            // AI / DECISION TREE RECOMMENDATION
+            // ---------------------------------------------------------
+            item {
 
-                    selectedSort =
-                        DoctorSort.RECOMMENDED
+                DoctorRecommendationCard(
+                    recommendation = recommendation,
+                    isLoading = recommendationLoading,
+                    questionnaireHasSymptoms = questionnaireHasSymptoms,
+                    matchingDoctorCount = recommendedMatchCount,
+                    showingRecommendedOnly = showRecommendedOnly,
 
-                    showRecommendedOnly =
-                        true
-                },
-                onShowAll = {
+                    onShowRecommended = {
 
-                    showRecommendedOnly =
-                        false
-                }
-            )
+                        selectedSpecialty = null
 
-            Column(
-                modifier =
-                    Modifier.padding(
+                        searchQuery = ""
+
+                        selectedSort =
+                            DoctorSort.RECOMMENDED
+
+                        showRecommendedOnly = true
+                    },
+
+                    onShowAll = {
+
+                        showRecommendedOnly = false
+                    }
+                )
+            }
+
+
+            // ---------------------------------------------------------
+            // SEARCH + SORT
+            // ---------------------------------------------------------
+            item {
+
+                Column(
+                    modifier = Modifier.padding(
                         horizontal = 16.dp
                     )
-            ) {
+                ) {
 
-                Spacer(
-                    modifier =
-                        Modifier.height(
+                    Spacer(
+                        modifier = Modifier.height(
                             14.dp
                         )
-                )
+                    )
 
-                OutlinedTextField(
 
-                    value =
-                        searchQuery,
+                    OutlinedTextField(
 
-                    onValueChange = {
-                        searchQuery = it
-                    },
+                        value = searchQuery,
 
-                    modifier =
-                        Modifier.fillMaxWidth(),
+                        onValueChange = {
+                            searchQuery = it
+                        },
 
-                    placeholder = {
+                        modifier = Modifier.fillMaxWidth(),
 
-                        Text(
-                            "Doctor, specialty, location..."
-                        )
-                    },
+                        placeholder = {
 
-                    leadingIcon = {
+                            Text(
+                                "Doctor, specialty, location..."
+                            )
+                        },
 
-                        Icon(
-                            imageVector =
-                                Icons.Outlined.Search,
-                            contentDescription =
-                                null
-                        )
-                    },
+                        leadingIcon = {
 
-                    singleLine =
-                        true,
+                            Icon(
+                                imageVector =
+                                    Icons.Outlined.Search,
 
-                    shape =
-                        RoundedCornerShape(
+                                contentDescription = null
+                            )
+                        },
+
+                        singleLine = true,
+
+                        shape = RoundedCornerShape(
                             18.dp
                         ),
 
-                    colors =
-                        OutlinedTextFieldDefaults.colors(
+                        colors =
+                            OutlinedTextFieldDefaults.colors(
 
-                            focusedBorderColor =
-                                PatientColors.DoctorAccent,
+                                focusedBorderColor =
+                                    PatientColors.DoctorAccent,
 
-                            unfocusedBorderColor =
-                                PatientColors.DoctorAccent
-                                    .copy(
-                                        alpha = 0.16f
-                                    ),
+                                unfocusedBorderColor =
+                                    PatientColors.DoctorAccent
+                                        .copy(
+                                            alpha = 0.16f
+                                        ),
 
-                            focusedContainerColor =
-                                PatientColors.DoctorCard
-                                    .copy(
-                                        alpha = 0.55f
-                                    ),
+                                focusedContainerColor =
+                                    PatientColors.DoctorCard
+                                        .copy(
+                                            alpha = 0.55f
+                                        ),
 
-                            unfocusedContainerColor =
-                                MaterialTheme
-                                    .colorScheme
-                                    .surface,
+                                unfocusedContainerColor =
+                                    MaterialTheme.colorScheme.surface,
 
-                            focusedLeadingIconColor =
-                                PatientColors.DoctorAccent,
+                                focusedLeadingIconColor =
+                                    PatientColors.DoctorAccent,
 
-                            cursorColor =
-                                PatientColors.DoctorAccent
-                        )
-                )
-
-                Spacer(
-                    modifier =
-                        Modifier.height(
-                            12.dp
-                        )
-                )
-
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth(),
-                    horizontalArrangement =
-                        Arrangement
-                            .SpaceBetween,
-                    verticalAlignment =
-                        Alignment.CenterVertically
-                ) {
-
-                    Text(
-                        text =
-                            "Specialties",
-                        fontWeight =
-                            FontWeight.Bold,
-                        fontSize =
-                            15.sp
-                    )
-
-                    Box {
-
-                        TextButton(
-                            onClick = {
-                                sortMenuExpanded =
-                                    true
-                            }
-                        ) {
-
-                            Text(
-                                text =
-                                    selectedSort.label
+                                cursorColor =
+                                    PatientColors.DoctorAccent
                             )
-                        }
-
-                        DropdownMenu(
-
-                            expanded =
-                                sortMenuExpanded,
-
-                            onDismissRequest = {
-                                sortMenuExpanded =
-                                    false
-                            }
-
-                        ) {
-
-                            DoctorSort
-                                .entries
-                                .forEach { sort ->
-
-                                    DropdownMenuItem(
-
-                                        text = {
-
-                                            Text(
-                                                sort.label
-                                            )
-                                        },
-
-                                        onClick = {
-
-                                            selectedSort =
-                                                sort
-
-                                            sortMenuExpanded =
-                                                false
-                                        }
-                                    )
-                                }
-                        }
-                    }
-                }
-            }
-
-            SpecialtyFilters(
-                specialties =
-                    specialties,
-                selectedSpecialty =
-                    selectedSpecialty,
-                onSpecialtySelected = {
-                    selectedSpecialty = it
-                }
-            )
-
-            AnimatedVisibility(
-                visible =
-                    selectedSpecialty != null ||
-                            searchQuery.isNotBlank() ||
-                            showRecommendedOnly
-            ) {
-
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(
-                                horizontal =
-                                    16.dp
-                            ),
-                    verticalAlignment =
-                        Alignment.CenterVertically
-                ) {
-
-                    Text(
-                        text =
-                            "${visibleDoctors.size} result${
-                                if (
-                                    visibleDoctors.size ==
-                                    1
-                                ) {
-                                    ""
-                                } else {
-                                    "s"
-                                }
-                            }",
-                        color =
-                            MaterialTheme
-                                .colorScheme
-                                .primary,
-                        fontWeight =
-                            FontWeight.SemiBold,
-                        fontSize =
-                            13.sp
                     )
+
 
                     Spacer(
-                        modifier =
-                            Modifier.weight(
-                                1f
-                            )
+                        modifier = Modifier.height(
+                            12.dp
+                        )
                     )
 
-                    TextButton(
-                        onClick = {
 
-                            searchQuery = ""
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
 
-                            selectedSpecialty =
-                                null
+                        horizontalArrangement =
+                            Arrangement.SpaceBetween,
 
-                            selectedSort =
-                                DoctorSort
-                                    .RECOMMENDED
-
-                            showRecommendedOnly =
-                                false
-                        }
+                        verticalAlignment =
+                            Alignment.CenterVertically
                     ) {
 
                         Text(
-                            "Clear filters"
+                            text = "Specialties",
+
+                            fontWeight =
+                                FontWeight.Bold,
+
+                            fontSize = 15.sp
+                        )
+
+
+                        Box {
+
+                            TextButton(
+                                onClick = {
+                                    sortMenuExpanded = true
+                                }
+                            ) {
+
+                                Text(
+                                    text =
+                                        selectedSort.label
+                                )
+                            }
+
+
+                            DropdownMenu(
+
+                                expanded =
+                                    sortMenuExpanded,
+
+                                onDismissRequest = {
+                                    sortMenuExpanded = false
+                                }
+
+                            ) {
+
+                                DoctorSort.entries
+                                    .forEach { sort ->
+
+                                        DropdownMenuItem(
+
+                                            text = {
+
+                                                Text(
+                                                    sort.label
+                                                )
+                                            },
+
+                                            onClick = {
+
+                                                selectedSort =
+                                                    sort
+
+                                                sortMenuExpanded =
+                                                    false
+                                            }
+                                        )
+                                    }
+                            }
+                        }
+                    }
+                }
+            }
+
+
+            // ---------------------------------------------------------
+            // SPECIALTY FILTERS
+            // ---------------------------------------------------------
+            item {
+
+                SpecialtyFilters(
+                    specialties = specialties,
+
+                    selectedSpecialty =
+                        selectedSpecialty,
+
+                    onSpecialtySelected = {
+
+                        selectedSpecialty = it
+                    }
+                )
+            }
+
+
+            // ---------------------------------------------------------
+            // FILTER RESULT COUNT
+            // ---------------------------------------------------------
+            if (
+                selectedSpecialty != null ||
+                searchQuery.isNotBlank() ||
+                showRecommendedOnly
+            ) {
+
+                item {
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                horizontal = 16.dp
+                            ),
+
+                        verticalAlignment =
+                            Alignment.CenterVertically
+                    ) {
+
+                        Text(
+
+                            text =
+                                "${visibleDoctors.size} result${
+                                    if (
+                                        visibleDoctors.size == 1
+                                    ) {
+                                        ""
+                                    } else {
+                                        "s"
+                                    }
+                                }",
+
+                            color =
+                                MaterialTheme.colorScheme.primary,
+
+                            fontWeight =
+                                FontWeight.SemiBold,
+
+                            fontSize =
+                                13.sp
+                        )
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.weight(1f)
+                        )
+
+
+                        TextButton(
+
+                            onClick = {
+
+                                searchQuery = ""
+
+                                selectedSpecialty = null
+
+                                selectedSort =
+                                    DoctorSort.RECOMMENDED
+
+                                showRecommendedOnly = false
+                            }
+
+                        ) {
+
+                            Text(
+                                "Clear filters"
+                            )
+                        }
+                    }
+                }
+            }
+
+
+            // ---------------------------------------------------------
+            // LOADING
+            // ---------------------------------------------------------
+            if (isLoading) {
+
+                item {
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                vertical = 50.dp
+                            ),
+
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+
+                        CircularProgressIndicator(
+                            color =
+                                PatientColors.DoctorAccent
                         )
                     }
                 }
             }
 
-            when {
 
-                isLoading -> {
+            // ---------------------------------------------------------
+            // ERROR
+            // ---------------------------------------------------------
+            else if (errorMessage != null) {
 
-                    LoadingDoctors()
-                }
+                item {
 
-                errorMessage != null -> {
-
-                    ErrorDoctors(
-                        message =
-                            errorMessage
-                                ?: "Unable to load doctors.",
-                        onRetry = {
-
-                            scope.launch {
-
-                                loadDoctors()
-                            }
-                        }
-                    )
-                }
-
-                visibleDoctors
-                    .isEmpty() -> {
-
-                    EmptyDoctors(
-                        hasFilters =
-                            searchQuery
-                                .isNotBlank() ||
-                                    selectedSpecialty != null ||
-                                    showRecommendedOnly,
-
-                        onClear = {
-
-                            searchQuery = ""
-
-                            selectedSpecialty =
-                                null
-
-                            selectedSort =
-                                DoctorSort
-                                    .RECOMMENDED
-
-                            showRecommendedOnly =
-                                false
-                        }
-                    )
-                }
-
-                else -> {
-
-                    LazyColumn(
-
-                        modifier =
-                            Modifier.fillMaxSize(),
-
-                        contentPadding =
-                            PaddingValues(
-                                start =
-                                    16.dp,
-                                end =
-                                    16.dp,
-                                top =
-                                    8.dp,
-                                bottom =
-                                    28.dp
-                            ),
-
-                        verticalArrangement =
-                            Arrangement.spacedBy(
-                                14.dp
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                horizontal = 16.dp
                             )
-
                     ) {
 
-                        item {
+                        ErrorDoctors(
+                            message =
+                                errorMessage
+                                    ?: "Unable to load doctors.",
 
-                            Text(
-                                text =
-                                    if (
-                                        showRecommendedOnly
-                                    ) {
-                                        "Recommended doctors"
-                                    } else {
-                                        "Available doctors"
-                                    },
-                                fontSize =
-                                    17.sp,
-                                fontWeight =
-                                    FontWeight.Bold
-                            )
-                        }
+                            onRetry = {
 
-                        items(
-                            items =
-                                visibleDoctors,
-                            key = {
-                                it.id
-                            }
-                        ) { doctor ->
+                                scope.launch {
 
-                            ModernDoctorCard(
-
-                                doctor =
-                                    doctor,
-
-                                onProfile = {
-                                    onViewProfile(
-                                        doctor
-                                    )
-                                },
-
-                                onBook = {
-                                    onSelectDoctor(
-                                        doctor
-                                    )
+                                    loadDoctors()
                                 }
+                            }
+                        )
+                    }
+                }
+            }
+
+
+            // ---------------------------------------------------------
+            // EMPTY LIST
+            // ---------------------------------------------------------
+            else if (
+                visibleDoctors.isEmpty()
+            ) {
+
+                item {
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                horizontal = 16.dp
                             )
-                        }
+                    ) {
+
+                        EmptyDoctors(
+
+                            hasFilters =
+                                searchQuery.isNotBlank() ||
+                                        selectedSpecialty != null ||
+                                        showRecommendedOnly,
+
+                            onClear = {
+
+                                searchQuery = ""
+
+                                selectedSpecialty = null
+
+                                selectedSort =
+                                    DoctorSort.RECOMMENDED
+
+                                showRecommendedOnly = false
+                            }
+                        )
+                    }
+                }
+            }
+
+
+            // ---------------------------------------------------------
+            // DOCTORS
+            // ---------------------------------------------------------
+            else {
+
+                item {
+
+                    Text(
+                        text =
+                            if (
+                                showRecommendedOnly
+                            ) {
+                                "Recommended doctors"
+                            } else {
+                                "Available doctors"
+                            },
+
+                        modifier = Modifier.padding(
+                            start = 16.dp,
+                            end = 16.dp,
+                            top = 8.dp,
+                            bottom = 10.dp
+                        ),
+
+                        fontSize = 17.sp,
+
+                        fontWeight =
+                            FontWeight.Bold
+                    )
+                }
+
+
+                items(
+                    items = visibleDoctors,
+
+                    key = {
+                        it.id
+                    }
+
+                ) { doctor ->
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                start = 16.dp,
+                                end = 16.dp,
+                                bottom = 14.dp
+                            )
+                    ) {
+
+                        ModernDoctorCard(
+
+                            doctor = doctor,
+
+                            onProfile = {
+
+                                onViewProfile(
+                                    doctor
+                                )
+                            },
+
+                            onBook = {
+
+                                onSelectDoctor(
+                                    doctor
+                                )
+                            }
+                        )
                     }
                 }
             }
@@ -2946,7 +3014,7 @@ private fun ErrorDoctors(
             Modifier
                 .fillMaxSize()
                 .padding(
-                    24.dp
+                    vertical = 24.dp
                 ),
         contentAlignment =
             Alignment.Center
@@ -3172,7 +3240,7 @@ private fun EmptyDoctors(
             Modifier
                 .fillMaxSize()
                 .padding(
-                    24.dp
+                    vertical = 24.dp
                 ),
         contentAlignment =
             Alignment.Center

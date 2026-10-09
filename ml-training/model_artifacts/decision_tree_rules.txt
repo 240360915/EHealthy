@@ -1,0 +1,97 @@
+|--- tooth_pain <= 0.500
+|   |--- skin_rash <= 0.500
+|   |   |--- chest_pain <= 0.500
+|   |   |   |--- anxiety <= 0.500
+|   |   |   |   |--- fever <= 0.500
+|   |   |   |   |   |--- shortness_of_breath <= 0.500
+|   |   |   |   |   |   |--- low_mood <= 0.500
+|   |   |   |   |   |   |   |--- itching <= 0.500
+|   |   |   |   |   |   |   |   |--- class: General Practitioner
+|   |   |   |   |   |   |   |--- itching >  0.500
+|   |   |   |   |   |   |   |   |--- class: Dermatology
+|   |   |   |   |   |   |--- low_mood >  0.500
+|   |   |   |   |   |   |   |--- sleep_problem <= 0.500
+|   |   |   |   |   |   |   |   |--- class: Mental Health
+|   |   |   |   |   |   |   |--- sleep_problem >  0.500
+|   |   |   |   |   |   |   |   |--- class: Mental Health
+|   |   |   |   |   |--- shortness_of_breath >  0.500
+|   |   |   |   |   |   |--- palpitations <= 0.500
+|   |   |   |   |   |   |   |--- class: Cardiology
+|   |   |   |   |   |   |--- palpitations >  0.500
+|   |   |   |   |   |   |   |--- class: Cardiology
+|   |   |   |   |--- fever >  0.500
+|   |   |   |   |   |--- headache <= 0.500
+|   |   |   |   |   |   |--- cough <= 0.500
+|   |   |   |   |   |   |   |--- body_aches <= 0.500
+|   |   |   |   |   |   |   |   |--- class: General Practitioner
+|   |   |   |   |   |   |   |--- body_aches >  0.500
+|   |   |   |   |   |   |   |   |--- class: General Practitioner
+|   |   |   |   |   |   |--- cough >  0.500
+|   |   |   |   |   |   |   |--- class: General Practitioner
+|   |   |   |   |   |--- headache >  0.500
+|   |   |   |   |   |   |--- class: General Practitioner
+|   |   |   |--- anxiety >  0.500
+|   |   |   |   |--- low_mood <= 0.500
+|   |   |   |   |   |--- panic <= 0.500
+|   |   |   |   |   |   |--- sleep_problem <= 0.500
+|   |   |   |   |   |   |   |--- duration_long <= 0.500
+|   |   |   |   |   |   |   |   |--- class: Mental Health
+|   |   |   |   |   |   |   |--- duration_long >  0.500
+|   |   |   |   |   |   |   |   |--- class: Mental Health
+|   |   |   |   |   |   |--- sleep_problem >  0.500
+|   |   |   |   |   |   |   |--- class: Mental Health
+|   |   |   |   |   |--- panic >  0.500
+|   |   |   |   |   |   |--- class: Mental Health
+|   |   |   |   |--- low_mood >  0.500
+|   |   |   |   |   |--- class: Mental Health
+|   |   |--- chest_pain >  0.500
+|   |   |   |--- palpitations <= 0.500
+|   |   |   |   |--- shortness_of_breath <= 0.500
+|   |   |   |   |   |--- dizziness_fainting <= 0.500
+|   |   |   |   |   |   |--- duration_long <= 0.500
+|   |   |   |   |   |   |   |--- class: Cardiology
+|   |   |   |   |   |   |--- duration_long >  0.500
+|   |   |   |   |   |   |   |--- class: Cardiology
+|   |   |   |   |   |--- dizziness_fainting >  0.500
+|   |   |   |   |   |   |--- class: Cardiology
+|   |   |   |   |--- shortness_of_breath >  0.500
+|   |   |   |   |   |--- class: Cardiology
+|   |   |   |--- palpitations >  0.500
+|   |   |   |   |--- class: Cardiology
+|   |--- skin_rash >  0.500
+|   |   |--- itching <= 0.500
+|   |   |   |--- acne <= 0.500
+|   |   |   |   |--- severity_high <= 0.500
+|   |   |   |   |   |--- duration_long <= 0.500
+|   |   |   |   |   |   |--- class: Dermatology
+|   |   |   |   |   |--- duration_long >  0.500
+|   |   |   |   |   |   |--- class: Dermatology
+|   |   |   |   |--- severity_high >  0.500
+|   |   |   |   |   |--- class: Dermatology
+|   |   |   |--- acne >  0.500
+|   |   |   |   |--- class: Dermatology
+|   |   |--- itching >  0.500
+|   |   |   |--- class: Dermatology
+|--- tooth_pain >  0.500
+|   |--- shortness_of_breath <= 0.500
+|   |   |--- low_mood <= 0.500
+|   |   |   |--- fever <= 0.500
+|   |   |   |   |--- skin_rash <= 0.500
+|   |   |   |   |   |--- gum_problem <= 0.500
+|   |   |   |   |   |   |--- severity_high <= 0.500
+|   |   |   |   |   |   |   |--- class: Dentistry
+|   |   |   |   |   |   |--- severity_high >  0.500
+|   |   |   |   |   |   |   |--- jaw_pain <= 0.500
+|   |   |   |   |   |   |   |   |--- class: Dentistry
+|   |   |   |   |   |   |   |--- jaw_pain >  0.500
+|   |   |   |   |   |   |   |   |--- class: Dentistry
+|   |   |   |   |   |--- gum_problem >  0.500
+|   |   |   |   |   |   |--- class: Dentistry
+|   |   |   |   |--- skin_rash >  0.500
+|   |   |   |   |   |--- class: Dentistry
+|   |   |   |--- fever >  0.500
+|   |   |   |   |--- class: General Practitioner
+|   |   |--- low_mood >  0.500
+|   |   |   |--- class: Mental Health
+|   |--- shortness_of_breath >  0.500
+|   |   |--- class: Cardiology

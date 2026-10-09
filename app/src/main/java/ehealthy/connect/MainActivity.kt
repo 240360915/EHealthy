@@ -70,6 +70,8 @@ import ehealthy.connect.ui.patient.PatientLogin
 import ehealthy.connect.ui.patient.PatientRegister
 import ehealthy.connect.ui.patientDashboard.Appointment
 import android.content.Intent
+import ehealthy.connect.data.BookingRepository
+import ehealthy.connect.data.ProfileRepository
 import ehealthy.connect.ui.patientDashboard.BookAppointmentScreen
 import ehealthy.connect.ui.patientDashboard.BookingConfirmation
 import ehealthy.connect.ui.patientDashboard.BookingConfirmedScreen
@@ -80,6 +82,7 @@ import ehealthy.connect.ui.patientDashboard.DoctorReviewItem
 import ehealthy.connect.ui.patientDashboard.EditProfileScreen
 import ehealthy.connect.ui.patientDashboard.FindDoctors.FindDoctorsScreen
 import ehealthy.connect.ui.patientDashboard.HealthTipsScreen
+import ehealthy.connect.ui.patientDashboard.HealthProfileScreen
 import ehealthy.connect.ui.patientDashboard.MedicalRecord
 import ehealthy.connect.ui.patientDashboard.MedicalRecordDisplay
 import ehealthy.connect.ui.patientDashboard.MedicalRecordsScreen
@@ -116,13 +119,14 @@ import ehealthy.connect.ui.patientDashboard.myVisits.PatientVisitsScreen
 import ehealthy.connect.ui.patientDashboard.myVisits.RateVisitScreen
 import ehealthy.connect.ui.patientDashboard.myVisits.RescheduleAppointmentScreen
 import ehealthy.connect.ui.doctorDashboard.RefillRequest
-import ehealthy.connect.data.ProfileRepository
-import ehealthy.connect.data.BookingRepository
-
-
+import ehealthy.connect.ui.patientDashboard.PatientNotificationsScreen
+import ehealthy.connect.ui.patientDashboard.PatientInvoicesScreen
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.JsonPrimitive
 private object BookingConfirmationHolder {
     var confirmation: BookingConfirmation? = null
 }
+
 @Serializable
 private data class PatientLookup(
     val id: String? = null,
@@ -374,6 +378,16 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 }
             )
         }
+        composable("healthProfile") {
+
+            HealthProfileScreen(
+                onBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+
         composable("settings") {
             val scope = rememberCoroutineScope()
 
@@ -401,6 +415,14 @@ fun AppNavGraph(pendingRoute: String? = null) {
 
                 onNavigateEditProfile = {
                     navController.navigate("editProfile")
+                },
+
+                onNavigateHealthProfile = {
+                    navController.navigate("healthProfile")
+                },
+
+                onNavigateInvoices = {
+                    navController.navigate("patientInvoices")
                 },
 
                 onNavigateContactUs = {
@@ -1619,57 +1641,35 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 /*
                  * Approve patient refill request
                  */
-                onApproveRefill = {
-                        request ->
-
-                    val docId =
-                        doctorId
-                            ?: return@DoctorPrescriptions
-
+                onApproveRefill = { request ->
 
                     scope.launch {
 
                         try {
 
-                            saveError =
-                                null
-
+                            saveError = null
 
                             SupabaseClientProvider.client
                                 .postgrest
-                                .from("prescriptions")
-                                .update({
-
-                                    set(
-                                        "refill_status",
-                                        "approved"
-                                    )
-
-                                }) {
-
-                                    filter {
-
-                                        eq(
-                                            "id",
-                                            request.id
+                                .rpc(
+                                    "doctor_update_refill_status",
+                                    buildJsonObject {
+                                        put(
+                                            "p_prescription_id",
+                                            JsonPrimitive(request.id)
                                         )
 
-                                        eq(
-                                            "doctor_id",
-                                            docId
+                                        put(
+                                            "p_status",
+                                            JsonPrimitive("approved")
                                         )
                                     }
-                                }
-
+                                )
 
                             refillRequests =
-                                refillRequests
-                                    .filterNot {
-
-                                        it.id ==
-                                                request.id
-                                    }
-
+                                refillRequests.filterNot {
+                                    it.id == request.id
+                                }
 
                             Toast.makeText(
                                 context,
@@ -1677,10 +1677,13 @@ fun AppNavGraph(pendingRoute: String? = null) {
                                 Toast.LENGTH_SHORT
                             ).show()
 
+                        } catch (e: Exception) {
 
-                        } catch (
-                            e: Exception
-                        ) {
+                            Log.e(
+                                "RefillApproval",
+                                "Could not approve refill",
+                                e
+                            )
 
                             saveError =
                                 e.message
@@ -1693,57 +1696,35 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 /*
                  * Decline patient refill request
                  */
-                onDeclineRefill = {
-                        request ->
-
-                    val docId =
-                        doctorId
-                            ?: return@DoctorPrescriptions
-
+                onDeclineRefill = { request ->
 
                     scope.launch {
 
                         try {
 
-                            saveError =
-                                null
-
+                            saveError = null
 
                             SupabaseClientProvider.client
                                 .postgrest
-                                .from("prescriptions")
-                                .update({
-
-                                    set(
-                                        "refill_status",
-                                        "declined"
-                                    )
-
-                                }) {
-
-                                    filter {
-
-                                        eq(
-                                            "id",
-                                            request.id
+                                .rpc(
+                                    "doctor_update_refill_status",
+                                    buildJsonObject {
+                                        put(
+                                            "p_prescription_id",
+                                            JsonPrimitive(request.id)
                                         )
 
-                                        eq(
-                                            "doctor_id",
-                                            docId
+                                        put(
+                                            "p_status",
+                                            JsonPrimitive("declined")
                                         )
                                     }
-                                }
-
+                                )
 
                             refillRequests =
-                                refillRequests
-                                    .filterNot {
-
-                                        it.id ==
-                                                request.id
-                                    }
-
+                                refillRequests.filterNot {
+                                    it.id == request.id
+                                }
 
                             Toast.makeText(
                                 context,
@@ -1751,10 +1732,13 @@ fun AppNavGraph(pendingRoute: String? = null) {
                                 Toast.LENGTH_SHORT
                             ).show()
 
+                        } catch (e: Exception) {
 
-                        } catch (
-                            e: Exception
-                        ) {
+                            Log.e(
+                                "RefillDecline",
+                                "Could not decline refill",
+                                e
+                            )
 
                             saveError =
                                 e.message
@@ -1851,6 +1835,61 @@ fun AppNavGraph(pendingRoute: String? = null) {
                             Log.e("DoctorSettingsUpdate", "Failed to save setting")
                         }
                     }
+                }
+            )
+        }
+        composable("patientNotifications") {
+
+            PatientNotificationsScreen(
+                onBack = {
+                    navController.popBackStack()
+                },
+                onOpenInvoice = { invoiceId ->
+
+                    navController.navigate(
+                        "patientInvoices?invoiceId=${
+                            Uri.encode(
+                                invoiceId
+                            )
+                        }"
+                    )
+                }
+            )
+        }
+
+
+        composable(
+            route =
+                "patientInvoices?invoiceId={invoiceId}",
+            arguments =
+                listOf(
+                    navArgument(
+                        "invoiceId"
+                    ) {
+                        type =
+                            NavType.StringType
+
+                        defaultValue =
+                            ""
+                    }
+                )
+        ) { backStackEntry ->
+
+            val initialInvoiceId =
+                backStackEntry
+                    .arguments
+                    ?.getString(
+                        "invoiceId"
+                    )
+                    ?.takeIf {
+                        it.isNotBlank()
+                    }
+
+            PatientInvoicesScreen(
+                initialInvoiceId =
+                    initialInvoiceId,
+                onBack = {
+                    navController.popBackStack()
                 }
             )
         }
@@ -1960,6 +1999,9 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 isUploadingPhoto = isUploadingPhoto,
                 onNavigateSettings = {
                     navController.navigate("settings")
+                },
+                onNavigateNotifications = {
+                    navController.navigate("patientNotifications")
                 },
 
                 onNavigateFindDoctors = {
@@ -2621,6 +2663,12 @@ fun AppNavGraph(pendingRoute: String? = null) {
 
                 onBack = {
                     navController.popBackStack()
+                },
+
+                onOpenInvoices = {
+                    navController.navigate(
+                        "patientInvoices"
+                    )
                 },
 
                 onReschedule = {

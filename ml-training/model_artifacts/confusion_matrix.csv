@@ -1,0 +1,6 @@
+,General Practitioner,Cardiology,Dermatology,Mental Health,Dentistry
+General Practitioner,40,1,1,1,1
+Cardiology,3,40,1,0,0
+Dermatology,2,0,42,0,0
+Mental Health,3,2,0,39,0
+Dentistry,8,2,0,1,33

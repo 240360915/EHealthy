@@ -49,6 +49,24 @@ import kotlinx.serialization.Serializable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Verified
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
+
+@Serializable
+data class PrescriptionItem(
+    val medication: String = "",
+    val dosage: String = "",
+    val frequency: String = "",
+    val duration: String = "",
+    val instructions: String? = null
+)
 
 @Serializable
 data class Prescription(
@@ -58,8 +76,21 @@ data class Prescription(
     val created_at: String? = null,
     val doctor_id: String? = null,
     val refill_status: String? = null,
-    val refill_requested_at: String? = null
+    val refill_requested_at: String? = null,
+
+    val prescription_reference: String? = null,
+    val patient_name: String? = null,
+    val doctor_name: String? = null,
+    val doctor_discipline: String? = null,
+    val doctor_practice_number: String? = null,
+    val doctor_hpcsa_number: String? = null,
+    val prescription_items: List<PrescriptionItem>? = null,
+    val general_instructions: String? = null,
+    val doctor_signature_data: String? = null,
+    val doctor_stamp_data: String? = null,
+    val is_official: Boolean = false
 )
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PatientPrescriptionsScreen(
@@ -70,6 +101,93 @@ fun PatientPrescriptionsScreen(
     doctorPhotos: Map<String, String> = emptyMap(),
     onRequestRefill: (Prescription) -> Unit = {}
 ) {
+
+    val context =
+        LocalContext.current
+
+    var pendingPdfPrescription by remember {
+        mutableStateOf<Prescription?>(
+            null
+        )
+    }
+
+    var pendingPdfDoctorName by remember {
+        mutableStateOf<String?>(
+            null
+        )
+    }
+
+    val createPdfLauncher =
+        rememberLauncherForActivityResult(
+            contract =
+                ActivityResultContracts.CreateDocument(
+                    "application/pdf"
+                )
+        ) { uri ->
+
+            val prescription =
+                pendingPdfPrescription
+
+            val fallbackDoctorName =
+                pendingPdfDoctorName
+
+            if (
+                uri != null &&
+                prescription != null
+            ) {
+
+                runCatching {
+
+                    context
+                        .contentResolver
+                        .openOutputStream(
+                            uri
+                        )
+                        ?.use { output ->
+
+                            PrescriptionPdfExporter
+                                .writePrescriptionPdf(
+                                    prescription =
+                                        prescription,
+                                    fallbackDoctorName =
+                                        fallbackDoctorName,
+                                    output =
+                                        output
+                                )
+                        }
+                        ?: error(
+                            "Could not open the selected file."
+                        )
+
+                }.onSuccess {
+
+                    Toast
+                        .makeText(
+                            context,
+                            "Prescription PDF saved.",
+                            Toast.LENGTH_LONG
+                        )
+                        .show()
+
+                }.onFailure {
+
+                    Toast
+                        .makeText(
+                            context,
+                            it.message
+                                ?: "Could not save prescription PDF.",
+                            Toast.LENGTH_LONG
+                        )
+                        .show()
+                }
+            }
+
+            pendingPdfPrescription =
+                null
+
+            pendingPdfDoctorName =
+                null
+        }
 
     val sortedPrescriptions =
         remember(prescriptions) {
@@ -586,6 +704,58 @@ fun PatientPrescriptionsScreen(
                                 onRequestRefill(
                                     prescription
                                 )
+                            },
+
+                            onDownloadPdf = {
+
+                                val hasOfficialPdf =
+                                    prescription.is_official &&
+                                            !prescription.doctor_signature_data
+                                                .isNullOrBlank() &&
+                                            !prescription.doctor_stamp_data
+                                                .isNullOrBlank()
+
+                                if (
+                                    !hasOfficialPdf
+                                ) {
+
+                                    Toast
+                                        .makeText(
+                                            context,
+                                            "This older prescription does not have the official signed PDF details.",
+                                            Toast.LENGTH_LONG
+                                        )
+                                        .show()
+
+                                } else {
+
+                                    pendingPdfPrescription =
+                                        prescription
+
+                                    pendingPdfDoctorName =
+                                        prescription.doctor_name
+                                            ?: prescription.doctor_id
+                                                ?.let {
+                                                    doctorNames[
+                                                        it
+                                                    ]
+                                                }
+
+                                    val reference =
+                                        prescription
+                                            .prescription_reference
+                                            ?.takeIf {
+                                                it.isNotBlank()
+                                            }
+                                            ?: prescription.id
+                                                .take(
+                                                    8
+                                                )
+
+                                    createPdfLauncher.launch(
+                                        "EHealthy_Prescription_$reference.pdf"
+                                    )
+                                }
                             }
                         )
                     }
@@ -611,7 +781,8 @@ private fun PrescriptionCard(
     prescription: Prescription,
     doctorName: String?,
     doctorPhoto: String?,
-    onRequestRefill: () -> Unit
+    onRequestRefill: () -> Unit,
+    onDownloadPdf: () -> Unit
 ) {
 
     val dateLabel =
@@ -756,10 +927,24 @@ private fun PrescriptionCard(
 
                         Text(
                             text =
-                                prescription.medication
-                                    ?.takeIf {
-                                        it.isNotBlank()
+                                prescription.prescription_items
+                                    ?.mapNotNull {
+                                        it.medication
+                                            .takeIf {
+                                                    name ->
+                                                name.isNotBlank()
+                                            }
                                     }
+                                    ?.takeIf {
+                                        it.isNotEmpty()
+                                    }
+                                    ?.joinToString(
+                                        ", "
+                                    )
+                                    ?: prescription.medication
+                                        ?.takeIf {
+                                            it.isNotBlank()
+                                        }
                                     ?: "Medication not specified",
 
                             color =
@@ -903,6 +1088,193 @@ private fun PrescriptionCard(
                 Spacer(
                     modifier =
                         Modifier.height(14.dp)
+                )
+
+
+                /*
+                 * Official signed prescription PDF
+                 */
+                val officialPdfReady =
+                    prescription.is_official &&
+                            !prescription.doctor_signature_data
+                                .isNullOrBlank() &&
+                            !prescription.doctor_stamp_data
+                                .isNullOrBlank()
+
+
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(
+                                RoundedCornerShape(
+                                    15.dp
+                                )
+                            )
+                            .background(
+                                if (
+                                    officialPdfReady
+                                ) {
+                                    PatientColors.SuccessCard
+                                } else {
+                                    PatientColors.NeutralCard
+                                }
+                            )
+                            .padding(
+                                horizontal =
+                                    13.dp,
+                                vertical =
+                                    12.dp
+                            ),
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+
+                    Icon(
+                        imageVector =
+                            if (
+                                officialPdfReady
+                            ) {
+                                Icons.Outlined.Verified
+                            } else {
+                                Icons.Outlined.Medication
+                            },
+                        contentDescription =
+                            null,
+                        tint =
+                            if (
+                                officialPdfReady
+                            ) {
+                                PatientColors.SuccessAccent
+                            } else {
+                                PatientColors.TextSecondary
+                            },
+                        modifier =
+                            Modifier.size(
+                                20.dp
+                            )
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(
+                                9.dp
+                            )
+                    )
+
+
+                    Column(
+                        modifier =
+                            Modifier.weight(
+                                1f
+                            )
+                    ) {
+
+                        Text(
+                            text =
+                                if (
+                                    officialPdfReady
+                                ) {
+                                    "Official prescription"
+                                } else {
+                                    "Legacy prescription"
+                                },
+                            color =
+                                PatientColors.TextPrimary,
+                            fontWeight =
+                                FontWeight.Bold,
+                            fontSize =
+                                11.5.sp
+                        )
+
+
+                        Text(
+                            text =
+                                if (
+                                    officialPdfReady
+                                ) {
+                                    "Includes EHealthy branding, doctor signature and stamp."
+                                } else {
+                                    "This prescription was created before signed PDF support."
+                                },
+                            color =
+                                PatientColors.TextSecondary,
+                            fontSize =
+                                9.5.sp,
+                            lineHeight =
+                                13.sp
+                        )
+                    }
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            8.dp
+                        )
+                )
+
+
+                TextButton(
+                    onClick =
+                        onDownloadPdf,
+                    enabled =
+                        officialPdfReady,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(
+                                RoundedCornerShape(
+                                    14.dp
+                                )
+                            )
+                            .background(
+                                PatientColors.PurpleSoft
+                            )
+                ) {
+
+                    Icon(
+                        imageVector =
+                            Icons.Outlined.Download,
+                        contentDescription =
+                            null,
+                        tint =
+                            PatientColors.Purple,
+                        modifier =
+                            Modifier.size(
+                                17.dp
+                            )
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(
+                                7.dp
+                            )
+                    )
+
+
+                    Text(
+                        text =
+                            "Download signed PDF",
+                        color =
+                            PatientColors.Purple,
+                        fontWeight =
+                            FontWeight.Bold,
+                        fontSize =
+                            12.sp
+                    )
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            12.dp
+                        )
                 )
 
 

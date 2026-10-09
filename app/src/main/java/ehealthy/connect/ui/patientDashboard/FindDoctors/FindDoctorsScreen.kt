@@ -77,6 +77,9 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.graphics.Color
 import ehealthy.connect.ui.patientDashboard.PatientColors
 import ehealthy.connect.ui.patientDashboard.patientPressAnimation
+import ehealthy.connect.data.patient.PatientRepository
+import ehealthy.connect.ml.DoctorRecommendation
+import ehealthy.connect.ml.DoctorRecommendationEngine
 import androidx.compose.material3.Card
 import androidx.compose.material.icons.outlined.HealthAndSafety
 import androidx.compose.material3.FilterChipDefaults
@@ -228,6 +231,67 @@ fun FindDoctorsScreen(
         mutableStateOf(false)
     }
 
+    var recommendation by remember {
+        mutableStateOf<DoctorRecommendation?>(
+            null
+        )
+    }
+
+    var recommendationLoading by remember {
+        mutableStateOf(true)
+    }
+
+    var questionnaireHasSymptoms by remember {
+        mutableStateOf(false)
+    }
+
+    var showRecommendedOnly by remember {
+        mutableStateOf(false)
+    }
+
+    var preferredLanguage by remember {
+        mutableStateOf<String?>(
+            null
+        )
+    }
+
+
+    suspend fun loadRecommendation() {
+
+        recommendationLoading =
+            true
+
+        PatientRepository
+            .getMyHealthProfile()
+            .onSuccess { profile ->
+
+                questionnaireHasSymptoms =
+                    !profile.current_symptoms
+                        .isNullOrBlank()
+
+                preferredLanguage =
+                    profile.preferred_language
+
+                recommendation =
+                    DoctorRecommendationEngine
+                        .recommend(
+                            profile
+                        )
+            }
+            .onFailure {
+
+                questionnaireHasSymptoms =
+                    false
+
+                recommendation =
+                    null
+            }
+
+        recommendationLoading =
+            false
+    }
+
+
     suspend fun loadDoctors(
         refreshing: Boolean = false
     ) {
@@ -248,7 +312,12 @@ fun FindDoctorsScreen(
 
                 doctors =
                     result.filter {
-                        it.is_deactivated != true
+                        it.is_deactivated != true &&
+                                it.verification_status
+                                    .equals(
+                                        "approved",
+                                        ignoreCase = true
+                                    )
                     }
             }
             .onFailure { error ->
@@ -266,6 +335,8 @@ fun FindDoctorsScreen(
     LaunchedEffect(Unit) {
 
         loadDoctors()
+
+        loadRecommendation()
     }
 
     val specialties =
@@ -279,12 +350,40 @@ fun FindDoctorsScreen(
                 .sorted()
         }
 
+    val recommendedMatchCount =
+        remember(
+            doctors,
+            recommendation
+        ) {
+
+            recommendation
+                ?.let { result ->
+
+                    doctors.count {
+                            doctor ->
+
+                        DoctorRecommendationEngine
+                            .specialtyMatches(
+                                doctorSpecialty =
+                                    doctor.specialty,
+                                recommendedSpecialty =
+                                    result.specialty
+                            )
+                    }
+                }
+                ?: 0
+        }
+
+
     val visibleDoctors =
         remember(
             doctors,
             searchQuery,
             selectedSpecialty,
-            selectedSort
+            selectedSort,
+            recommendation,
+            showRecommendedOnly,
+            preferredLanguage
         ) {
 
             val query =
@@ -301,20 +400,28 @@ fun FindDoctorsScreen(
 
                                 doctor.fullName
                                     .lowercase()
-                                    .contains(query) ||
+                                    .contains(
+                                        query
+                                    ) ||
 
                                 doctor.specialty
                                     .lowercase()
-                                    .contains(query) ||
+                                    .contains(
+                                        query
+                                    ) ||
 
                                 doctor.location
                                     .lowercase()
-                                    .contains(query) ||
+                                    .contains(
+                                        query
+                                    ) ||
 
                                 doctor.language
                                     .orEmpty()
                                     .lowercase()
-                                    .contains(query)
+                                    .contains(
+                                        query
+                                    )
 
                     val matchesSpecialty =
 
@@ -323,26 +430,78 @@ fun FindDoctorsScreen(
                                 doctor.specialty ==
                                 selectedSpecialty
 
+
+                    val matchesRecommendation =
+
+                        !showRecommendedOnly ||
+
+                                recommendation
+                                    ?.let { result ->
+
+                                        DoctorRecommendationEngine
+                                            .specialtyMatches(
+                                                doctorSpecialty =
+                                                    doctor.specialty,
+                                                recommendedSpecialty =
+                                                    result.specialty
+                                            )
+                                    }
+                                ?: true
+
+
                     matchesSearch &&
-                            matchesSpecialty
+                            matchesSpecialty &&
+                            matchesRecommendation
                 }
 
-            when (selectedSort) {
+
+            when (
+                selectedSort
+            ) {
 
                 DoctorSort.RECOMMENDED ->
 
                     filtered.sortedWith(
-                        compareByDescending<DoctorListing> {
-                            it.years_of_experience ?: 0
+
+                        compareByDescending<DoctorListing> { doctor ->
+
+                            recommendation
+                                ?.let { result ->
+
+                                    DoctorRecommendationEngine
+                                        .specialtyMatches(
+                                            doctorSpecialty =
+                                                doctor.specialty,
+                                            recommendedSpecialty =
+                                                result.specialty
+                                        )
+                                }
+                                ?: false
                         }
+                            .thenByDescending { doctor ->
+
+                                DoctorRecommendationEngine
+                                    .languageMatches(
+                                        doctorLanguages =
+                                            doctor.language,
+                                        preferredLanguage =
+                                            preferredLanguage
+                                    )
+                            }
+                            .thenByDescending {
+                                it.years_of_experience
+                                    ?: 0
+                            }
                             .thenBy {
                                 it.fullName
                             }
                     )
 
+
                 DoctorSort.PRICE_LOW ->
 
                     filtered.sortedWith(
+
                         compareBy<DoctorListing> {
                             it.hourly_rate
                                 ?: Double.MAX_VALUE
@@ -352,16 +511,20 @@ fun FindDoctorsScreen(
                             }
                     )
 
+
                 DoctorSort.PRICE_HIGH ->
 
                     filtered.sortedWith(
+
                         compareByDescending<DoctorListing> {
-                            it.hourly_rate ?: 0.0
+                            it.hourly_rate
+                                ?: 0.0
                         }
                             .thenBy {
                                 it.fullName
                             }
                     )
+
 
                 DoctorSort.NAME ->
 
@@ -490,6 +653,38 @@ fun FindDoctorsScreen(
             DoctorDiscoveryHeader(
                 doctorCount =
                     visibleDoctors.size
+            )
+
+            DoctorRecommendationCard(
+                recommendation =
+                    recommendation,
+                isLoading =
+                    recommendationLoading,
+                questionnaireHasSymptoms =
+                    questionnaireHasSymptoms,
+                matchingDoctorCount =
+                    recommendedMatchCount,
+                showingRecommendedOnly =
+                    showRecommendedOnly,
+                onShowRecommended = {
+
+                    selectedSpecialty =
+                        null
+
+                    searchQuery =
+                        ""
+
+                    selectedSort =
+                        DoctorSort.RECOMMENDED
+
+                    showRecommendedOnly =
+                        true
+                },
+                onShowAll = {
+
+                    showRecommendedOnly =
+                        false
+                }
             )
 
             Column(
@@ -669,7 +864,8 @@ fun FindDoctorsScreen(
             AnimatedVisibility(
                 visible =
                     selectedSpecialty != null ||
-                            searchQuery.isNotBlank()
+                            searchQuery.isNotBlank() ||
+                            showRecommendedOnly
             ) {
 
                 Row(
@@ -724,6 +920,9 @@ fun FindDoctorsScreen(
                             selectedSort =
                                 DoctorSort
                                     .RECOMMENDED
+
+                            showRecommendedOnly =
+                                false
                         }
                     ) {
 
@@ -764,7 +963,8 @@ fun FindDoctorsScreen(
                         hasFilters =
                             searchQuery
                                 .isNotBlank() ||
-                                    selectedSpecialty != null,
+                                    selectedSpecialty != null ||
+                                    showRecommendedOnly,
 
                         onClear = {
 
@@ -776,6 +976,9 @@ fun FindDoctorsScreen(
                             selectedSort =
                                 DoctorSort
                                     .RECOMMENDED
+
+                            showRecommendedOnly =
+                                false
                         }
                     )
                 }
@@ -810,7 +1013,13 @@ fun FindDoctorsScreen(
 
                             Text(
                                 text =
-                                    "Available doctors",
+                                    if (
+                                        showRecommendedOnly
+                                    ) {
+                                        "Recommended doctors"
+                                    } else {
+                                        "Available doctors"
+                                    },
                                 fontSize =
                                     17.sp,
                                 fontWeight =
@@ -1087,6 +1296,462 @@ private fun DoctorDiscoveryHeader(
         }
     }
 }
+
+@Composable
+private fun DoctorRecommendationCard(
+    recommendation: DoctorRecommendation?,
+    isLoading: Boolean,
+    questionnaireHasSymptoms: Boolean,
+    matchingDoctorCount: Int,
+    showingRecommendedOnly: Boolean,
+    onShowRecommended: () -> Unit,
+    onShowAll: () -> Unit
+) {
+
+    Card(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal =
+                        16.dp,
+                    vertical =
+                        10.dp
+                ),
+        shape =
+            RoundedCornerShape(
+                22.dp
+            ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    PatientColors
+                        .DoctorCard
+            ),
+        border =
+            BorderStroke(
+                1.dp,
+                PatientColors
+                    .DoctorAccent
+                    .copy(
+                        alpha =
+                            0.14f
+                    )
+            )
+    ) {
+
+        Column(
+            modifier =
+                Modifier.padding(
+                    17.dp
+                )
+        ) {
+
+            Row(
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+
+                Box(
+                    modifier =
+                        Modifier
+                            .size(
+                                42.dp
+                            )
+                            .clip(
+                                RoundedCornerShape(
+                                    13.dp
+                                )
+                            )
+                            .background(
+                                PatientColors
+                                    .DoctorAccent
+                                    .copy(
+                                        alpha =
+                                            0.12f
+                                    )
+                            ),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+
+                    Icon(
+                        imageVector =
+                            Icons.Outlined.HealthAndSafety,
+                        contentDescription =
+                            null,
+                        tint =
+                            PatientColors
+                                .DoctorAccent,
+                        modifier =
+                            Modifier.size(
+                                22.dp
+                            )
+                    )
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.width(
+                            11.dp
+                        )
+                )
+
+
+                Column(
+                    modifier =
+                        Modifier.weight(
+                            1f
+                        )
+                ) {
+
+                    Text(
+                        text =
+                            "Smart doctor recommendation",
+                        color =
+                            PatientColors
+                                .TextPrimary,
+                        fontWeight =
+                            FontWeight.ExtraBold,
+                        fontSize =
+                            14.sp
+                    )
+
+                    Text(
+                        text =
+                            "Decision Tree classification from your health questionnaire",
+                        color =
+                            PatientColors
+                                .TextSecondary,
+                        fontSize =
+                            10.5.sp
+                    )
+                }
+            }
+
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        12.dp
+                    )
+            )
+
+
+            when {
+
+                isLoading -> {
+
+                    Row(
+                        verticalAlignment =
+                            Alignment.CenterVertically
+                    ) {
+
+                        CircularProgressIndicator(
+                            modifier =
+                                Modifier.size(
+                                    18.dp
+                                ),
+                            strokeWidth =
+                                2.dp,
+                            color =
+                                PatientColors
+                                    .DoctorAccent
+                        )
+
+                        Spacer(
+                            modifier =
+                                Modifier.width(
+                                    8.dp
+                                )
+                        )
+
+                        Text(
+                            text =
+                                "Analysing your questionnaire...",
+                            color =
+                                PatientColors
+                                    .TextSecondary,
+                            fontSize =
+                                11.5.sp
+                        )
+                    }
+                }
+
+
+                !questionnaireHasSymptoms -> {
+
+                    Text(
+                        text =
+                            "Add your current symptoms in Settings → Health profile to receive a personalised specialty recommendation.",
+                        color =
+                            PatientColors
+                                .TextSecondary,
+                        fontSize =
+                            11.5.sp,
+                        lineHeight =
+                            16.sp
+                    )
+                }
+
+
+                recommendation != null -> {
+
+                    Text(
+                        text =
+                            recommendation.specialty,
+                        color =
+                            PatientColors
+                                .DoctorAccent,
+                        fontSize =
+                            19.sp,
+                        fontWeight =
+                            FontWeight.ExtraBold
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                4.dp
+                            )
+                    )
+
+
+                    Text(
+                        text =
+                            "Model confidence: ${
+                                (
+                                        recommendation.confidence *
+                                                100.0
+                                        )
+                                    .toInt()
+                            }%",
+                        color =
+                            PatientColors
+                                .TextSecondary,
+                        fontSize =
+                            10.5.sp,
+                        fontWeight =
+                            FontWeight.SemiBold
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                8.dp
+                            )
+                    )
+
+
+                    Text(
+                        text =
+                            recommendation.reason,
+                        color =
+                            PatientColors
+                                .TextPrimary,
+                        fontSize =
+                            11.5.sp,
+                        lineHeight =
+                            16.sp
+                    )
+
+
+                    if (
+                        recommendation
+                            .matchedSignals
+                            .isNotEmpty()
+                    ) {
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(
+                                    7.dp
+                                )
+                        )
+
+
+                        Text(
+                            text =
+                                "Questionnaire signals: ${
+                                    recommendation
+                                        .matchedSignals
+                                        .joinToString(
+                                            ", "
+                                        )
+                                }",
+                            color =
+                                PatientColors
+                                    .TextSecondary,
+                            fontSize =
+                                10.sp,
+                            lineHeight =
+                                14.sp
+                        )
+                    }
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                11.dp
+                            )
+                    )
+
+
+                    if (
+                        matchingDoctorCount >
+                        0
+                    ) {
+
+                        if (
+                            showingRecommendedOnly
+                        ) {
+
+                            OutlinedButton(
+                                onClick =
+                                    onShowAll,
+                                modifier =
+                                    Modifier.fillMaxWidth(),
+                                shape =
+                                    RoundedCornerShape(
+                                        14.dp
+                                    )
+                            ) {
+
+                                Text(
+                                    "Show all approved doctors"
+                                )
+                            }
+
+                        } else {
+
+                            Button(
+                                onClick =
+                                    onShowRecommended,
+                                modifier =
+                                    Modifier.fillMaxWidth(),
+                                shape =
+                                    RoundedCornerShape(
+                                        14.dp
+                                    ),
+                                colors =
+                                    ButtonDefaults
+                                        .buttonColors(
+                                            containerColor =
+                                                PatientColors
+                                                    .DoctorAccent
+                                        )
+                            ) {
+
+                                Text(
+                                    text =
+                                        "Show $matchingDoctorCount recommended doctor${
+                                            if (
+                                                matchingDoctorCount ==
+                                                1
+                                            ) {
+                                                ""
+                                            } else {
+                                                "s"
+                                            }
+                                        }",
+                                    fontWeight =
+                                        FontWeight.Bold
+                                )
+                            }
+                        }
+
+                    } else {
+
+                        Text(
+                            text =
+                                "No exact approved specialist match is currently listed. You can still browse all approved doctors below.",
+                            color =
+                                PatientColors
+                                    .TextSecondary,
+                            fontSize =
+                                10.5.sp,
+                            lineHeight =
+                                15.sp
+                        )
+                    }
+                }
+            }
+
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        10.dp
+                    )
+            )
+
+
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(
+                            RoundedCornerShape(
+                                12.dp
+                            )
+                        )
+                        .background(
+                            Color.White
+                                .copy(
+                                    alpha =
+                                        0.58f
+                                )
+                        )
+                        .padding(
+                            10.dp
+                        ),
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+
+                Icon(
+                    imageVector =
+                        Icons.Outlined.Verified,
+                    contentDescription =
+                        null,
+                    tint =
+                        PatientColors
+                            .DoctorAccent,
+                    modifier =
+                        Modifier.size(
+                            15.dp
+                        )
+                )
+
+
+                Spacer(
+                    modifier =
+                        Modifier.width(
+                            7.dp
+                        )
+                )
+
+
+                Text(
+                    text =
+                        "This feature routes you to a healthcare specialty. It is not a medical diagnosis.",
+                    color =
+                        PatientColors
+                            .TextSecondary,
+                    fontSize =
+                        9.8.sp,
+                    lineHeight =
+                        13.sp
+                )
+            }
+        }
+    }
+}
+
 
 @Composable
 private fun SpecialtyFilters(

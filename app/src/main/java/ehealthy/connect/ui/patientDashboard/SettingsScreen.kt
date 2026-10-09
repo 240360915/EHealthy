@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Logout
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Sms
 import androidx.compose.material.icons.outlined.Visibility
@@ -80,6 +81,8 @@ fun SettingsScreen(
     isDarkMode: Boolean,
     onToggleDarkMode: (Boolean) -> Unit,
     onNavigateEditProfile: () -> Unit,
+    onNavigateHealthProfile: () -> Unit,
+    onNavigateInvoices: () -> Unit,
     onViewPrivacyPolicy: () -> Unit,
     onNavigateContactUs: () -> Unit,
     onLogout: () -> Unit,
@@ -403,6 +406,54 @@ fun SettingsScreen(
                         PatientColors.DoctorCard,
                     onClick =
                         onNavigateEditProfile
+                )
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            8.dp
+                        )
+                )
+
+
+                SettingsLinkRow(
+                    icon =
+                        Icons.Outlined.AccountCircle,
+                    label =
+                        "Health profile",
+                    description =
+                        "Medical history, symptoms and emergency information",
+                    accent =
+                        PatientColors.AppointmentAccent,
+                    background =
+                        PatientColors.AppointmentCard,
+                    onClick =
+                        onNavigateHealthProfile
+                )
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            8.dp
+                        )
+                )
+
+
+                SettingsLinkRow(
+                    icon =
+                        Icons.Outlined.Payments,
+                    label =
+                        "My invoices",
+                    description =
+                        "Physical visit invoices, maps and directions",
+                    accent =
+                        PatientColors.Purple,
+                    background =
+                        PatientColors.PurpleSoft,
+                    onClick =
+                        onNavigateInvoices
                 )
             }
 

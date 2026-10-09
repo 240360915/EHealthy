@@ -101,11 +101,7 @@ import ehealthy.connect.ui.patientDashboard.SettingsScreen
 import ehealthy.connect.ui.theme.EHealthyTheme
 import ehealthy.connect.util.SupabaseClientProvider
 import ehealthy.connect.util.ThemeManager
-<<<<<<< HEAD
 import ehealthy.connect.util.showBoldToast
-=======
-
->>>>>>> de49c9b (Complete EHealthy patient features and doctor recommendation model)
 import io.github.jan.supabase.auth.OtpType
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
@@ -123,17 +119,10 @@ import ehealthy.connect.ui.patientDashboard.myVisits.PatientVisitsScreen
 import ehealthy.connect.ui.patientDashboard.myVisits.RateVisitScreen
 import ehealthy.connect.ui.patientDashboard.myVisits.RescheduleAppointmentScreen
 import ehealthy.connect.ui.doctorDashboard.RefillRequest
-<<<<<<< HEAD
-import ehealthy.connect.data.ProfileRepository
-import ehealthy.connect.data.BookingRepository
-
-
-=======
 import ehealthy.connect.ui.patientDashboard.PatientNotificationsScreen
 import ehealthy.connect.ui.patientDashboard.PatientInvoicesScreen
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.JsonPrimitive
->>>>>>> de49c9b (Complete EHealthy patient features and doctor recommendation model)
 private object BookingConfirmationHolder {
     var confirmation: BookingConfirmation? = null
 }

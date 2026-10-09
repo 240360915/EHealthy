@@ -2,6 +2,7 @@ package ehealthy.connect.ui.doctor
 
 import ehealthy.connect.ui.doctorDashboard.DoctorRegistrationFiles
 import ehealthy.connect.ui.doctorDashboard.PrescriptionPatient
+import ehealthy.connect.ui.doctorDashboard.PrescribedMedicine
 import ehealthy.connect.ui.doctorDashboard.TimeSlotRow
 import ehealthy.connect.ui.doctorDashboard.uploadDoctorDocument
 import ehealthy.connect.ui.doctorDashboard.uploadDoctorProfilePhoto
@@ -214,7 +215,7 @@ suspend fun verifyDoctorResetCodeAndSetPassword(
 suspend fun savePrescription(
     patientId: String,
     doctorId: String,
-    medications: List<String>
+    medications: List<PrescribedMedicine>
 ): Result<Unit> {
     return try {
         @Serializable
@@ -224,13 +225,26 @@ suspend fun savePrescription(
             val medication: String
         )
 
+        // The current Supabase `prescriptions` table only has a `medication`
+        // text column for the medicine itself, so store the medicine name here.
+        // The richer dosage/frequency/duration/instructions values remain in
+        // PrescribedMedicine and will need matching database columns before
+        // they can be persisted separately.
         val rows = medications.map { med ->
-            PrescriptionInsert(patient_id = patientId, doctor_id = doctorId, medication = med)
+            PrescriptionInsert(
+                patient_id = patientId,
+                doctor_id = doctorId,
+                medication = med.medicine
+            )
         }
 
-        SupabaseClientProvider.client.postgrest.from("prescriptions").insert(rows)
+        SupabaseClientProvider.client.postgrest
+            .from("prescriptions")
+            .insert(rows)
+
         Result.success(Unit)
-    } catch (e: kotlinx.coroutines.CancellationException) { throw e
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(Exception(friendlyAuthError(e)))
     }

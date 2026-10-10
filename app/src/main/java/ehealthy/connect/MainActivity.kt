@@ -123,6 +123,7 @@ import kotlinx.serialization.Serializable
 import ehealthy.connect.ui.patientDashboard.DoctorProfile as PatientDoctorProfile
 import ehealthy.connect.data.patient.PatientAppointment
 import ehealthy.connect.data.patient.PatientRepository
+import ehealthy.connect.ui.doctorDashboard.DoctorPatientCareHub
 import ehealthy.connect.ui.patientDashboard.ConsultDoctorNow.OnDemandConsultationScreen
 import ehealthy.connect.ui.patientDashboard.FindDoctors.DoctorListing
 import ehealthy.connect.ui.patientDashboard.myVisits.PatientVisitsScreen
@@ -133,6 +134,7 @@ import ehealthy.connect.ui.patientDashboard.PatientNotificationsScreen
 import ehealthy.connect.ui.patientDashboard.PatientInvoicesScreen
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import ehealthy.connect.ui.doctorDashboard.DoctorPatientCareHub
 private object BookingConfirmationHolder {
     var confirmation: BookingConfirmation? = null
 }
@@ -1346,6 +1348,12 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 onNavigateEarnings = { navController.navigate("doctorDemoEarnings") },
                 onNavigateSettings = { navController.navigate("doctorSettings") },
                 onNavigateTimeSlots = { navController.navigate("doctorTimeSlots") },
+                onOpenPatientCareHub = { appointmentId, patientName ->
+
+                    navController.navigate(
+                        "doctorPatientCare/$appointmentId/${Uri.encode(patientName)}"
+                    )
+                },
                 onStartCall = { appointmentId -> navController.navigate("doctorCall/$appointmentId") },
                 onOpenPatientFile = { appointmentId ->
                     navController.navigate("doctorPatientCareFile/$appointmentId")
@@ -1441,6 +1449,40 @@ fun AppNavGraph(pendingRoute: String? = null) {
                     }
                 },
                 onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = "doctorPatientCare/{appointmentId}/{patientName}",
+            arguments = listOf(
+                navArgument("appointmentId") {
+                    type = NavType.StringType
+                },
+                navArgument("patientName") {
+                    type = NavType.StringType
+                }
+            )
+        ) { backStackEntry ->
+
+            val appointmentId =
+                backStackEntry.arguments
+                    ?.getString("appointmentId")
+                    .orEmpty()
+
+            val patientName =
+                backStackEntry.arguments
+                    ?.getString("patientName")
+                    ?.let {
+                        Uri.decode(it)
+                    }
+                    ?: "Patient"
+
+            DoctorPatientCareHub(
+                appointmentId = appointmentId,
+                patientName = patientName,
+                onBack = {
+                    navController.popBackStack()
+                }
             )
         }
 

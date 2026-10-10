@@ -56,6 +56,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ehealthy.connect.ui.patientDashboard.Appointment
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 // Same visual language as the patient dashboard.
 private val AppointmentsBackground = Color(0xFFF7F9FC)
@@ -79,25 +81,88 @@ enum class DoctorAppointmentFilter(val label: String) {
     COMPLETED("Completed"),
     CANCELLED("Cancelled")
 }
+private fun isAppointmentExpired(
+    appointment: Appointment
+): Boolean {
+
+    val date =
+        appointment.date
+            ?: return false
+
+    val time =
+        appointment.time
+            ?: return false
+
+    return try {
+
+        val cleanTime =
+            if (time.length >= 8) {
+                time.take(8)
+            } else {
+                time
+            }
+
+        val appointmentDateTime =
+            LocalDateTime.parse(
+                "$date $cleanTime",
+                DateTimeFormatter.ofPattern(
+                    "yyyy-MM-dd HH:mm:ss"
+                )
+            )
+
+        appointmentDateTime.isBefore(
+            LocalDateTime.now()
+        )
+
+    } catch (_: Exception) {
+
+        false
+    }
+}
 
 private fun matchesFilter(
     appointment: Appointment,
     filter: DoctorAppointmentFilter
 ): Boolean {
-    val status = appointment.status?.lowercase().orEmpty()
+
+    val status =
+        appointment.status
+            ?.lowercase()
+            .orEmpty()
+
+    val expired =
+        isAppointmentExpired(
+            appointment
+        ) &&
+                status != "completed" &&
+                status != "cancelled" &&
+                status != "declined"
 
     return when (filter) {
-        DoctorAppointmentFilter.UPCOMING ->
-            status != "completed" && status != "cancelled" && status != "declined"
 
-        DoctorAppointmentFilter.COMPLETED ->
+        DoctorAppointmentFilter.UPCOMING -> {
+
+            !expired &&
+                    status != "completed" &&
+                    status != "cancelled" &&
+                    status != "declined"
+        }
+
+
+        DoctorAppointmentFilter.COMPLETED -> {
+
             status == "completed"
+        }
 
-        DoctorAppointmentFilter.CANCELLED ->
-            status == "cancelled" || status == "declined"
+
+        DoctorAppointmentFilter.CANCELLED -> {
+
+            status == "cancelled" ||
+                    status == "declined" ||
+                    expired
+        }
     }
 }
-
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun DoctorAppointmentsTab(
@@ -126,9 +191,18 @@ fun DoctorAppointmentsTab(
     }
 
     val upcomingCount = remember(appointments) {
-        appointments.count {
-            val status = it.status?.lowercase().orEmpty()
-            status != "completed" &&
+
+        appointments.count { appointment ->
+
+            val status =
+                appointment.status
+                    ?.lowercase()
+                    .orEmpty()
+
+            !isAppointmentExpired(
+                appointment
+            ) &&
+                    status != "completed" &&
                     status != "cancelled" &&
                     status != "declined"
         }

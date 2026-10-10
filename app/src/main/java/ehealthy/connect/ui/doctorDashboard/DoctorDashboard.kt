@@ -168,6 +168,7 @@ fun DoctorDashboard(
     onNavigateSettings: () -> Unit,
     onNavigateTimeSlots: () -> Unit,
     onNavigateEarnings: () -> Unit = {},
+    onOpenPatientCareHub: (appointmentId: String, patientName: String) -> Unit,
     onNavigateAvailability: () -> Unit = {},
     onStartCall: (appointmentId: String) -> Unit = {},
     onVerifyCompletionCode: suspend (appointmentId: String, code: String) -> Result<Unit> = { _, _ -> Result.failure(Exception("Not available")) },
@@ -322,7 +323,8 @@ fun DoctorDashboard(
                     isLoading = isLoadingAppointments,
                     background = background,
                     navy = navy,
-                    muted = muted
+                    muted = muted,
+                    onOpenPatientCareHub = onOpenPatientCareHub
                 )
 
                 DoctorTab.PROFILE -> ProfileTabContent(
@@ -1307,13 +1309,15 @@ private fun PatientsTabContent(
     isLoading: Boolean,
     background: Color,
     navy: Color,
-    muted: Color
+    muted: Color,
+    onOpenPatientCareHub: (appointmentId: String, patientName: String) -> Unit
 ) {
     data class PatientSummary(
         val name: String,
         val visitCount: Int,
         val completedCount: Int,
         val upcomingCount: Int,
+        val appointmentId: String,
         val lastDate: String?,
         val lastReason: String?
     )
@@ -1343,6 +1347,12 @@ private fun PatientsTabContent(
                     visitCount = appts.size,
                     completedCount = completed,
                     upcomingCount = upcoming,
+
+                    // We use one appointment belonging to this patient
+                    // to securely open their Patient Care Hub.
+                    appointmentId = latest?.id
+                        ?: appts.first().id,
+
                     lastDate = latest?.date,
                     lastReason = latest?.reason
                 )
@@ -1579,7 +1589,14 @@ private fun PatientsTabContent(
                         key = { it.name }
                     ) { patient ->
                         Card(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onOpenPatientCareHub(
+                                        patient.appointmentId,
+                                        patient.name
+                                    )
+                                },
                             shape = RoundedCornerShape(22.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = Color.White

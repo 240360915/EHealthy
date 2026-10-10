@@ -4925,6 +4925,52 @@ private fun BookingErrorMessage(
     message: String
 ) {
 
+    val friendlyMessage =
+        when {
+
+            message.contains(
+                "physical visit arrangement",
+                ignoreCase = true
+            ) -> {
+                "You already have a physical visit arranged for this date. " +
+                        "Please choose another date or review your existing visit."
+            }
+
+            message.contains(
+                "one appointment per day",
+                ignoreCase = true
+            ) ||
+                    message.contains(
+                        "already have an appointment",
+                        ignoreCase = true
+                    ) -> {
+                "You already have an appointment on this date. " +
+                        "Only one active appointment per day is allowed."
+            }
+
+            message.contains(
+                "time slot",
+                ignoreCase = true
+            ) &&
+                    message.contains(
+                        "booked",
+                        ignoreCase = true
+                    ) -> {
+                "This time slot is no longer available. Please choose another time."
+            }
+
+            message.contains(
+                "already passed",
+                ignoreCase = true
+            ) -> {
+                "This appointment time has already passed. Please choose another date or time."
+            }
+
+            else -> {
+                "We couldn't complete your booking. Please try again or choose another appointment time."
+            }
+        }
+
     Card(
         modifier =
             Modifier
@@ -5031,8 +5077,7 @@ private fun BookingErrorMessage(
 
 
                 Text(
-                    text =
-                        message,
+                    text = friendlyMessage,
                     color =
                         PatientColors.TextSecondary,
                     fontSize =

@@ -19,11 +19,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.CalendarMonth
-import androidx.compose.material.icons.outlined.Chat
 import androidx.compose.material.icons.outlined.EventRepeat
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
@@ -68,6 +68,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ehealthy.connect.data.PatientPrescriptionLinkRepository
 import ehealthy.connect.data.patient.PatientAppointment
 import ehealthy.connect.data.patient.PatientDoctorSummary
 import ehealthy.connect.data.patient.PatientRepository
@@ -96,6 +97,7 @@ private val VisitCancelled = Color(0xFFB91C1C)
 fun PatientVisitsScreen(
     onBack: () -> Unit,
     onOpenInvoices: () -> Unit,
+    onOpenPrescriptions: () -> Unit,
     onReschedule: (appointmentId: String) -> Unit,
     onMessageDoctor: (doctorId: String) -> Unit,
     onJoinScheduledCall: (appointment: PatientAppointment) -> Unit,
@@ -161,6 +163,11 @@ fun PatientVisitsScreen(
         mutableStateOf<List<PhysicalVisitInvoice>>(
             emptyList()
         )
+    }
+
+    // null = prescription lookup has not succeeded (don't show false negatives).
+    var linkedPrescriptionAppointments by remember {
+        mutableStateOf<Set<String>?>(null)
     }
 
     var requestingPhysicalVisit by remember {
@@ -265,6 +272,11 @@ fun PatientVisitsScreen(
                 physicalVisitInvoices =
                     emptyList()
             }
+
+        PatientPrescriptionLinkRepository
+            .getMyLinkedAppointmentIds()
+            .onSuccess { linkedPrescriptionAppointments = it }
+            .onFailure { linkedPrescriptionAppointments = null }
 
         isLoading = false
         isRefreshing = false
@@ -808,6 +820,11 @@ fun PatientVisitsScreen(
                                     )
                                 },
 
+                                linkedPrescription =
+                                    linkedPrescriptionAppointments?.contains(appointment.id),
+
+                                onOpenPrescriptions = onOpenPrescriptions,
+
                                 physicalRequest =
                                     physicalVisitRequests
                                         .firstOrNull {
@@ -1120,6 +1137,8 @@ private fun VisitCard(
     onCancel: () -> Unit,
     onJoinCall: () -> Unit,
     onRate: () -> Unit,
+    linkedPrescription: Boolean?,
+    onOpenPrescriptions: () -> Unit,
     physicalRequest: PhysicalVisitRequest?,
     physicalInvoice: PhysicalVisitInvoice?,
     invoiceDecisionInProgress: Boolean,
@@ -1428,12 +1447,19 @@ private fun VisitCard(
 
             HorizontalDivider()
 
-            Spacer(
-                modifier =
-                    Modifier.height(
-                        12.dp
-                    )
+            Spacer(Modifier.height(12.dp))
+
+            // Read-only journey tracker; never assumes payment, refunds,
+            // issued prescriptions or completed visits from elapsed time.
+            VisitProgressTracker(
+                appointment = appointment,
+                physicalRequest = physicalRequest,
+                physicalInvoice = physicalInvoice,
+                linkedPrescription = linkedPrescription,
+                onOpenPrescriptions = onOpenPrescriptions
             )
+
+            Spacer(Modifier.height(12.dp))
 
             if (
                 isCompleted &&
@@ -1511,6 +1537,244 @@ private fun VisitCard(
                             MaterialTheme
                                 .colorScheme
                                 .onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+
+/**
+ * The My Visits screen is the real appointment destination in MainActivity.
+ * Every checked milestone below is derived from an existing Supabase row/status.
+ * Official prescription milestones are shown only when a patient-owned
+ * prescription row contains this appointment_id. An unavailable lookup does
+ * not become a false "not issued" result.
+ */
+private data class VisitJourneyStep(
+    val title: String,
+    val detail: String,
+    val complete: Boolean
+)
+
+@Composable
+private fun VisitProgressTracker(
+    appointment: PatientAppointment,
+    physicalRequest: PhysicalVisitRequest?,
+    physicalInvoice: PhysicalVisitInvoice?,
+    linkedPrescription: Boolean?,
+    onOpenPrescriptions: () -> Unit
+) {
+    val appointmentStatus = appointment.status.orEmpty().lowercase(Locale.ROOT)
+    val isCancelled = appointment.status.isCancelledStatus()
+    val confirmed = appointmentStatus in setOf(
+        "confirmed", "approved", "in_progress", "completed"
+    )
+    val consultationComplete = appointmentStatus == "completed"
+    val isOnline = appointment.appointment_type.equals("online", ignoreCase = true)
+    val invoiceStatus = physicalInvoice?.status?.lowercase(Locale.ROOT).orEmpty()
+    val requestStatus = physicalRequest?.status?.lowercase(Locale.ROOT).orEmpty()
+
+    val summary = when {
+        isCancelled -> "Appointment cancelled"
+        invoiceStatus == "accepted" -> "Physical visit arrangement accepted"
+        invoiceStatus == "declined" -> "Physical visit invoice declined"
+        invoiceStatus == "sent" -> "Invoice awaiting your decision"
+        requestStatus == "declined" -> "Follow-up request declined"
+        requestStatus == "pending" -> "Awaiting doctor's follow-up response"
+        requestStatus == "accepted" -> "Doctor approved follow-up request"
+        consultationComplete && linkedPrescription == true -> "Consultation completed • prescription issued"
+        consultationComplete -> "Consultation completed"
+        confirmed -> "Appointment confirmed"
+        else -> "Awaiting doctor confirmation"
+    }
+
+    val steps = buildList {
+        add(VisitJourneyStep(
+            "Appointment created",
+            "Your appointment is recorded in EHealthy.",
+            true
+        ))
+        add(VisitJourneyStep(
+            "Doctor confirmation",
+            if (confirmed) "The appointment status confirms this step."
+            else if (isCancelled) "The appointment was cancelled."
+            else "Waiting for a confirmed status from the doctor.",
+            confirmed
+        ))
+        add(VisitJourneyStep(
+            "Consultation completed",
+            if (consultationComplete) "The appointment is marked completed."
+            else if (isCancelled) "Not completed before cancellation."
+            else "Not yet recorded as completed.",
+            consultationComplete
+        ))
+        if (confirmed || consultationComplete || linkedPrescription == true) {
+            add(VisitJourneyStep(
+                if (linkedPrescription == true) "Official prescription issued"
+                else "Prescription (if issued)",
+                when (linkedPrescription) {
+                    true -> "A signed prescription is linked to this consultation."
+                    false -> "No official prescription has been linked to this visit."
+                    null -> "Prescription status is currently unavailable; check My Prescriptions."
+                },
+                linkedPrescription == true
+            ))
+        }
+
+        // Physical follow-up is optional and only offered after an online visit.
+        if (isOnline && (consultationComplete || physicalRequest != null || physicalInvoice != null)) {
+            add(VisitJourneyStep(
+                "Optional physical follow-up",
+                when {
+                    physicalRequest == null -> "You can request a physical visit after this consultation."
+                    requestStatus == "declined" -> "The doctor declined the follow-up request."
+                    requestStatus == "pending" -> "Your follow-up request is with the doctor."
+                    else -> "Request status: ${requestStatus.replace('_', ' ')}"
+                },
+                physicalRequest != null
+            ))
+            if (physicalRequest != null || physicalInvoice != null) {
+                add(VisitJourneyStep(
+                    "Doctor invoice",
+                    if (physicalInvoice != null) "The doctor issued a physical visit invoice."
+                    else if (requestStatus == "declined") "Not applicable to this declined request."
+                    else "No invoice has been issued for this request yet.",
+                    physicalInvoice != null
+                ))
+                if (physicalInvoice != null) {
+                    add(VisitJourneyStep(
+                        "Patient invoice decision",
+                        when (invoiceStatus) {
+                            "accepted" -> "You accepted the proposed arrangement (not proof of payment)."
+                            "declined" -> "You declined the proposed arrangement."
+                            "sent" -> "Review the invoice and choose Accept or Decline."
+                            else -> "Invoice status: ${invoiceStatus.replace('_', ' ')}"
+                        },
+                        invoiceStatus == "accepted" || invoiceStatus == "declined"
+                    ))
+                }
+            }
+        }
+    }
+
+    var expanded by remember(appointment.id) { mutableStateOf(false) }
+    val completedCount = steps.count { it.complete }
+    val accent = when {
+        isCancelled -> VisitCancelled
+        invoiceStatus == "declined" || requestStatus == "declined" -> VisitCancelled
+        consultationComplete -> VisitSuccess
+        else -> MaterialTheme.colorScheme.primary
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.48f),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(35.dp)
+                        .background(accent.copy(alpha = 0.10f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CheckCircle,
+                        contentDescription = null,
+                        tint = accent,
+                        modifier = Modifier.size(19.dp)
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "CARE JOURNEY  •  $completedCount/${steps.size} recorded",
+                        fontSize = 10.sp,
+                        color = accent,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        summary,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                TextButton(onClick = { expanded = !expanded }) {
+                    Text(if (expanded) "Hide" else "Steps", fontSize = 11.sp)
+                }
+            }
+
+            if (expanded) {
+                Spacer(Modifier.height(11.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(11.dp))
+                steps.forEachIndexed { index, step ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(26.dp)
+                                .background(
+                                    if (step.complete) VisitSuccess.copy(alpha = 0.13f)
+                                    else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f),
+                                    CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (step.complete) {
+                                Icon(
+                                    Icons.Filled.CheckCircle,
+                                    contentDescription = null,
+                                    tint = VisitSuccess,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            } else {
+                                Text(
+                                    (index + 1).toString(),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                step.title,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                step.detail,
+                                fontSize = 10.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    if (index < steps.lastIndex) Spacer(Modifier.height(12.dp))
+                }
+                if (linkedPrescription == true) {
+                    Spacer(Modifier.height(9.dp))
+                    TextButton(onClick = onOpenPrescriptions) {
+                        Text("View / download prescription", fontSize = 11.sp)
+                    }
+                } else if (consultationComplete) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "Older prescriptions may not be linked to a visit; " +
+                                "you can still find them in My Prescriptions.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 10.sp
                     )
                 }
             }
@@ -2242,7 +2506,7 @@ private fun ActiveVisitActions(
 
                 Icon(
                     imageVector =
-                        Icons.Outlined.Chat,
+                        Icons.AutoMirrored.Outlined.Chat,
                     contentDescription =
                         null
                 )
@@ -2341,7 +2605,7 @@ private fun CompletedVisitActions(
 
             Icon(
                 imageVector =
-                    Icons.Outlined.Chat,
+                    Icons.AutoMirrored.Outlined.Chat,
                 contentDescription =
                     null
             )

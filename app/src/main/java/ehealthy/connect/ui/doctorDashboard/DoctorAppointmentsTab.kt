@@ -33,6 +33,8 @@ import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -107,7 +109,9 @@ fun DoctorAppointmentsTab(
     onStartCall: (appointmentId: String) -> Unit = {},
     onVerifyCompletionCode: suspend (appointmentId: String, code: String) -> Result<Unit> = { _, _ ->
         Result.failure(Exception("Not available"))
-    }
+    },
+    // Receives the appointment ID; patient identity is validated by the backend RPC.
+    onOpenPatientFile: (appointmentId: String) -> Unit = {}
 ) {
     var selectedFilter by remember {
         mutableStateOf(DoctorAppointmentFilter.UPCOMING)
@@ -305,6 +309,9 @@ fun DoctorAppointmentsTab(
                             appointment = appointment,
                             onActions = {
                                 actionTarget = appointment
+                            },
+                            onOpenPatientFile = {
+                                onOpenPatientFile(appointment.id)
                             }
                         )
                     }
@@ -546,9 +553,13 @@ private fun EmptyAppointmentsState(
 @Composable
 private fun DoctorAppointmentListCard(
     appointment: Appointment,
-    onActions: () -> Unit
+    onActions: () -> Unit,
+    onOpenPatientFile: () -> Unit
 ) {
     val status = appointment.status?.lowercase().orEmpty()
+    // Align with the protected doctor_get_patient_care_file RPC: pending or
+    // cancelled appointments must never expose the care-file action.
+    val canOpenPatientFile = status == "confirmed" || status == "completed"
 
     val statusColor = when (status) {
         "confirmed", "accepted" ->
@@ -722,6 +733,111 @@ private fun DoctorAppointmentListCard(
                     iconBackground = AppointmentGreenSoft,
                     modifier = Modifier.fillMaxWidth()
                 )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // ACTION AREA
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(15.dp))
+                    .background(
+                        Color.White.copy(
+                            alpha = 0.64f
+                        )
+                    )
+                    .padding(
+                        horizontal = 12.dp,
+                        vertical = 10.dp
+                    ),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector =
+                        if (
+                            status == "confirmed" ||
+                            status == "accepted"
+                        ) {
+                            Icons.Outlined.Videocam
+                        } else {
+                            Icons.Outlined.Description
+                        },
+                    contentDescription = null,
+                    tint = AppointmentTeal,
+                    modifier = Modifier.size(18.dp)
+                )
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text =
+                            if (
+                                status == "confirmed" ||
+                                status == "accepted"
+                            ) {
+                                "Consultation ready"
+                            } else {
+                                "Appointment actions"
+                            },
+                        color = AppointmentInk,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Text(
+                        text = "View details, confirm, call or update status",
+                        color = AppointmentMuted,
+                        fontSize = 8.5.sp
+                    )
+                }
+
+                IconButton(
+                    onClick = onActions,
+                    modifier = Modifier.size(34.dp)
+                ) {
+                    Icon(
+                        Icons.Outlined.MoreVert,
+                        contentDescription = "Appointment actions",
+                        tint = AppointmentInk,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            // Only an authenticated doctor with a confirmed/completed booking can
+            // access this patient's record. The RPC enforces that independently.
+            if (canOpenPatientFile) {
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedButton(
+                    onClick = onOpenPatientFile,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = AppointmentTeal.copy(alpha = 0.35f)
+                    ),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = AppointmentTeal,
+                        containerColor = AppointmentTealSoft
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Description,
+                        contentDescription = null,
+                        modifier = Modifier.size(17.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Open patient care file",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))

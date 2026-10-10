@@ -41,6 +41,8 @@ import ehealthy.connect.ui.common.isValidEmail
 import ehealthy.connect.ui.common.normalizeEmail
 import ehealthy.connect.ui.doctorDashboard.DoctorAccountSettings
 import ehealthy.connect.ui.doctorDashboard.DoctorDashboard
+import ehealthy.connect.ui.doctorDashboard.DoctorDemoEarningsScreen
+import ehealthy.connect.ui.doctorDashboard.DoctorPatientCareFileScreen
 import ehealthy.connect.ui.doctorDashboard.DoctorForgotPassword
 import ehealthy.connect.ui.doctor.DoctorLogin
 import ehealthy.connect.ui.doctor.DoctorVerificationScreen
@@ -88,6 +90,7 @@ import ehealthy.connect.ui.patientDashboard.EditProfileScreen
 import ehealthy.connect.ui.patientDashboard.FindDoctors.FindDoctorsScreen
 import ehealthy.connect.ui.patientDashboard.HealthTipsScreen
 import ehealthy.connect.ui.patientDashboard.HealthProfileScreen
+import ehealthy.connect.ui.patientDashboard.PatientCareFileScreen
 import ehealthy.connect.ui.patientDashboard.MedicalRecord
 import ehealthy.connect.ui.patientDashboard.MedicalRecordDisplay
 import ehealthy.connect.ui.patientDashboard.MedicalRecordsScreen
@@ -400,7 +403,19 @@ fun AppNavGraph(pendingRoute: String? = null) {
             HealthProfileScreen(
                 onBack = {
                     navController.popBackStack()
+                },
+                onOpenCareFile = {
+                    navController.navigate("patientCareFile")
                 }
+            )
+        }
+
+        // Patient's own care file: existing health profile + consultation summaries.
+        composable("patientCareFile") {
+            PatientCareFileScreen(
+                onBack = { navController.popBackStack() },
+                onEditHealthProfile = { navController.navigate("healthProfile") },
+                onOpenMedicalRecords = { navController.navigate("medicalRecords") }
             )
         }
 
@@ -1328,9 +1343,13 @@ fun AppNavGraph(pendingRoute: String? = null) {
                     }
                 },
                 onNavigatePrescriptions = { navController.navigate("doctorPrescriptions") },
+                onNavigateEarnings = { navController.navigate("doctorDemoEarnings") },
                 onNavigateSettings = { navController.navigate("doctorSettings") },
                 onNavigateTimeSlots = { navController.navigate("doctorTimeSlots") },
                 onStartCall = { appointmentId -> navController.navigate("doctorCall/$appointmentId") },
+                onOpenPatientFile = { appointmentId ->
+                    navController.navigate("doctorPatientCareFile/$appointmentId")
+                },
                 onVerifyCompletionCode = { appointmentId, enteredCode ->
                     try {
                         val row = SupabaseClientProvider.client.postgrest
@@ -1360,6 +1379,26 @@ fun AppNavGraph(pendingRoute: String? = null) {
                         Result.failure(e)
                     }
                 }
+            )
+        }
+
+        // Doctor virtual earnings + simulated EHealthy commission.
+        composable("doctorDemoEarnings") {
+            DoctorDemoEarningsScreen(onBack = { navController.popBackStack() })
+        }
+
+        // Doctor's authorized view: permission is checked by Supabase RPC.
+        composable(
+            route = "doctorPatientCareFile/{appointmentId}",
+            arguments = listOf(
+                navArgument("appointmentId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            DoctorPatientCareFileScreen(
+                appointmentId = backStackEntry.arguments
+                    ?.getString("appointmentId")
+                    .orEmpty(),
+                onBack = { navController.popBackStack() }
             )
         }
 
@@ -2143,6 +2182,14 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 patientName = patientName,
                 patientAvatarUrl = patientAvatarUrl,
                 isUploadingPhoto = isUploadingPhoto,
+
+                onNavigateHealthProfile = {
+                    navController.navigate("healthProfile")
+                },
+                onNavigateInvoices = {
+                    navController.navigate("patientInvoices")
+                },
+
                 onNavigateSettings = {
                     navController.navigate("settings")
                 },
@@ -2815,6 +2862,10 @@ fun AppNavGraph(pendingRoute: String? = null) {
                     navController.navigate(
                         "patientInvoices"
                     )
+                },
+
+                onOpenPrescriptions = {
+                    navController.navigate("patientPrescriptions")
                 },
 
                 onReschedule = {

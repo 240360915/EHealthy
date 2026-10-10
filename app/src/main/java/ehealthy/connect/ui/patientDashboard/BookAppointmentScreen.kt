@@ -34,6 +34,7 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.VideoCall
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -130,6 +131,12 @@ data class BookingSubmission(
     val fee: Double,
     val paymentReference: String,
     val appointmentType: AppointmentType
+)
+
+// A clear patient-facing message when checkout is cancelled or booking fails.
+private data class DemoPayNotice(
+    val title: String,
+    val message: String
 )
 
 private enum class BookingStep(
@@ -237,6 +244,10 @@ fun BookAppointmentScreen(
             null
         )
     }
+
+    // Display the checkout before making any booking request. Cancelling never calls Supabase.
+    var showDemoPayCheckout by remember { mutableStateOf(false) }
+    var demoPayNotice by remember { mutableStateOf<DemoPayNotice?>(null) }
 
     var bookingRequestId by remember {
         mutableStateOf(
@@ -452,71 +463,83 @@ fun BookAppointmentScreen(
     }
 
     fun submitBooking() {
+        // A single checkout confirmation can create only one booking request.
+        if (isBooking || bookingResult != null) return
 
-        val slot =
-            selectedSlot
-
+        val slot = selectedSlot
         if (slot == null) {
-
-            bookingError =
-                "Choose an available time."
-
+            showDemoPayCheckout = false
+            bookingError = "Choose an available time."
+            demoPayNotice = DemoPayNotice(
+                title = "Appointment details needed",
+                message = "Please choose an available appointment time before continuing."
+            )
             return
         }
 
-        if (
-            reason.trim()
-                .length < 3
-        ) {
-
-            bookingError =
-                "Please briefly tell the doctor why you need the appointment."
-
+        if (reason.trim().length < 3) {
+            showDemoPayCheckout = false
+            bookingError = "Please briefly tell the doctor why you need the appointment."
+            demoPayNotice = DemoPayNotice(
+                title = "Appointment details needed",
+                message = "Please add a short reason for your consultation before continuing."
+            )
             return
         }
 
-        bookingError =
-            null
-
-        isBooking =
-            true
+        bookingError = null
+        isBooking = true
 
         scope.launch {
-
-            PatientRepository
-                .bookScheduledAppointment(
-
-                    slotId =
-                        slot.id,
-
-                    appointmentType =
-                        AppointmentType.ONLINE.databaseValue,
-
-                    paymentChoice =
-                        "demo_pay",
-
-                    reason =
-                        reason.trim(),
-
-                    idempotencyKey =
-                        bookingRequestId
-                )
-                .onSuccess { result ->
-
-                    bookingResult =
-                        result
-                }
-                .onFailure {
-
-                    bookingError =
-                        friendlyBookingError(
-                            it.message
+            try {
+                PatientRepository
+                    .bookScheduledAppointment(
+                        slotId = slot.id,
+                        appointmentType = AppointmentType.ONLINE.databaseValue,
+                        paymentChoice = "demo_pay",
+                        reason = reason.trim(),
+                        idempotencyKey = bookingRequestId
+                    )
+                    .onSuccess { result ->
+                        // The server performs the booking and writes the DemoPay record.
+                        bookingResult = result
+                        showDemoPayCheckout = false
+                    }
+                    .onFailure { error ->
+                        showDemoPayCheckout = false
+                        bookingError = friendlyBookingError(error.message)
+                        demoPayNotice = DemoPayNotice(
+                            title = "Payment not completed",
+                            message = "We couldn't finish your appointment payment and booking. " +
+                                    "No real money was charged. Please check your details and try again."
                         )
-                }
-
-            isBooking =
-                false
+                    }
+            } catch (error: Exception) {
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                // A network timeout may occur after the server has saved a booking.
+                // Ask the patient to check their appointments before retrying.
+                showDemoPayCheckout = false
+                bookingError = "Could not verify your booking. Check My Appointments before trying again."
+                demoPayNotice = DemoPayNotice(
+                    title = "Unable to verify payment",
+                    message = "We couldn't confirm the booking response. Check My Appointments " +
+                            "before trying again, in case the appointment was already saved."
+                )
+            } finally {
+                isBooking = false
+            }
         }
+    }
+
+    fun cancelCheckout() {
+        if (isBooking) return
+        showDemoPayCheckout = false
+        bookingError = null
+        demoPayNotice = DemoPayNotice(
+            title = "Payment cancelled",
+            message = "You cancelled the checkout. No appointment was created " +
+                    "and no payment was recorded. You can return to checkout whenever you're ready."
+        )
     }
 
     LaunchedEffect(Unit) {
@@ -541,6 +564,144 @@ fun BookAppointmentScreen(
 
                 BookingStep.DETAILS
         }
+
+    // Payment is requested only after the patient explicitly taps Complete Payment.
+    // The existing backend still uses DemoPay: a virtual transaction, not a bank charge.
+    if (showDemoPayCheckout && bookingResult == null) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!isBooking) cancelCheckout()
+            },
+            icon = {
+                Icon(
+                    imageVector = Icons.Outlined.Payments,
+                    contentDescription = null,
+                    tint = PatientColors.AppointmentAccent
+                )
+            },
+            title = {
+                Text(
+                    "EHealthy Checkout",
+                    fontWeight = FontWeight.ExtraBold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "Review your appointment details before completing payment.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 13.sp
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = PatientColors.AppointmentCard
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(9.dp)
+                        ) {
+                            Text(
+                                doctor?.fullName ?: "Your doctor",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp
+                            )
+                            HorizontalDivider(
+                                color = PatientColors.AppointmentAccent.copy(alpha = 0.12f)
+                            )
+                            Text("Date: ${selectedSlot?.date.orEmpty()}")
+                            Text("Time: ${selectedSlot?.time?.let(::displayTime).orEmpty()}")
+                            Text("Consultation: Online")
+                            HorizontalDivider(
+                                color = PatientColors.AppointmentAccent.copy(alpha = 0.12f)
+                            )
+                            Text(
+                                "Amount: ${doctor?.hourlyRate?.let { "R %.2f".format(it) } ?: "Confirmed by server"}",
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 18.sp,
+                                color = PatientColors.AppointmentAccent
+                            )
+                        }
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Lock,
+                            contentDescription = null,
+                            modifier = Modifier.size(17.dp),
+                            tint = PatientColors.Purple
+                        )
+                        Text(
+                            "DemoPay checkout: no actual bank or card payment is taken. " +
+                                    "Completing this step records a demonstration payment and " +
+                                    "books your appointment, subject to availability. " +
+                                    "The final fee is confirmed by the server.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp,
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { submitBooking() },
+                    enabled = !isBooking
+                ) {
+                    if (isBooking) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(17.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(modifier = Modifier.width(7.dp))
+                        Text("Processing...")
+                    } else {
+                        Text("Complete Payment")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = ::cancelCheckout,
+                    enabled = !isBooking
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Cancellation or a failed checkout request must produce immediate visible feedback.
+    demoPayNotice?.let { notice ->
+        AlertDialog(
+            onDismissRequest = { demoPayNotice = null },
+            title = {
+                Text(notice.title, fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Text(notice.message)
+            },
+            confirmButton = {
+                Button(onClick = {
+                    demoPayNotice = null
+                    showDemoPayCheckout = true
+                }) {
+                    Text("Try again")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { demoPayNotice = null }) {
+                    Text("Back to booking")
+                }
+            }
+        )
+    }
 
     Scaffold(
 
@@ -627,7 +788,11 @@ fun BookAppointmentScreen(
 
                     isBooking = isBooking,
 
-                    onBook = ::submitBooking
+                    onBook = {
+                        bookingError = null
+                        demoPayNotice = null
+                        showDemoPayCheckout = true
+                    }
                 )
             }
         }
@@ -2944,7 +3109,7 @@ private fun OnlineConsultationNotice() {
 
                 Text(
                     text =
-                        "This project currently uses EHealthy DemoPay for the online booking. No real money is charged.",
+                        "Online bookings currently use EHealthy DemoPay. These are demonstration payments; no real money is charged.",
                     modifier =
                         Modifier.weight(1f),
                     color =
@@ -3590,7 +3755,7 @@ private fun SecureBookingNotice() {
 
                 Text(
                     text =
-                        "When you reserve, the server locks the selected slot and checks that you do not already have another appointment on that day.",
+                        "When you complete payment, the server checks the selected slot and makes sure you do not already have an appointment that day.",
                     color =
                         PatientColors.TextSecondary,
                     fontSize =
@@ -3854,7 +4019,7 @@ private fun BookingBottomBar(
 
                     Text(
                         text =
-                            "Reserving your online appointment...",
+                            "Processing your appointment...",
                         fontWeight =
                             FontWeight.Bold,
                         fontSize =
@@ -3886,7 +4051,7 @@ private fun BookingBottomBar(
                     Text(
                         text =
                             if (readyToReserve) {
-                                "Reserve online appointment"
+                                "Pay for Appointment"
                             } else {
                                 "Complete appointment details"
                             },
@@ -3911,7 +4076,7 @@ private fun BookingBottomBar(
 
                 Text(
                     text =
-                        "Your selected slot will be checked again when you reserve.",
+                        "Your selected time is confirmed when you complete payment.",
                     modifier =
                         Modifier.fillMaxWidth(),
                     color =
@@ -4046,7 +4211,7 @@ private fun BookingSuccessScreen(
 
                 Text(
                     text =
-                        "Online appointment reserved",
+                        "Appointment booked successfully",
                     color =
                         PatientColors.TextPrimary,
                     fontSize =
@@ -4411,7 +4576,7 @@ private fun BookingSuccessScreen(
                                         ignoreCase = true
                                     )
                                 ) {
-                                    "Demo payment successful"
+                                    "Payment completed with DemoPay"
                                 } else {
                                     "Payment status: ${
                                         result.payment_status
@@ -4439,8 +4604,8 @@ private fun BookingSuccessScreen(
                         Text(
                             text =
                                 "Payment reference: ${result.payment_reference}. " +
-                                        "This is an EHealthy DemoPay test transaction. " +
-                                        "No real money was charged.",
+                                        "DemoPay records a demonstration payment; " +
+                                        "no real money was charged.",
 
                             color =
                                 PatientColors.TextSecondary,

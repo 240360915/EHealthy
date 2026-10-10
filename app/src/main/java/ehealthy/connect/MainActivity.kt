@@ -37,6 +37,7 @@ import ehealthy.connect.ui.common.ContactUsScreen
 import ehealthy.connect.ui.common.isPasswordStrong
 import ehealthy.connect.ui.doctorDashboard.DoctorAccountSettings
 import ehealthy.connect.ui.doctorDashboard.DoctorDashboard
+import ehealthy.connect.ui.doctorDashboard.DoctorDemoEarningsScreen
 import ehealthy.connect.ui.doctorDashboard.DoctorPatientCareFileScreen
 import ehealthy.connect.ui.doctorDashboard.DoctorForgotPassword
 import ehealthy.connect.ui.doctor.DoctorLogin
@@ -1196,6 +1197,7 @@ fun AppNavGraph(pendingRoute: String? = null) {
                     }
                 },
                 onNavigatePrescriptions = { navController.navigate("doctorPrescriptions") },
+                onNavigateEarnings = { navController.navigate("doctorDemoEarnings") },
                 onNavigateSettings = { navController.navigate("doctorSettings") },
                 onNavigateTimeSlots = { navController.navigate("doctorTimeSlots") },
                 onStartCall = { appointmentId -> navController.navigate("doctorCall/$appointmentId") },
@@ -1232,6 +1234,11 @@ fun AppNavGraph(pendingRoute: String? = null) {
                     }
                 }
             )
+        }
+
+        // Doctor virtual earnings + simulated EHealthy commission.
+        composable("doctorDemoEarnings") {
+            DoctorDemoEarningsScreen(onBack = { navController.popBackStack() })
         }
 
         // Doctor's authorized view: permission is checked by Supabase RPC.

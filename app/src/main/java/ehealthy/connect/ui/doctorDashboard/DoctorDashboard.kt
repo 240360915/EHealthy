@@ -50,6 +50,7 @@ import androidx.compose.material.icons.outlined.ExitToApp
 import androidx.compose.material.icons.outlined.Medication
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -59,6 +60,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -146,6 +148,7 @@ fun DoctorDashboard(
     onNavigatePrescriptions: () -> Unit,
     onNavigateSettings: () -> Unit,
     onNavigateTimeSlots: () -> Unit,
+    onNavigateEarnings: () -> Unit = {},
     onNavigateAvailability: () -> Unit = {},
     onStartCall: (appointmentId: String) -> Unit = {},
     onVerifyCompletionCode: suspend (appointmentId: String, code: String) -> Result<Unit> = { _, _ -> Result.failure(Exception("Not available")) },
@@ -196,6 +199,13 @@ fun DoctorDashboard(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onNavigateEarnings) {
+                        Icon(
+                            imageVector = Icons.Outlined.Payments,
+                            contentDescription = "Demo earnings",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))

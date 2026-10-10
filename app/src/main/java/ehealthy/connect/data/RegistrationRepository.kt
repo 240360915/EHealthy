@@ -1,6 +1,8 @@
 package ehealthy.connect.data
 
 import ehealthy.connect.ui.patient.PatientRegistrationData
+import ehealthy.connect.ui.common.isValidEmail
+import ehealthy.connect.ui.common.normalizeEmail
 import ehealthy.connect.util.SupabaseClientProvider
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
@@ -10,7 +12,8 @@ import io.github.jan.supabase.postgrest.query.Columns
 object RegistrationRepository {
     suspend fun registerPatient(data: PatientRegistrationData) {
         val auth = SupabaseClientProvider.client.auth
-        val email = data.email.trim()
+        val email = normalizeEmail(data.email)
+        require(isValidEmail(email)) { "Please enter a valid email address." }
         val existingSession = auth.currentUserOrNull()
         if (existingSession == null) {
             auth.signUpWith(Email) { this.email = email; password = data.password }
@@ -37,7 +40,7 @@ object RegistrationRepository {
                 "id_number" to data.idNumber,
                 "phone" to data.phone,
                 "languege" to data.language,
-                "email" to data.email.trim(),
+                "email" to email,
                 "gender" to data.gender,
                 "province" to data.province,
                 "address1" to data.address1,

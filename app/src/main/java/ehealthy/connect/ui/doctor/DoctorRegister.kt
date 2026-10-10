@@ -30,24 +30,26 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.outlined.AddAPhoto
 import androidx.compose.material.icons.outlined.UploadFile
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,19 +65,23 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import ehealthy.connect.ui.common.AuthColors
 import ehealthy.connect.ui.common.PasswordRequirementsChecklist
+import ehealthy.connect.ui.common.authTextFieldColors
 import ehealthy.connect.ui.common.PasswordStrengthMeter
+import ehealthy.connect.ui.common.digitsOnly
 import ehealthy.connect.ui.common.isPasswordValid
-import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material3.IconButton
+import ehealthy.connect.ui.common.isValidEmail
+import ehealthy.connect.ui.common.isValidSaIdNumber
+import ehealthy.connect.ui.common.isValidSaPhoneNumber
+import ehealthy.connect.ui.common.isValidSaPostalCode
 
-enum class DoctorRegisterStep(val label: String) {
-    PRACTICE("Practice Information"),
-    PERSONAL("Personal Information"),
-    ADDRESS("Practice Address"),
-    DOCUMENTS("Documents & Photo"),
-    SECURITY("Account Security")
+enum class DoctorRegisterStep(val label: String, val helper: String) {
+    PROFESSIONAL("Professional details", "Your registration and practice information."),
+    PERSONAL("About you", "Your personal and contact details."),
+    PRACTICE("Practice location", "Where patients can find your practice."),
+    DOCUMENTS("Verification documents", "Required documents are reviewed before your doctor account is approved."),
+    SECURITY("Secure your account", "Create your sign-in password and submit your application.")
 }
 
 data class DoctorRegistrationUris(
@@ -88,13 +94,12 @@ data class DoctorRegistrationUris(
     val proofOfAddress: Uri?
 )
 
-private val titleOptions = listOf("Dr", "Prof", "Mr", "Mrs", "Ms")
-private val genderOptions = listOf("Male", "Female", "Prefer not to say")
-private val languageOptions = listOf(
+private val doctorGenderOptions = listOf("Male", "Female", "Prefer not to say")
+private val doctorLanguageOptions = listOf(
     "Afrikaans", "English", "isiNdebele", "isiXhosa", "isiZulu",
     "Sepedi", "Sesotho", "Setswana", "siSwati", "Tshivenda", "itsonga"
 )
-private val provinceOptions = listOf(
+private val doctorProvinceOptions = listOf(
     "Eastern Cape", "Free State", "Gauteng", "KwaZulu-Natal", "Limpopo",
     "Mpumalanga", "Northern Cape", "North West", "Western Cape"
 )
@@ -105,7 +110,7 @@ private fun queryDisplayName(context: Context, uri: Uri): String? = try {
         val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
         if (cursor.moveToFirst() && nameIndex >= 0) cursor.getString(nameIndex) else null
     }
-} catch (e: Exception) {
+} catch (_: Exception) {
     null
 }
 
@@ -113,65 +118,64 @@ private fun queryDisplayName(context: Context, uri: Uri): String? = try {
 fun DoctorRegister(
     isLoading: Boolean = false,
     errorMessage: String? = null,
+    initialEmail: String = "",
+    existingAccount: Boolean = false,
     onRegister: (DoctorRegistrationInfo, DoctorRegistrationUris) -> Unit,
     onLogin: () -> Unit
 ) {
-    val background = Color(0xFFFAF9FF)
-    val darkText = Color(0xFF182033)
-    val blue = Color(0xFF385A9E)
-    val greyText = Color(0xFF4F555C)
-    val navyButton = Color(0xFF293147)
+    val background = AuthColors.Background
+    val darkText = AuthColors.TextPrimary
+    val blue = AuthColors.DoctorAccent
+    val greyText = AuthColors.TextSecondary
+    val navyButton = AuthColors.Button
+    val errorRed = AuthColors.Error
     val context = LocalContext.current
 
-    @Composable
-    fun fieldColors() = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = blue,
-        unfocusedBorderColor = Color(0xFFE2E5EC),
-        focusedTextColor = darkText,
-        unfocusedTextColor = darkText,
-        cursorColor = blue,
-        focusedLabelColor = blue,
-        unfocusedLabelColor = greyText,
-        focusedContainerColor = Color.White,
-        unfocusedContainerColor = Color.White,
-        focusedPlaceholderColor = greyText,
-        unfocusedPlaceholderColor = greyText
-    )
+    val fieldColors = authTextFieldColors(blue)
 
-    var step by remember { mutableStateOf(DoctorRegisterStep.PRACTICE) }
+    var stepIndex by rememberSaveable { mutableStateOf(0) }
+    val step = DoctorRegisterStep.entries[stepIndex]
 
-    var practiceNumber by remember { mutableStateOf("") }
-    var practiceName by remember { mutableStateOf("") }
-    var hpcsaNumber by remember { mutableStateOf("") }
-    var discipline by remember { mutableStateOf("") }
-    var qualifications by remember { mutableStateOf("") }
-    var operatingHours by remember { mutableStateOf("") }
-    var consultationFee by remember { mutableStateOf("") }
-    var medicalAidSchemes by remember { mutableStateOf("") }
+    var practiceNumber by rememberSaveable { mutableStateOf("") }
+    var practiceName by rememberSaveable { mutableStateOf("") }
+    var hpcsaNumber by rememberSaveable { mutableStateOf("") }
+    var discipline by rememberSaveable { mutableStateOf("") }
+    var qualifications by rememberSaveable { mutableStateOf("") }
+    var operatingHours by rememberSaveable { mutableStateOf("") }
+    var consultationFee by rememberSaveable { mutableStateOf("") }
+    var medicalAidSchemes by rememberSaveable { mutableStateOf("") }
 
-    var title by remember { mutableStateOf(titleOptions[0]) }
-    var name by remember { mutableStateOf("") }
-    var surname by remember { mutableStateOf("") }
-    var idNumber by remember { mutableStateOf("") }
-    var cellNumber by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
-    var languagesSpoken by remember { mutableStateOf("") }
-    var gender by remember { mutableStateOf("") }
+    val title = "Dr"
+    var name by rememberSaveable { mutableStateOf("") }
+    var surname by rememberSaveable { mutableStateOf("") }
+    var idNumber by rememberSaveable { mutableStateOf("") }
+    var cellNumber by rememberSaveable { mutableStateOf("") }
+    var email by rememberSaveable(initialEmail) { mutableStateOf(initialEmail) }
+    var languagesSpoken by rememberSaveable { mutableStateOf("") }
+    var gender by rememberSaveable { mutableStateOf("") }
 
-    var province by remember { mutableStateOf("") }
-    var city by remember { mutableStateOf("") }
-    var addressLine1 by remember { mutableStateOf("") }
-    var addressLine2 by remember { mutableStateOf("") }
-    var addressLine3 by remember { mutableStateOf("") }
-    var postalCode by remember { mutableStateOf("") }
+    var province by rememberSaveable { mutableStateOf("") }
+    var city by rememberSaveable { mutableStateOf("") }
+    var addressLine1 by rememberSaveable { mutableStateOf("") }
+    var addressLine2 by rememberSaveable { mutableStateOf("") }
+    var addressLine3 by rememberSaveable { mutableStateOf("") }
+    var postalCode by rememberSaveable { mutableStateOf("") }
 
-    var profilePhotoUri by remember { mutableStateOf<Uri?>(null) }
-    var idDocumentUri by remember { mutableStateOf<Uri?>(null) }
-    var hpcsaCertUri by remember { mutableStateOf<Uri?>(null) }
-    var medicalDegreeUri by remember { mutableStateOf<Uri?>(null) }
-    var specialistCertUri by remember { mutableStateOf<Uri?>(null) }
-    var practiceCertUri by remember { mutableStateOf<Uri?>(null) }
-    var proofOfAddressUri by remember { mutableStateOf<Uri?>(null) }
+    var profilePhotoUriText by rememberSaveable { mutableStateOf<String?>(null) }
+    var idDocumentUriText by rememberSaveable { mutableStateOf<String?>(null) }
+    var hpcsaCertUriText by rememberSaveable { mutableStateOf<String?>(null) }
+    var medicalDegreeUriText by rememberSaveable { mutableStateOf<String?>(null) }
+    var specialistCertUriText by rememberSaveable { mutableStateOf<String?>(null) }
+    var practiceCertUriText by rememberSaveable { mutableStateOf<String?>(null) }
+    var proofOfAddressUriText by rememberSaveable { mutableStateOf<String?>(null) }
+
+    val profilePhotoUri = profilePhotoUriText?.let(Uri::parse)
+    val idDocumentUri = idDocumentUriText?.let(Uri::parse)
+    val hpcsaCertUri = hpcsaCertUriText?.let(Uri::parse)
+    val medicalDegreeUri = medicalDegreeUriText?.let(Uri::parse)
+    val specialistCertUri = specialistCertUriText?.let(Uri::parse)
+    val practiceCertUri = practiceCertUriText?.let(Uri::parse)
+    val proofOfAddressUri = proofOfAddressUriText?.let(Uri::parse)
 
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
@@ -179,141 +183,148 @@ fun DoctorRegister(
     var confirmPasswordVisible by remember { mutableStateOf(false) }
     var passwordFieldFocused by remember { mutableStateOf(false) }
 
-    var stepError by remember { mutableStateOf<String?>(null) }
+    var fieldErrors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
 
     val profilePhotoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) profilePhotoUri = uri
+        if (uri != null) profilePhotoUriText = uri.toString()
     }
     val idDocumentLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) idDocumentUri = uri
+        if (uri != null) {
+            idDocumentUriText = uri.toString()
+            fieldErrors = fieldErrors - "idDocument"
+        }
     }
     val hpcsaCertLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) hpcsaCertUri = uri
+        if (uri != null) {
+            hpcsaCertUriText = uri.toString()
+            fieldErrors = fieldErrors - "hpcsaCert"
+        }
     }
     val medicalDegreeLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) medicalDegreeUri = uri
+        if (uri != null) {
+            medicalDegreeUriText = uri.toString()
+            fieldErrors = fieldErrors - "medicalDegree"
+        }
     }
     val specialistCertLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) specialistCertUri = uri
+        if (uri != null) specialistCertUriText = uri.toString()
     }
     val practiceCertLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) practiceCertUri = uri
+        if (uri != null) {
+            practiceCertUriText = uri.toString()
+            fieldErrors = fieldErrors - "practiceCert"
+        }
     }
     val proofOfAddressLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) proofOfAddressUri = uri
+        if (uri != null) {
+            proofOfAddressUriText = uri.toString()
+            fieldErrors = fieldErrors - "proofOfAddress"
+        }
     }
 
-    val passwordsMatch = confirmPassword.isEmpty() ||
-            confirmPassword.length < password.length ||
-            password == confirmPassword
+    fun validateCurrentStep(): Boolean {
+        val errors = mutableMapOf<String, String>()
 
-    fun validateAndAdvance() {
-        stepError = null
         when (step) {
-            DoctorRegisterStep.PRACTICE -> {
-                when {
-                    practiceNumber.isBlank() -> stepError = "Please enter your practice number."
-                    practiceName.isBlank() -> stepError = "Please enter your practice name."
-                    hpcsaNumber.isBlank() -> stepError = "Please enter your HPCSA registration number."
-                    qualifications.isBlank() -> stepError = "Please enter your qualifications."
-                    operatingHours.isBlank() -> stepError = "Please enter your operating hours."
-                    medicalAidSchemes.isBlank() -> stepError = "Please enter accepted medical aid schemes."
-                    else -> step = DoctorRegisterStep.PERSONAL
+            DoctorRegisterStep.PROFESSIONAL -> {
+                if (practiceNumber.isBlank()) errors["practiceNumber"] = "Practice number is required."
+                if (practiceName.isBlank()) errors["practiceName"] = "Practice name is required."
+                if (hpcsaNumber.isBlank()) errors["hpcsaNumber"] = "HPCSA registration number is required."
+                if (discipline.isBlank()) errors["discipline"] = "Discipline is required."
+                if (qualifications.isBlank()) errors["qualifications"] = "Qualifications are required."
+                if (consultationFee.isNotBlank() && consultationFee.toDoubleOrNull() == null) {
+                    errors["consultationFee"] = "Enter a valid amount, for example 350."
                 }
             }
 
             DoctorRegisterStep.PERSONAL -> {
-                when {
-                    name.isBlank() || surname.isBlank() -> stepError = "Please enter your full name."
-                    idNumber.length != 13 -> stepError = "ID number must be exactly 13 digits."
-                    cellNumber.length != 10 -> stepError = "Cell phone number must be exactly 10 digits."
-                    email.isBlank() -> stepError = "Please enter your email address."
-                    !email.matches(Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) -> stepError = "Please enter a valid email address."
-                    languagesSpoken.isBlank() -> stepError = "Please select a language."
-                    gender.isBlank() -> stepError = "Please select a gender option."
-                    else -> step = DoctorRegisterStep.ADDRESS
-                }
+                if (name.isBlank()) errors["name"] = "First name is required."
+                if (surname.isBlank()) errors["surname"] = "Surname is required."
+                if (!isValidSaIdNumber(idNumber)) errors["id"] = "Enter a 13-digit South African ID number."
+                if (!isValidSaPhoneNumber(cellNumber)) errors["phone"] = "Enter a 10-digit phone number."
+                if (!isValidEmail(email)) errors["email"] = "Enter a valid email address."
+                if (languagesSpoken.isBlank()) errors["language"] = "Select a preferred language."
+                if (gender.isBlank()) errors["gender"] = "Select a gender option."
             }
 
-            DoctorRegisterStep.ADDRESS -> {
-                when {
-                    province.isBlank() -> stepError = "Please select a province."
-                    city.isBlank() -> stepError = "Please enter a city."
-                    addressLine1.isBlank() -> stepError = "Please enter address line 1."
-                    postalCode.isBlank() -> stepError = "Please enter a postal code."
-                    else -> step = DoctorRegisterStep.DOCUMENTS
-                }
+            DoctorRegisterStep.PRACTICE -> {
+                if (province.isBlank()) errors["province"] = "Select a province."
+                if (city.isBlank()) errors["city"] = "City is required."
+                if (addressLine1.isBlank()) errors["address1"] = "Practice address is required."
+                if (!isValidSaPostalCode(postalCode)) errors["postal"] = "Enter a 4-digit postal code."
             }
 
             DoctorRegisterStep.DOCUMENTS -> {
-                when {
-                    idDocumentUri == null -> stepError = "Please upload a certified copy of your ID."
-                    hpcsaCertUri == null -> stepError = "Please upload your HPCSA registration certificate."
-                    medicalDegreeUri == null -> stepError = "Please upload your medical degree certificate."
-                    practiceCertUri == null -> stepError = "Please upload your practice registration certificate."
-                    proofOfAddressUri == null -> stepError = "Please upload proof of address."
-                    else -> step = DoctorRegisterStep.SECURITY
-                }
+                if (idDocumentUri == null) errors["idDocument"] = "Upload a certified ID copy."
+                if (hpcsaCertUri == null) errors["hpcsaCert"] = "Upload your HPCSA certificate."
+                if (medicalDegreeUri == null) errors["medicalDegree"] = "Upload your medical degree certificate."
+                if (practiceCertUri == null) errors["practiceCert"] = "Upload your practice registration certificate."
+                if (proofOfAddressUri == null) errors["proofOfAddress"] = "Upload proof of address."
             }
 
             DoctorRegisterStep.SECURITY -> {
-                when {
-                    !isPasswordValid(password) -> stepError = "Your password doesn't meet all requirements yet."
-                    password != confirmPassword -> stepError = "Passwords do not match."
-                    else -> onRegister(
-                        DoctorRegistrationInfo(
-                            practiceNumber = practiceNumber,
-                            practiceName = practiceName,
-                            hpcsaNumber = hpcsaNumber,
-                            discipline = discipline,
-                            qualifications = qualifications,
-                            operatingHours = operatingHours,
-                            consultationFee = consultationFee,
-                            medicalAidSchemes = medicalAidSchemes,
-                            title = title,
-                            name = name,
-                            surname = surname,
-                            idNumber = idNumber,
-                            cellNumber = cellNumber,
-                            email = email,
-                            languagesSpoken = languagesSpoken,
-                            gender = gender,
-                            province = province,
-                            city = city,
-                            addressLine1 = addressLine1,
-                            addressLine2 = addressLine2,
-                            addressLine3 = addressLine3,
-                            postalCode = postalCode,
-                            password = password
-                        ),
-                        DoctorRegistrationUris(
-                            profilePhoto = profilePhotoUri,
-                            idDocument = idDocumentUri,
-                            hpcsaCertificate = hpcsaCertUri,
-                            medicalDegree = medicalDegreeUri,
-                            specialistCertificate = specialistCertUri,
-                            practiceCertificate = practiceCertUri,
-                            proofOfAddress = proofOfAddressUri
-                        )
-                    )
+                if (!existingAccount) {
+                    if (!isPasswordValid(password)) errors["password"] = "Your password does not meet all requirements yet."
+                    if (password != confirmPassword) errors["confirmPassword"] = "Passwords do not match."
                 }
             }
         }
+
+        fieldErrors = errors
+        return errors.isEmpty()
+    }
+
+    fun continueFlow() {
+        if (!validateCurrentStep()) return
+
+        if (step != DoctorRegisterStep.SECURITY) {
+            stepIndex += 1
+            fieldErrors = emptyMap()
+            return
+        }
+
+        onRegister(
+            DoctorRegistrationInfo(
+                practiceNumber = practiceNumber.trim(),
+                practiceName = practiceName.trim(),
+                hpcsaNumber = hpcsaNumber.trim(),
+                discipline = discipline.trim(),
+                qualifications = qualifications.trim(),
+                operatingHours = operatingHours.trim(),
+                consultationFee = consultationFee.trim(),
+                medicalAidSchemes = medicalAidSchemes.trim(),
+                title = title,
+                name = name.trim(),
+                surname = surname.trim(),
+                idNumber = idNumber,
+                cellNumber = cellNumber,
+                email = email.trim(),
+                languagesSpoken = languagesSpoken,
+                gender = gender,
+                province = province,
+                city = city.trim(),
+                addressLine1 = addressLine1.trim(),
+                addressLine2 = addressLine2.trim(),
+                addressLine3 = addressLine3.trim(),
+                postalCode = postalCode,
+                password = password
+            ),
+            DoctorRegistrationUris(
+                profilePhoto = profilePhotoUri,
+                idDocument = idDocumentUri,
+                hpcsaCertificate = hpcsaCertUri,
+                medicalDegree = medicalDegreeUri,
+                specialistCertificate = specialistCertUri,
+                practiceCertificate = practiceCertUri,
+                proofOfAddress = proofOfAddressUri
+            )
+        )
     }
 
     fun goBack() {
-        stepError = null
-        step = when (step) {
-            DoctorRegisterStep.PRACTICE -> DoctorRegisterStep.PRACTICE
-            DoctorRegisterStep.PERSONAL -> DoctorRegisterStep.PRACTICE
-            DoctorRegisterStep.ADDRESS -> DoctorRegisterStep.PERSONAL
-            DoctorRegisterStep.DOCUMENTS -> DoctorRegisterStep.ADDRESS
-            DoctorRegisterStep.SECURITY -> DoctorRegisterStep.DOCUMENTS
-        }
+        fieldErrors = emptyMap()
+        if (stepIndex > 0) stepIndex -= 1
     }
-
-    val stepIndex = DoctorRegisterStep.entries.indexOf(step)
-    val totalSteps = DoctorRegisterStep.entries.size
 
     Scaffold { paddingValues ->
         Column(
@@ -326,12 +337,18 @@ fun DoctorRegister(
                 .padding(paddingValues)
                 .padding(vertical = 24.dp)
         ) {
-            Text("Doctor Registration", color = darkText, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text("Doctor registration", color = darkText, fontSize = 24.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(4.dp))
-            Text("Step ${stepIndex + 1} of $totalSteps · ${step.label}", color = greyText, fontSize = 13.sp)
+            Text(
+                "Step ${stepIndex + 1} of ${DoctorRegisterStep.entries.size} · ${step.label}",
+                color = greyText,
+                fontSize = 13.sp
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(step.helper, color = greyText, fontSize = 12.5.sp, lineHeight = 18.sp)
             Spacer(modifier = Modifier.height(10.dp))
             LinearProgressIndicator(
-                progress = { (stepIndex + 1f) / totalSteps },
+                progress = { (stepIndex + 1f) / DoctorRegisterStep.entries.size },
                 modifier = Modifier.fillMaxWidth().height(6.dp),
                 color = blue,
                 trackColor = Color(0xFFE3E6EC)
@@ -339,120 +356,141 @@ fun DoctorRegister(
             Spacer(modifier = Modifier.height(24.dp))
 
             when (step) {
-                DoctorRegisterStep.PRACTICE -> {
-                    OutlinedTextField(practiceNumber, { practiceNumber = it }, label = { Text("Practice number") }, singleLine = true, colors = fieldColors(), modifier = Modifier.fillMaxWidth())
+                DoctorRegisterStep.PROFESSIONAL -> {
+                    DoctorField(practiceNumber, { practiceNumber = it; fieldErrors = fieldErrors - "practiceNumber" }, "Practice number", fieldErrors["practiceNumber"], fieldColors)
                     Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(practiceName, { practiceName = it }, label = { Text("Practice name") }, singleLine = true, colors = fieldColors(), modifier = Modifier.fillMaxWidth())
+                    DoctorField(practiceName, { practiceName = it; fieldErrors = fieldErrors - "practiceName" }, "Practice name", fieldErrors["practiceName"], fieldColors)
                     Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(hpcsaNumber, { hpcsaNumber = it }, label = { Text("HPCSA registration number") }, singleLine = true, colors = fieldColors(), modifier = Modifier.fillMaxWidth())
+                    DoctorField(hpcsaNumber, { hpcsaNumber = it; fieldErrors = fieldErrors - "hpcsaNumber" }, "HPCSA registration number", fieldErrors["hpcsaNumber"], fieldColors)
                     Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(discipline, { discipline = it }, label = { Text("Discipline") }, placeholder = { Text("e.g. General Practitioner") }, singleLine = true, colors = fieldColors(), modifier = Modifier.fillMaxWidth())
+                    DoctorField(discipline, { discipline = it; fieldErrors = fieldErrors - "discipline" }, "Discipline / speciality", fieldErrors["discipline"], fieldColors, placeholder = "e.g. General Practitioner")
                     Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(qualifications, { qualifications = it }, label = { Text("Qualifications") }, placeholder = { Text("e.g. MBChB, MMed") }, singleLine = true, colors = fieldColors(), modifier = Modifier.fillMaxWidth())
+                    DoctorField(qualifications, { qualifications = it; fieldErrors = fieldErrors - "qualifications" }, "Qualifications", fieldErrors["qualifications"], fieldColors, placeholder = "e.g. MBChB")
+
+                    Spacer(modifier = Modifier.height(24.dp))
+                    DoctorSectionHeading(
+                        "Practice preferences",
+                        "Optional for registration. You can complete or update these later from your profile.",
+                        darkText,
+                        greyText
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    DoctorField(operatingHours, { operatingHours = it }, "Operating hours (optional)", null, fieldColors, placeholder = "e.g. Mon-Fri 08:00-17:00")
                     Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(operatingHours, { operatingHours = it }, label = { Text("Operating hours") }, placeholder = { Text("e.g. Mon-Fri 08:00-17:00") }, singleLine = true, colors = fieldColors(), modifier = Modifier.fillMaxWidth())
+                    DoctorField(
+                        consultationFee,
+                        { consultationFee = it.filter { ch -> ch.isDigit() || ch == '.' }; fieldErrors = fieldErrors - "consultationFee" },
+                        "Consultation fee (optional)",
+                        fieldErrors["consultationFee"],
+                        fieldColors,
+                        keyboardType = KeyboardType.Decimal,
+                        placeholder = "e.g. 350"
+                    )
                     Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(consultationFee, { consultationFee = it }, label = { Text("Consultation fee") }, placeholder = { Text("e.g. 350") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), colors = fieldColors(), modifier = Modifier.fillMaxWidth())
-                    Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(medicalAidSchemes, { medicalAidSchemes = it }, label = { Text("Medical aid schemes accepted") }, placeholder = { Text("e.g. Discovery, Medihelp, GEMS") }, singleLine = true, colors = fieldColors(), modifier = Modifier.fillMaxWidth())
+                    DoctorField(medicalAidSchemes, { medicalAidSchemes = it }, "Medical aid schemes (optional)", null, fieldColors, placeholder = "e.g. Discovery, GEMS")
                 }
 
                 DoctorRegisterStep.PERSONAL -> {
-                    OutlinedTextField(name, { name = it }, label = { Text("First name") }, singleLine = true, colors = fieldColors(), modifier = Modifier.fillMaxWidth())
+                    DoctorField(name, { name = it; fieldErrors = fieldErrors - "name" }, "First name", fieldErrors["name"], fieldColors)
                     Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(surname, { surname = it }, label = { Text("Surname") }, singleLine = true, colors = fieldColors(), modifier = Modifier.fillMaxWidth())
+                    DoctorField(surname, { surname = it; fieldErrors = fieldErrors - "surname" }, "Surname", fieldErrors["surname"], fieldColors)
                     Spacer(modifier = Modifier.height(12.dp))
-
-                    var titleExpanded by remember { mutableStateOf(false) }
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        OutlinedTextField(
-                            value = title, onValueChange = {}, label = { Text("Title") }, singleLine = true, readOnly = true,
-                            colors = fieldColors(), modifier = Modifier.fillMaxWidth(),
-                            trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = "Select title") }
-                        )
-                        Box(modifier = Modifier.matchParentSize().clickable { titleExpanded = true })
-                        DropdownMenu(expanded = titleExpanded, onDismissRequest = { titleExpanded = false }) {
-                            titleOptions.forEach { option ->
-                                DropdownMenuItem(text = { Text(option) }, onClick = { title = option; titleExpanded = false })
-                            }
-                        }
-                    }
+                    DoctorField(
+                        idNumber,
+                        { idNumber = digitsOnly(it, 13); fieldErrors = fieldErrors - "id" },
+                        "South African ID number",
+                        fieldErrors["id"],
+                        fieldColors,
+                        keyboardType = KeyboardType.Number
+                    )
                     Spacer(modifier = Modifier.height(12.dp))
-
-                    OutlinedTextField(idNumber, { new -> if (new.length <= 13 && new.all { it.isDigit() }) idNumber = new }, label = { Text("ID number (13 digits)") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), colors = fieldColors(), modifier = Modifier.fillMaxWidth())
+                    DoctorField(
+                        cellNumber,
+                        { cellNumber = digitsOnly(it, 10); fieldErrors = fieldErrors - "phone" },
+                        "Cell phone number",
+                        fieldErrors["phone"],
+                        fieldColors,
+                        keyboardType = KeyboardType.Phone
+                    )
                     Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(cellNumber, { new -> if (new.length <= 10) cellNumber = new }, label = { Text("Cell phone number") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), colors = fieldColors(), modifier = Modifier.fillMaxWidth())
+                    DoctorField(
+                        email,
+                        { if (!existingAccount) email = it; fieldErrors = fieldErrors - "email" },
+                        "Email address",
+                        fieldErrors["email"],
+                        fieldColors,
+                        keyboardType = KeyboardType.Email,
+                        readOnly = existingAccount
+                    )
                     Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(email, { email = it }, label = { Text("Email address") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), colors = fieldColors(), modifier = Modifier.fillMaxWidth())
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    var languageExpanded by remember { mutableStateOf(false) }
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        OutlinedTextField(
-                            value = languagesSpoken, onValueChange = {}, label = { Text("Languages spoken") }, singleLine = true, readOnly = true,
-                            colors = fieldColors(), modifier = Modifier.fillMaxWidth(),
-                            trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = "Select language") }
-                        )
-                        Box(modifier = Modifier.matchParentSize().clickable { languageExpanded = true })
-                        DropdownMenu(expanded = languageExpanded, onDismissRequest = { languageExpanded = false }) {
-                            languageOptions.forEach { option ->
-                                DropdownMenuItem(text = { Text(option) }, onClick = { languagesSpoken = option; languageExpanded = false })
-                            }
-                        }
-                    }
+                    DoctorSelectionField(
+                        value = languagesSpoken,
+                        label = "Preferred language",
+                        options = doctorLanguageOptions,
+                        accent = blue,
+                        colors = fieldColors,
+                        error = fieldErrors["language"],
+                        onSelected = { languagesSpoken = it; fieldErrors = fieldErrors - "language" }
+                    )
                     Spacer(modifier = Modifier.height(16.dp))
-
                     Text("Gender", color = darkText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        genderOptions.forEach { option ->
-                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 8.dp)) {
-                                RadioButton(selected = gender == option, onClick = { gender = option }, colors = RadioButtonDefaults.colors(selectedColor = blue))
-                                Text(option, fontSize = 12.sp, color = darkText)
-                            }
+                    doctorGenderOptions.forEach { option ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(
+                                selected = gender == option,
+                                onClick = { gender = option; fieldErrors = fieldErrors - "gender" }
+                            )
+                            Text(option, color = darkText, fontSize = 13.sp)
                         }
                     }
+                    fieldErrors["gender"]?.let { Text(it, color = errorRed, fontSize = 12.sp) }
                 }
 
-                DoctorRegisterStep.ADDRESS -> {
-                    var provinceExpanded by remember { mutableStateOf(false) }
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        OutlinedTextField(
-                            value = province, onValueChange = {}, label = { Text("Province") }, singleLine = true, readOnly = true,
-                            colors = fieldColors(), modifier = Modifier.fillMaxWidth(),
-                            trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = "Select province") }
-                        )
-                        Box(modifier = Modifier.matchParentSize().clickable { provinceExpanded = true })
-                        DropdownMenu(expanded = provinceExpanded, onDismissRequest = { provinceExpanded = false }) {
-                            provinceOptions.forEach { option ->
-                                DropdownMenuItem(text = { Text(option) }, onClick = { province = option; provinceExpanded = false })
-                            }
-                        }
-                    }
+                DoctorRegisterStep.PRACTICE -> {
+                    DoctorSelectionField(
+                        value = province,
+                        label = "Province",
+                        options = doctorProvinceOptions,
+                        accent = blue,
+                        colors = fieldColors,
+                        error = fieldErrors["province"],
+                        onSelected = { province = it; fieldErrors = fieldErrors - "province" }
+                    )
                     Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(city, { city = it }, label = { Text("City") }, singleLine = true, colors = fieldColors(), modifier = Modifier.fillMaxWidth())
+                    DoctorField(city, { city = it; fieldErrors = fieldErrors - "city" }, "City / town", fieldErrors["city"], fieldColors)
                     Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(addressLine1, { addressLine1 = it }, label = { Text("Address line 1") }, singleLine = true, colors = fieldColors(), modifier = Modifier.fillMaxWidth())
+                    DoctorField(addressLine1, { addressLine1 = it; fieldErrors = fieldErrors - "address1" }, "Practice address line 1", fieldErrors["address1"], fieldColors)
                     Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(addressLine2, { addressLine2 = it }, label = { Text("Address line 2") }, singleLine = true, colors = fieldColors(), modifier = Modifier.fillMaxWidth())
+                    DoctorField(addressLine2, { addressLine2 = it }, "Address line 2 (optional)", null, fieldColors)
                     Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(addressLine3, { addressLine3 = it }, label = { Text("Address line 3 (optional)") }, singleLine = true, colors = fieldColors(), modifier = Modifier.fillMaxWidth())
+                    DoctorField(addressLine3, { addressLine3 = it }, "Address line 3 (optional)", null, fieldColors)
                     Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(postalCode, { postalCode = it }, label = { Text("Postal code") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), colors = fieldColors(), modifier = Modifier.fillMaxWidth())
+                    DoctorField(
+                        postalCode,
+                        { postalCode = digitsOnly(it, 4); fieldErrors = fieldErrors - "postal" },
+                        "Postal code",
+                        fieldErrors["postal"],
+                        fieldColors,
+                        keyboardType = KeyboardType.Number
+                    )
                 }
 
                 DoctorRegisterStep.DOCUMENTS -> {
                     Text(
-                        "Upload PDF copies only. Your account stays pending until an administrator verifies these.",
-                        color = greyText, fontSize = 12.5.sp, lineHeight = 18.sp
+                        "Your documents stay private and are used to verify your professional registration. Required documents must be added before submission.",
+                        color = greyText,
+                        fontSize = 12.5.sp,
+                        lineHeight = 18.sp
                     )
-                    Spacer(modifier = Modifier.height(18.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
 
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                         Box(
                             modifier = Modifier
-                                .size(96.dp)
+                                .size(92.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFFEFF1FF))
+                                .background(Color.White)
+                                .border(1.dp, Color(0xFFE2E5EC), CircleShape)
                                 .clickable {
                                     profilePhotoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                                 },
@@ -471,125 +509,283 @@ fun DoctorRegister(
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            if (profilePhotoUri != null) "Change photo" else "Add profile photo",
-                            color = blue, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                            if (profilePhotoUri != null) "Change profile photo" else "Add profile photo (optional)",
+                            color = blue,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.clickable {
                                 profilePhotoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                             }
                         )
                     }
-                    Spacer(modifier = Modifier.height(20.dp))
 
-                    DocumentPickerField("Certified ID copy", idDocumentUri?.let { queryDisplayName(context, it) }, "Certified copy of your South African ID", blue) {
-                        idDocumentLauncher.launch(documentMimeTypes)
-                    }
+                    Spacer(modifier = Modifier.height(22.dp))
+                    DocumentPickerField(
+                        label = "Certified ID copy",
+                        fileName = idDocumentUri?.let { queryDisplayName(context, it) },
+                        helperText = "Required · PDF",
+                        accent = blue,
+                        error = fieldErrors["idDocument"]
+                    ) { idDocumentLauncher.launch(documentMimeTypes) }
                     Spacer(modifier = Modifier.height(14.dp))
-                    DocumentPickerField("HPCSA registration certificate", hpcsaCertUri?.let { queryDisplayName(context, it) }, null, blue) {
-                        hpcsaCertLauncher.launch(documentMimeTypes)
-                    }
+                    DocumentPickerField(
+                        "HPCSA registration certificate",
+                        hpcsaCertUri?.let { queryDisplayName(context, it) },
+                        "Required · PDF",
+                        blue,
+                        fieldErrors["hpcsaCert"]
+                    ) { hpcsaCertLauncher.launch(documentMimeTypes) }
                     Spacer(modifier = Modifier.height(14.dp))
-                    DocumentPickerField("Medical degree certificate", medicalDegreeUri?.let { queryDisplayName(context, it) }, "e.g. MBChB degree certificate", blue) {
-                        medicalDegreeLauncher.launch(documentMimeTypes)
-                    }
+                    DocumentPickerField(
+                        "Medical degree certificate",
+                        medicalDegreeUri?.let { queryDisplayName(context, it) },
+                        "Required · PDF",
+                        blue,
+                        fieldErrors["medicalDegree"]
+                    ) { medicalDegreeLauncher.launch(documentMimeTypes) }
                     Spacer(modifier = Modifier.height(14.dp))
-                    DocumentPickerField("Specialist certificate (optional)", specialistCertUri?.let { queryDisplayName(context, it) }, "Only if applicable to your discipline", blue) {
-                        specialistCertLauncher.launch(documentMimeTypes)
-                    }
+                    DocumentPickerField(
+                        "Specialist certificate",
+                        specialistCertUri?.let { queryDisplayName(context, it) },
+                        "Optional · only if applicable",
+                        blue,
+                        null
+                    ) { specialistCertLauncher.launch(documentMimeTypes) }
                     Spacer(modifier = Modifier.height(14.dp))
-                    DocumentPickerField("Practice registration certificate", practiceCertUri?.let { queryDisplayName(context, it) }, null, blue) {
-                        practiceCertLauncher.launch(documentMimeTypes)
-                    }
+                    DocumentPickerField(
+                        "Practice registration certificate",
+                        practiceCertUri?.let { queryDisplayName(context, it) },
+                        "Required · PDF",
+                        blue,
+                        fieldErrors["practiceCert"]
+                    ) { practiceCertLauncher.launch(documentMimeTypes) }
                     Spacer(modifier = Modifier.height(14.dp))
-                    DocumentPickerField("Proof of address", proofOfAddressUri?.let { queryDisplayName(context, it) }, "Utility bill or bank statement (not older than 3 months)", blue) {
-                        proofOfAddressLauncher.launch(documentMimeTypes)
-                    }
+                    DocumentPickerField(
+                        "Proof of address",
+                        proofOfAddressUri?.let { queryDisplayName(context, it) },
+                        "Required · PDF · recent utility bill or bank statement",
+                        blue,
+                        fieldErrors["proofOfAddress"]
+                    ) { proofOfAddressLauncher.launch(documentMimeTypes) }
                 }
 
                 DoctorRegisterStep.SECURITY -> {
-                    OutlinedTextField(
-                        value = password, onValueChange = { password = it }, label = { Text("Password") }, singleLine = true,
-                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        trailingIcon = {
-                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                                Icon(
-                                    imageVector = if (passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                                    contentDescription = if (passwordVisible) "Hide password" else "Show password"
-                                )
-                            }
-                        },
-                        colors = fieldColors(),
-                        modifier = Modifier.fillMaxWidth().onFocusEvent { passwordFieldFocused = it.isFocused }
-                    )
-                    if (passwordFieldFocused || password.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        PasswordStrengthMeter(password = password)
-                        Spacer(modifier = Modifier.height(10.dp))
-                        PasswordRequirementsChecklist(password = password)
+                    if (existingAccount) {
+                        Text(
+                            "Your sign-in account already exists. Your current password will stay unchanged when you submit this doctor profile.",
+                            color = greyText,
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp
+                        )
+                    } else {
+                        OutlinedTextField(
+                            value = password,
+                            onValueChange = { password = it; fieldErrors = fieldErrors - "password" },
+                            label = { Text("Password") },
+                            singleLine = true,
+                            isError = fieldErrors["password"] != null,
+                            supportingText = fieldErrors["password"]?.let { message -> { Text(message, color = errorRed) } },
+                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            trailingIcon = {
+                                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                    Icon(
+                                        if (passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                        contentDescription = if (passwordVisible) "Hide password" else "Show password"
+                                    )
+                                }
+                            },
+                            colors = fieldColors,
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .onFocusEvent { passwordFieldFocused = it.isFocused }
+                        )
+                        if (passwordFieldFocused || password.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            PasswordStrengthMeter(password = password)
+                            Spacer(modifier = Modifier.height(10.dp))
+                            PasswordRequirementsChecklist(password = password)
+                        }
+                        Spacer(modifier = Modifier.height(14.dp))
+                        OutlinedTextField(
+                            value = confirmPassword,
+                            onValueChange = { confirmPassword = it; fieldErrors = fieldErrors - "confirmPassword" },
+                            label = { Text("Confirm password") },
+                            singleLine = true,
+                            isError = fieldErrors["confirmPassword"] != null,
+                            supportingText = fieldErrors["confirmPassword"]?.let { message -> { Text(message, color = errorRed) } },
+                            visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            trailingIcon = {
+                                IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
+                                    Icon(
+                                        if (confirmPasswordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                        contentDescription = if (confirmPasswordVisible) "Hide password" else "Show password"
+                                    )
+                                }
+                            },
+                            colors = fieldColors,
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
-                    Spacer(modifier = Modifier.height(14.dp))
-                    OutlinedTextField(
-                        value = confirmPassword, onValueChange = { confirmPassword = it }, label = { Text("Confirm password") }, singleLine = true,
-                        isError = !passwordsMatch,
-                        visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        trailingIcon = {
-                            IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
-                                Icon(
-                                    imageVector = if (confirmPasswordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                                    contentDescription = if (confirmPasswordVisible) "Hide password" else "Show password"
-                                )
-                            }
-                        },
-                        colors = fieldColors(), modifier = Modifier.fillMaxWidth()
+
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Text(
+                        "After submission, your account remains pending until your documents are reviewed and approved. You can check your verification status from the app.",
+                        color = greyText,
+                        fontSize = 12.5.sp,
+                        lineHeight = 18.sp
                     )
-                    if (!passwordsMatch) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("Passwords don't match.", color = Color(0xFFD64545), fontSize = 13.sp)
-                    }
                 }
             }
 
-            (stepError ?: errorMessage)?.let {
+            errorMessage?.let {
                 Spacer(modifier = Modifier.height(14.dp))
-                Text(it, color = Color(0xFFD64545), fontSize = 13.sp)
+                Text(it, color = errorRed, fontSize = 13.sp)
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
             Row(modifier = Modifier.fillMaxWidth()) {
-                if (step != DoctorRegisterStep.PRACTICE) {
+                if (stepIndex > 0) {
                     OutlinedButton(
-                        onClick = ::goBack, enabled = !isLoading,
-                        modifier = Modifier.weight(1f).height(54.dp), shape = RoundedCornerShape(28.dp)
+                        onClick = ::goBack,
+                        enabled = !isLoading,
+                        modifier = Modifier.weight(1f).height(54.dp),
+                        shape = RoundedCornerShape(18.dp)
                     ) {
                         Text("Back", color = darkText, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                 }
+
                 Button(
-                    onClick = ::validateAndAdvance, enabled = !isLoading,
-                    modifier = Modifier.weight(1f).height(54.dp), shape = RoundedCornerShape(28.dp),
+                    onClick = ::continueFlow,
+                    enabled = !isLoading,
+                    modifier = Modifier.weight(1f).height(54.dp),
+                    shape = RoundedCornerShape(18.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = navyButton)
                 ) {
                     if (isLoading) {
                         CircularProgressIndicator(color = Color.White, modifier = Modifier.height(20.dp), strokeWidth = 2.dp)
                     } else {
                         Text(
-                            if (step == DoctorRegisterStep.SECURITY) "Register" else "Next",
-                            color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold
+                            if (step == DoctorRegisterStep.SECURITY) {
+                                if (existingAccount) "Submit profile" else "Submit application"
+                            } else {
+                                "Continue"
+                            },
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                Text("Already have an account? ", color = greyText, fontSize = 14.sp)
-                Text("Log in", color = blue, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onLogin() })
+            if (!existingAccount) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                    Text("Already have an account? ", color = greyText, fontSize = 14.sp)
+                    Text(
+                        "Log in",
+                        color = blue,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.clickable { onLogin() }
+                    )
+                }
             }
         }
     }
+}
+
+@Composable
+private fun DoctorField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    error: String?,
+    colors: androidx.compose.material3.TextFieldColors,
+    keyboardType: KeyboardType = KeyboardType.Text,
+    placeholder: String? = null,
+    readOnly: Boolean = false
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        placeholder = placeholder?.let { valueText -> { Text(valueText) } },
+        singleLine = true,
+        readOnly = readOnly,
+        isError = error != null,
+        supportingText = error?.let { message -> { Text(message, color = Color(0xFFD64545)) } },
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        colors = colors,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
+@Composable
+private fun DoctorSelectionField(
+    value: String,
+    label: String,
+    options: List<String>,
+    accent: Color,
+    colors: androidx.compose.material3.TextFieldColors,
+    error: String?,
+    onSelected: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Column {
+        Box(modifier = Modifier.fillMaxWidth()) {
+            OutlinedTextField(
+                value = value,
+                onValueChange = {},
+                label = { Text(label) },
+                readOnly = true,
+                singleLine = true,
+                isError = error != null,
+                trailingIcon = {
+                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Select $label", tint = accent)
+                },
+                colors = colors,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Box(modifier = Modifier.matchParentSize().clickable { expanded = true })
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                options.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option) },
+                        onClick = {
+                            onSelected(option)
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
+        error?.let {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(it, color = Color(0xFFD64545), fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
+private fun DoctorSectionHeading(
+    title: String,
+    subtitle: String,
+    color: Color,
+    secondary: Color
+) {
+    Text(title, color = color, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+    Spacer(modifier = Modifier.height(4.dp))
+    Text(subtitle, color = secondary, fontSize = 12.5.sp, lineHeight = 18.sp)
 }
 
 @Composable
@@ -598,6 +794,7 @@ private fun DocumentPickerField(
     fileName: String?,
     helperText: String?,
     accent: Color,
+    error: String?,
     onClick: () -> Unit
 ) {
     Column {
@@ -607,7 +804,11 @@ private fun DocumentPickerField(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color.White, RoundedCornerShape(16.dp))
-                .border(1.dp, Color(0xFFE2E5EC), RoundedCornerShape(16.dp))
+                .border(
+                    1.dp,
+                    if (error != null) Color(0xFFD64545) else Color(0xFFE2E5EC),
+                    RoundedCornerShape(16.dp)
+                )
                 .clickable { onClick() }
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -615,14 +816,18 @@ private fun DocumentPickerField(
             Icon(Icons.Outlined.UploadFile, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
             Spacer(modifier = Modifier.width(10.dp))
             Text(
-                fileName ?: "Choose file",
+                fileName ?: "Choose PDF",
                 color = if (fileName != null) Color(0xFF182033) else Color(0xFF4F555C),
                 fontSize = 14.sp
             )
         }
-        if (helperText != null) {
+        helperText?.let {
             Spacer(modifier = Modifier.height(4.dp))
-            Text(helperText, color = Color(0xFF4F555C), fontSize = 12.sp)
+            Text(it, color = Color(0xFF4F555C), fontSize = 12.sp)
+        }
+        error?.let {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(it, color = Color(0xFFD64545), fontSize = 12.sp)
         }
     }
 }

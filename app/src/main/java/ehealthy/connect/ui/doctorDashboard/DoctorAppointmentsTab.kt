@@ -839,6 +839,79 @@ private fun DoctorAppointmentListCard(
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // ACTION AREA
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(15.dp))
+                    .background(
+                        Color.White.copy(
+                            alpha = 0.64f
+                        )
+                    )
+                    .padding(
+                        horizontal = 12.dp,
+                        vertical = 10.dp
+                    ),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector =
+                        if (
+                            status == "confirmed" ||
+                            status == "accepted"
+                        ) {
+                            Icons.Outlined.Videocam
+                        } else {
+                            Icons.Outlined.Description
+                        },
+                    contentDescription = null,
+                    tint = AppointmentTeal,
+                    modifier = Modifier.size(18.dp)
+                )
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text =
+                            if (
+                                status == "confirmed" ||
+                                status == "accepted"
+                            ) {
+                                "Consultation ready"
+                            } else {
+                                "Appointment actions"
+                            },
+                        color = AppointmentInk,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Text(
+                        text = "View details, confirm, call or update status",
+                        color = AppointmentMuted,
+                        fontSize = 8.5.sp
+                    )
+                }
+
+                IconButton(
+                    onClick = onActions,
+                    modifier = Modifier.size(34.dp)
+                ) {
+                    Icon(
+                        Icons.Outlined.MoreVert,
+                        contentDescription = "Appointment actions",
+                        tint = AppointmentInk,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
         }
     }
 }

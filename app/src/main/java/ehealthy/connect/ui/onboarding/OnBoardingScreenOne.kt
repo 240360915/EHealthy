@@ -138,7 +138,7 @@ fun OnboardingOne(
                     )
                     Spacer(modifier = Modifier.width(9.dp))
                     Text(
-                        text = "Certified Clinical Network",
+                        text = "Care in one connected place",
                         color = darkText,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
@@ -161,7 +161,7 @@ fun OnboardingOne(
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "Find trusted healthcare professionals and\nmanage your healthcare from one simple\napp.",
+                text = "Find healthcare professionals, book care, and\nmanage important health information from\none connected app.",
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center,
                 color = greyText,
@@ -271,12 +271,12 @@ fun OnboardingOne(
                 onClick = onContinue,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(66.dp),
-                shape = RoundedCornerShape(35.dp),
+                    .height(56.dp),
+                shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = navyButton)
             ) {
                 Text(
-                    text = "Continue  →",
+                    text = "Continue",
                     color = Color.White,
                     fontSize = 19.sp,
                     fontWeight = FontWeight.Bold

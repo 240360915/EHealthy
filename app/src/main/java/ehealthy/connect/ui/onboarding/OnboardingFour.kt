@@ -138,7 +138,7 @@ fun OnboardingFour(
                     )
                     Spacer(modifier = Modifier.width(9.dp))
                     Text(
-                        text = "Your Records, Always Safe",
+                        text = "Your health records in one place",
                         color = darkText,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
@@ -169,7 +169,7 @@ fun OnboardingFour(
             // ------------------------------------------------
 
             Text(
-                text = "Prescriptions, records, and past visits —\nall saved automatically so you never\nlose track of your health.",
+                text = "Keep prescriptions, records, and past visits\norganized in one place so they are easier\nto find when you need them.",
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center,
                 color = greyText,
@@ -296,12 +296,12 @@ fun OnboardingFour(
                 onClick = onGetStarted,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(66.dp),
-                shape = RoundedCornerShape(35.dp),
+                    .height(56.dp),
+                shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = navyButton)
             ) {
                 Text(
-                    text = "Get Started  →",
+                    text = "Get started",
                     color = Color.White,
                     fontSize = 19.sp,
                     fontWeight = FontWeight.Bold

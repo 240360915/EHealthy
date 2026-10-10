@@ -34,13 +34,18 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import ehealthy.connect.ui.common.PrivacyPolicyScreen
 import ehealthy.connect.ui.common.ContactUsScreen
-import ehealthy.connect.ui.common.isPasswordStrong
+import ehealthy.connect.ui.common.IncompleteProfileScreen
+import ehealthy.connect.ui.common.TermsOfUseScreen
+import ehealthy.connect.ui.common.isPasswordValid
+import ehealthy.connect.ui.common.isValidEmail
+import ehealthy.connect.ui.common.normalizeEmail
 import ehealthy.connect.ui.doctorDashboard.DoctorAccountSettings
 import ehealthy.connect.ui.doctorDashboard.DoctorDashboard
 import ehealthy.connect.ui.doctorDashboard.DoctorDemoEarningsScreen
 import ehealthy.connect.ui.doctorDashboard.DoctorPatientCareFileScreen
 import ehealthy.connect.ui.doctorDashboard.DoctorForgotPassword
 import ehealthy.connect.ui.doctor.DoctorLogin
+import ehealthy.connect.ui.doctor.DoctorVerificationScreen
 import ehealthy.connect.ui.doctorDashboard.DoctorPrescriptions
 import ehealthy.connect.ui.doctorDashboard.DoctorProfile
 import ehealthy.connect.ui.doctorDashboard.DoctorProfileRow
@@ -102,8 +107,10 @@ import ehealthy.connect.ui.patientDashboard.Review
 import ehealthy.connect.ui.patientDashboard.ReviewDisplay
 import ehealthy.connect.ui.patientDashboard.SettingsScreen
 import ehealthy.connect.ui.theme.EHealthyTheme
+import ehealthy.connect.ui.splash.SplashScreen
 import ehealthy.connect.util.SupabaseClientProvider
 import ehealthy.connect.util.ThemeManager
+import ehealthy.connect.util.OnboardingPreferences
 import ehealthy.connect.util.showBoldToast
 import io.github.jan.supabase.auth.OtpType
 import io.github.jan.supabase.auth.auth
@@ -167,6 +174,15 @@ private data class DoctorLookup(
 @Composable
 fun AppNavGraph(pendingRoute: String? = null) {
     val navController = rememberNavController()
+    val appContext = LocalContext.current.applicationContext
+
+    fun finishOnboarding() {
+        OnboardingPreferences.markComplete(appContext)
+        navController.navigate("choose") {
+            popUpTo("onboarding1") { inclusive = true }
+            launchSingleTop = true
+        }
+    }
 
     NavHost(navController = navController, startDestination = "splash") {
         composable(
@@ -214,7 +230,9 @@ fun AppNavGraph(pendingRoute: String? = null) {
             LaunchedEffect(retry) {
                 startupError = false
                 try {
-                    val home = ProfileRepository.startupRoute()
+                    val home = ProfileRepository.startupRoute(
+                        onboardingComplete = OnboardingPreferences.isComplete(appContext)
+                    )
                     val scheduledPatientCall =
                         pendingRoute
                             ?.matches(
@@ -287,11 +305,10 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 } catch (e: kotlinx.coroutines.CancellationException) { throw e
                 } catch (_: Exception) { startupError = true }
             }
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                if (startupError) androidx.compose.material3.TextButton(onClick = { retry++ }) {
-                    Text("Could not restore your profile. Tap to retry.")
-                } else CircularProgressIndicator()
-            }
+            SplashScreen(
+                startupError = startupError,
+                onRetry = { retry++ }
+            )
         }
         composable("editProfile") {
             val scope = rememberCoroutineScope()
@@ -504,44 +521,67 @@ fun AppNavGraph(pendingRoute: String? = null) {
         composable("onboarding1") {
             OnboardingOne(
                 onContinue = { navController.navigate("onboarding2") },
-                onSkip = { navController.navigate("choose") }
+                onSkip = { finishOnboarding() }
             )
         }
 
         composable("onboarding2") {
             OnboardingScreenTwo(
                 onContinue = { navController.navigate("onboarding3") },
-                onSkip = { navController.navigate("choose") }
+                onSkip = { finishOnboarding() }
             )
         }
 
         composable("onboarding3") {
             OnBoardingScreenThree(
                 onContinue = { navController.navigate("onboarding4") },
-                onSkip = { navController.navigate("choose") }
+                onSkip = { finishOnboarding() }
             )
         }
 
         composable("onboarding4") {
             OnboardingFour(
-                onGetStarted = { navController.navigate("choose") }
+                onGetStarted = { finishOnboarding() }
             )
         }
 
         composable("choose") {
             ChooseRoleScreen(
                 onPatientSelected = { navController.navigate("patientLogin") },
-                onDoctorSelected = { navController.navigate("doctorLogin") }
+                onDoctorSelected = { navController.navigate("doctorLogin") },
+                onTermsSelected = { navController.navigate("termsOfUse") },
+                onPrivacySelected = { navController.navigate("privacyPolicy") }
+            )
+        }
+
+        composable("incompleteProfile") {
+            val scope = rememberCoroutineScope()
+            val email = SupabaseClientProvider.client.auth.currentUserOrNull()?.email.orEmpty()
+
+            IncompleteProfileScreen(
+                email = email,
+                onContinueAsPatient = {
+                    navController.navigate("patientRegister?email=${Uri.encode(email)}")
+                },
+                onContinueAsDoctor = {
+                    navController.navigate("doctorRegister")
+                },
+                onSignOut = {
+                    scope.launch {
+                        ehealthy.connect.consultation.ConsultationDevices.signOut()
+                        navController.navigate("choose") {
+                            popUpTo("incompleteProfile") { inclusive = true }
+                        }
+                    }
+                }
             )
         }
 
         composable("patientLogin") {
             val scope = rememberCoroutineScope()
-            val context = LocalContext.current
 
             var mode by remember { mutableStateOf(LoginMode.LOGIN) }
             var isLoading by remember { mutableStateOf(false) }
-            var isGoogleLoading by remember { mutableStateOf(false) }
             var email by remember { mutableStateOf("") }
             var password by remember { mutableStateOf("") }
             var otp by remember { mutableStateOf("") }
@@ -553,7 +593,6 @@ fun AppNavGraph(pendingRoute: String? = null) {
             PatientLogin(
                 mode = mode,
                 isLoading = isLoading,
-
                 email = email,
                 password = password,
                 otp = otp,
@@ -561,32 +600,59 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 confirmPassword = confirmPassword,
                 errorMessage = errorMessage,
                 successMessage = successMessage,
-                onEmailChange = { email = it },
-                onPasswordChange = { password = it },
-                onOtpChange = { otp = it },
-                onNewPasswordChange = { newPassword = it },
-                onConfirmPasswordChange = { confirmPassword = it },
+                onEmailChange = {
+                    email = it
+                    errorMessage = null
+                },
+                onPasswordChange = {
+                    password = it
+                    errorMessage = null
+                },
+                onOtpChange = {
+                    otp = it
+                    errorMessage = null
+                },
+                onNewPasswordChange = {
+                    newPassword = it
+                    errorMessage = null
+                },
+                onConfirmPasswordChange = {
+                    confirmPassword = it
+                    errorMessage = null
+                },
 
-                // Email + password submitted together
                 onLogin = {
                     scope.launch {
                         errorMessage = null
                         successMessage = null
+
+                        val cleanedEmail = normalizeEmail(email)
+                        if (!isValidEmail(cleanedEmail)) {
+                            errorMessage = "Please enter a valid email address."
+                            return@launch
+                        }
+                        if (password.isBlank()) {
+                            errorMessage = "Please enter your password."
+                            return@launch
+                        }
+
                         isLoading = true
                         try {
                             SupabaseClientProvider.client.auth.signInWith(Email) {
-                                this.email = email.trim()
+                                this.email = cleanedEmail
                                 this.password = password
                             }
+
                             val userId = SupabaseClientProvider.client.auth.currentSessionOrNull()?.user?.id
                                 ?: throw Exception("Sign-in did not create a session. Please sign in again.")
 
                             val patientRow = SupabaseClientProvider.client.postgrest.from("patients")
                                 .select(columns = Columns.list("id")) { filter { eq("user_id", userId) } }
                                 .decodeSingleOrNull<Map<String, String?>>()
+
                             if (patientRow == null) {
                                 isLoading = false
-                                navController.navigate("patientRegister?email=${Uri.encode(email.trim())}")
+                                navController.navigate("patientRegister?email=${Uri.encode(cleanedEmail)}")
                                 return@launch
                             }
 
@@ -597,10 +663,11 @@ fun AppNavGraph(pendingRoute: String? = null) {
                         } catch (e: Exception) {
                             isLoading = false
                             Log.e("LoginDebug", "Login failed", e)
-                            errorMessage = if (e.message?.contains("invalid_credentials", ignoreCase = true) == true ||
+                            errorMessage = if (
+                                e.message?.contains("invalid_credentials", ignoreCase = true) == true ||
                                 e.message?.contains("Invalid login credentials", ignoreCase = true) == true
                             ) {
-                                "Invalid email or password. Please try again."
+                                "Incorrect email or password."
                             } else {
                                 "Login failed. Please try again."
                             }
@@ -614,24 +681,29 @@ fun AppNavGraph(pendingRoute: String? = null) {
                     mode = LoginMode.FORGOT_REQUEST
                 },
 
-                // Step 1: send the reset code to that email
                 onSendResetCode = {
                     scope.launch {
                         errorMessage = null
+                        successMessage = null
+                        val cleanedEmail = normalizeEmail(email)
+                        if (!isValidEmail(cleanedEmail)) {
+                            errorMessage = "Please enter a valid email address."
+                            return@launch
+                        }
+
                         isLoading = true
                         try {
-                            SupabaseClientProvider.client.auth.resetPasswordForEmail(email)
-                            isLoading = false
-                            successMessage = null
+                            SupabaseClientProvider.client.auth.resetPasswordForEmail(cleanedEmail)
+                            email = cleanedEmail
                             mode = LoginMode.FORGOT_VERIFY
-                        } catch (e: Exception) {
+                        } catch (_: Exception) {
+                            errorMessage = "We couldn't send the reset code. Please try again."
+                        } finally {
                             isLoading = false
-                            errorMessage = "Couldn't send a code to that email: ${e.message}"
                         }
                     }
                 },
 
-                // Step 2: verify the recovery code
                 onVerifyResetCode = {
                     scope.launch {
                         errorMessage = null
@@ -639,44 +711,44 @@ fun AppNavGraph(pendingRoute: String? = null) {
                         try {
                             SupabaseClientProvider.client.auth.verifyEmailOtp(
                                 type = OtpType.Email.RECOVERY,
-                                email = email,
+                                email = normalizeEmail(email),
                                 token = otp
                             )
-                            isLoading = false
                             mode = LoginMode.FORGOT_RESET
                         } catch (_: Exception) {
-                            isLoading = false
                             errorMessage = "Incorrect or expired code."
+                        } finally {
+                            isLoading = false
                         }
                     }
                 },
 
-                // Step 3: set the new password
                 onResetPassword = {
                     scope.launch {
                         errorMessage = null
-                        if (!isPasswordStrong(newPassword)) {
-                            errorMessage = "Password doesn't meet the strength requirements."
+                        if (!isPasswordValid(newPassword)) {
+                            errorMessage = "Password doesn't meet the security requirements."
                             return@launch
                         }
                         if (newPassword != confirmPassword) {
                             errorMessage = "Passwords don't match."
                             return@launch
                         }
+
                         isLoading = true
                         try {
                             SupabaseClientProvider.client.auth.updateUser { password = newPassword }
                             ehealthy.connect.consultation.ConsultationDevices.signOut()
-                            isLoading = false
                             password = ""
                             otp = ""
                             newPassword = ""
                             confirmPassword = ""
-                            successMessage = "Password updated — please log in."
+                            successMessage = "Password updated. Please log in."
                             mode = LoginMode.LOGIN
-                        } catch (e: Exception) {
+                        } catch (_: Exception) {
+                            errorMessage = "We couldn't update your password. Please try again."
+                        } finally {
                             isLoading = false
-                            errorMessage = "Couldn't update password: ${e.message}"
                         }
                     }
                 },
@@ -691,7 +763,9 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 },
 
                 onGoToRegister = {
-                    navController.navigate("patientRegister?email=${Uri.encode(email.trim())}")
+                    navController.navigate(
+                        "patientRegister?email=${Uri.encode(normalizeEmail(email))}"
+                    )
                 }
             )
         }
@@ -701,12 +775,16 @@ fun AppNavGraph(pendingRoute: String? = null) {
             arguments = listOf(navArgument("email") { defaultValue = "" })
         ) { backStackEntry ->
             val prefilledEmail = backStackEntry.arguments?.getString("email") ?: ""
+            val signedInUser = SupabaseClientProvider.client.auth.currentUserOrNull()
+            val existingAccount = signedInUser != null
+            val registrationEmail = signedInUser?.email.orEmpty().ifBlank { prefilledEmail }
             val scope = rememberCoroutineScope()
             var isLoading by remember { mutableStateOf(false) }
             var errorMessage by remember { mutableStateOf<String?>(null) }
 
             PatientRegister(
-                initialEmail = prefilledEmail,
+                initialEmail = registrationEmail,
+                existingAccount = existingAccount,
                 isLoading = isLoading,
                 errorMessage = errorMessage,
                 onBackToLogin = { navController.popBackStack() },
@@ -719,8 +797,8 @@ fun AppNavGraph(pendingRoute: String? = null) {
                             ehealthy.connect.data.RegistrationRepository.registerPatient(data)
 
                             isLoading = false
-                            navController.navigate("patientLogin") {
-                                popUpTo("patientRegister?email={email}") { inclusive = true }
+                            navController.navigate("patientDashboard") {
+                                popUpTo("choose") { inclusive = false }
                             }
                         } catch (e: Exception) {
                             isLoading = false
@@ -729,6 +807,10 @@ fun AppNavGraph(pendingRoute: String? = null) {
                     }
                 }
             )
+        }
+
+        composable("termsOfUse") {
+            TermsOfUseScreen(onBack = { navController.popBackStack() })
         }
 
         composable("privacyPolicy") {
@@ -881,7 +963,6 @@ fun AppNavGraph(pendingRoute: String? = null) {
         }
 
         composable("doctorLogin") {
-            val context = LocalContext.current
             val scope = rememberCoroutineScope()
             var email by remember { mutableStateOf("") }
             var password by remember { mutableStateOf("") }
@@ -891,8 +972,14 @@ fun AppNavGraph(pendingRoute: String? = null) {
             DoctorLogin(
                 email = email,
                 password = password,
-                onEmailChange = { email = it },
-                onPasswordChange = { password = it },
+                onEmailChange = {
+                    email = it
+                    errorMessage = null
+                },
+                onPasswordChange = {
+                    password = it
+                    errorMessage = null
+                },
                 isLoading = isLoading,
                 errorMessage = errorMessage,
                 onLogin = {
@@ -902,16 +989,9 @@ fun AppNavGraph(pendingRoute: String? = null) {
                         try {
                             val result = signInDoctorWithEmail(email, password)
                             result.onSuccess {
-                                val userId = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
-                                val doctorRow = userId?.let {
-                                    SupabaseClientProvider.client.postgrest.from("doctors")
-                                        .select(columns = Columns.list("id")) { filter { eq("user_id", it) } }
-                                        .decodeSingleOrNull<Map<String, String?>>()
-                                }
-                                if (doctorRow == null) {
-                                    navController.navigate("doctorRegister")
-                                } else {
-                                    navController.navigate("doctorDashboard")
+                                val destination = ProfileRepository.doctorHomeRoute()
+                                navController.navigate(destination) {
+                                    popUpTo("doctorLogin") { inclusive = true }
                                 }
                             }.onFailure { error ->
                                 errorMessage = error.message
@@ -921,10 +1001,10 @@ fun AppNavGraph(pendingRoute: String? = null) {
                         isLoading = false
                     }
                 },
-                onForgotPassword = { navController.navigate("forgotPassword") },
-
-                onRegister = { navController.navigate("doctorRegister") },
-                onContinueWithGoogle = { errorMessage = "Google sign-in is unavailable. Please use email." }
+                onForgotPassword = {
+                    navController.navigate("forgotPassword") { launchSingleTop = true }
+                },
+                onRegister = { navController.navigate("doctorRegister") }
             )
         }
 
@@ -935,12 +1015,16 @@ fun AppNavGraph(pendingRoute: String? = null) {
         composable("doctorRegister") {
             val context = LocalContext.current
             val scope = rememberCoroutineScope()
+            val signedInUser = SupabaseClientProvider.client.auth.currentUserOrNull()
+            val existingAccount = signedInUser != null
             var isLoading by remember { mutableStateOf(false) }
             var errorMessage by remember { mutableStateOf<String?>(null) }
 
             DoctorRegister(
                 isLoading = isLoading,
                 errorMessage = errorMessage,
+                initialEmail = signedInUser?.email.orEmpty(),
+                existingAccount = existingAccount,
                 onRegister = { info, uris ->
                     scope.launch {
                         isLoading = true
@@ -992,7 +1076,7 @@ fun AppNavGraph(pendingRoute: String? = null) {
                         val result = registerDoctor(info, files)
                         isLoading = false
                         result.onSuccess {
-                            navController.navigate("doctorDashboard") {
+                            navController.navigate("doctorVerificationPending") {
                                 popUpTo("doctorLogin") { inclusive = true }
                             }
                         }.onFailure { error ->
@@ -1011,6 +1095,57 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 onLogin = {
                     navController.navigate("doctorLogin") {
                         popUpTo("doctorRegister") { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable("doctorVerificationPending") {
+            val scope = rememberCoroutineScope()
+            var verificationStatus by remember { mutableStateOf<String?>(null) }
+            var isRefreshing by remember { mutableStateOf(true) }
+            var errorMessage by remember { mutableStateOf<String?>(null) }
+
+            fun refreshStatus() {
+                scope.launch {
+                    isRefreshing = true
+                    errorMessage = null
+                    try {
+                        val destination = ProfileRepository.doctorHomeRoute()
+                        if (destination == "doctorDashboard") {
+                            navController.navigate("doctorDashboard") {
+                                popUpTo("doctorVerificationPending") { inclusive = true }
+                            }
+                        } else if (destination == "doctorRegister") {
+                            navController.navigate("doctorRegister") {
+                                popUpTo("doctorVerificationPending") { inclusive = true }
+                            }
+                        } else {
+                            verificationStatus = ProfileRepository.doctorVerificationStatus()
+                        }
+                    } catch (_: Exception) {
+                        errorMessage = "Could not check your verification status. Please try again."
+                    } finally {
+                        isRefreshing = false
+                    }
+                }
+            }
+
+            LaunchedEffect(Unit) {
+                refreshStatus()
+            }
+
+            DoctorVerificationScreen(
+                status = verificationStatus,
+                isRefreshing = isRefreshing,
+                errorMessage = errorMessage,
+                onRefresh = { refreshStatus() },
+                onSignOut = {
+                    scope.launch {
+                        ehealthy.connect.consultation.ConsultationDevices.signOut()
+                        navController.navigate("choose") {
+                            popUpTo("doctorVerificationPending") { inclusive = true }
+                        }
                     }
                 }
             )
@@ -1037,7 +1172,7 @@ fun AppNavGraph(pendingRoute: String? = null) {
                         val result = sendDoctorPasswordResetEmail(email)
                         isLoading = false
                         result.onSuccess {
-                            navController.navigate("resetPassword?email=$email")
+                            navController.navigate("resetPassword?email=${Uri.encode(normalizeEmail(email))}")
                         }.onFailure { error ->
                             errorMessage =
                                 error.message ?: "Couldn't send the code — please try again."
@@ -1078,7 +1213,8 @@ fun AppNavGraph(pendingRoute: String? = null) {
                                 Toast.LENGTH_LONG
                             ).show()
                             navController.navigate("doctorLogin") {
-                                popUpTo("forgotPassword") { inclusive = true }
+                                popUpTo("doctorLogin") { inclusive = false }
+                                launchSingleTop = true
                             }
                         }.onFailure { error ->
                             errorMessage =
@@ -1087,7 +1223,17 @@ fun AppNavGraph(pendingRoute: String? = null) {
                     }
                 },
                 onResendCode = {
-                    scope.launch { sendDoctorPasswordResetEmail(email) }
+                    scope.launch {
+                        sendDoctorPasswordResetEmail(email).onFailure { error ->
+                            errorMessage = error.message ?: "Couldn't resend the code."
+                        }
+                    }
+                },
+                onBackToLogin = {
+                    navController.navigate("doctorLogin") {
+                        popUpTo("doctorLogin") { inclusive = false }
+                        launchSingleTop = true
+                    }
                 }
             )
         }

@@ -31,7 +31,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -44,7 +43,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import ehealthy.connect.ui.patientDashboard.PatientColors
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -63,14 +61,14 @@ fun PrivacyPolicyScreen(
 
                         Text(
                             text = "Privacy Policy",
-                            color = PatientColors.TextPrimary,
+                            color = AuthColors.TextPrimary,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 18.sp
                         )
 
                         Text(
                             text = "How EHealthy handles your information",
-                            color = PatientColors.TextSecondary,
+                            color = AuthColors.TextSecondary,
                             fontSize = 10.sp
                         )
                     }
@@ -87,7 +85,7 @@ fun PrivacyPolicyScreen(
                                 Modifier
                                     .size(36.dp)
                                     .background(
-                                        PatientColors.SuccessCard,
+                                        AuthColors.PatientSoft,
                                         CircleShape
                                     ),
                             contentAlignment =
@@ -99,7 +97,7 @@ fun PrivacyPolicyScreen(
                                     Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "Back",
                                 tint =
-                                    PatientColors.SuccessAccent,
+                                    AuthColors.PatientAccent,
                                 modifier =
                                     Modifier.size(20.dp)
                             )
@@ -110,13 +108,13 @@ fun PrivacyPolicyScreen(
                 colors =
                     TopAppBarDefaults.topAppBarColors(
                         containerColor =
-                            MaterialTheme.colorScheme.surface
+                            AuthColors.Background
                     )
             )
         },
 
         containerColor =
-            MaterialTheme.colorScheme.background
+            AuthColors.Background
 
     ) { paddingValues ->
 
@@ -153,7 +151,7 @@ fun PrivacyPolicyScreen(
                 colors =
                     CardDefaults.cardColors(
                         containerColor =
-                            PatientColors.SuccessCard
+                            AuthColors.PatientSoft
                     ),
 
                 elevation =
@@ -177,7 +175,7 @@ fun PrivacyPolicyScreen(
                             Modifier
                                 .size(54.dp)
                                 .background(
-                                    PatientColors.SuccessAccent
+                                    AuthColors.PatientAccent
                                         .copy(alpha = 0.12f),
                                     RoundedCornerShape(16.dp)
                                 ),
@@ -191,7 +189,7 @@ fun PrivacyPolicyScreen(
                                 Icons.Outlined.PrivacyTip,
                             contentDescription = null,
                             tint =
-                                PatientColors.SuccessAccent,
+                                AuthColors.PatientAccent,
                             modifier =
                                 Modifier.size(27.dp)
                         )
@@ -213,7 +211,7 @@ fun PrivacyPolicyScreen(
                             text =
                                 "Your privacy matters",
                             color =
-                                PatientColors.TextPrimary,
+                                AuthColors.TextPrimary,
                             fontWeight =
                                 FontWeight.ExtraBold,
                             fontSize =
@@ -231,7 +229,7 @@ fun PrivacyPolicyScreen(
                             text =
                                 "This policy explains how e-Health Connect collects, uses and protects your personal and health information.",
                             color =
-                                PatientColors.TextSecondary,
+                                AuthColors.TextSecondary,
                             fontSize =
                                 10.5.sp,
                             lineHeight =
@@ -258,9 +256,9 @@ fun PrivacyPolicyScreen(
                 title =
                     "Information We Collect",
                 accent =
-                    PatientColors.DoctorAccent,
+                    AuthColors.DoctorAccent,
                 background =
-                    PatientColors.DoctorCard,
+                    AuthColors.DoctorSoft,
                 body =
                     "When you register as a patient, we collect personal details (name, date of birth, ID number, contact information, address), and medical information you choose to share (allergies, medications, chronic conditions, surgical history) to help doctors on our platform provide you with safe and informed care."
             )
@@ -282,9 +280,9 @@ fun PrivacyPolicyScreen(
                 title =
                     "How We Use Your Information",
                 accent =
-                    PatientColors.AppointmentAccent,
+                    AuthColors.DoctorAccent,
                 background =
-                    PatientColors.AppointmentCard,
+                    AuthColors.DoctorSoft,
                 body =
                     "Your information is used to create and manage your account, connect you with registered healthcare professionals, support appointment booking and consultations, and maintain accurate medical records for continuity of care. We do not sell your personal or medical information to third parties."
             )
@@ -306,11 +304,11 @@ fun PrivacyPolicyScreen(
                 title =
                     "Data Security",
                 accent =
-                    PatientColors.Purple,
+                    AuthColors.DoctorAccent,
                 background =
-                    PatientColors.PurpleSoft,
+                    AuthColors.DoctorSoft,
                 body =
-                    "We apply reasonable technical and organizational safeguards to protect your information, including encrypted storage and access controls limiting who can view your medical records to you and your treating healthcare providers."
+                    "We apply technical and organizational safeguards to protect your information. Access controls are used to restrict health information to authorized users and legitimate healthcare purposes."
             )
 
 
@@ -330,9 +328,9 @@ fun PrivacyPolicyScreen(
                 title =
                     "Your Rights",
                 accent =
-                    PatientColors.SuccessAccent,
+                    AuthColors.PatientAccent,
                 background =
-                    PatientColors.SuccessCard,
+                    AuthColors.PatientSoft,
                 body =
                     "You may request access to, correction of, or deletion of your personal information at any time, subject to our obligation to retain certain medical records as required by applicable healthcare regulations. You may also withdraw consent for optional data uses."
             )
@@ -354,11 +352,11 @@ fun PrivacyPolicyScreen(
                 title =
                     "Compliance",
                 accent =
-                    PatientColors.TipsAccent,
+                    AuthColors.PatientAccent,
                 background =
-                    PatientColors.TipsCard,
+                    AuthColors.PatientSoft,
                 body =
-                    "We process personal information in accordance with South Africa's Protection of Personal Information Act (POPIA) and applicable healthcare record-keeping requirements."
+                    "Our privacy practices are designed around South Africa's Protection of Personal Information Act (POPIA) and applicable healthcare record-keeping requirements."
             )
 
 
@@ -378,9 +376,9 @@ fun PrivacyPolicyScreen(
                 title =
                     "Contact Us",
                 accent =
-                    PatientColors.DoctorAccent,
+                    AuthColors.DoctorAccent,
                 background =
-                    PatientColors.DoctorCard,
+                    AuthColors.DoctorSoft,
                 body =
                     "For questions about this policy or your data, please contact our support team through the Contact Us section of the app."
             )
@@ -405,14 +403,14 @@ fun PrivacyPolicyScreen(
                 colors =
                     CardDefaults.cardColors(
                         containerColor =
-                            PatientColors.NeutralCard
+                            AuthColors.SurfaceMuted
                     ),
 
                 border =
                     BorderStroke(
                         width = 1.dp,
                         color =
-                            PatientColors.SuccessAccent
+                            AuthColors.PatientAccent
                                 .copy(alpha = 0.10f)
                     ),
 
@@ -435,7 +433,7 @@ fun PrivacyPolicyScreen(
                             Modifier
                                 .size(40.dp)
                                 .background(
-                                    PatientColors.SuccessAccent
+                                    AuthColors.PatientAccent
                                         .copy(alpha = 0.10f),
                                     CircleShape
                                 ),
@@ -449,7 +447,7 @@ fun PrivacyPolicyScreen(
                                 Icons.Outlined.Lock,
                             contentDescription = null,
                             tint =
-                                PatientColors.SuccessAccent,
+                                AuthColors.PatientAccent,
                             modifier =
                                 Modifier.size(19.dp)
                         )
@@ -471,7 +469,7 @@ fun PrivacyPolicyScreen(
                             text =
                                 "Privacy & trust",
                             color =
-                                PatientColors.TextPrimary,
+                                AuthColors.TextPrimary,
                             fontWeight =
                                 FontWeight.Bold,
                             fontSize =
@@ -483,7 +481,7 @@ fun PrivacyPolicyScreen(
                             text =
                                 "Your personal and health information should only be used for legitimate healthcare and account-related purposes.",
                             color =
-                                PatientColors.TextSecondary,
+                                AuthColors.TextSecondary,
                             fontSize =
                                 9.5.sp,
                             lineHeight =
@@ -523,7 +521,7 @@ private fun PolicySection(
         colors =
             CardDefaults.cardColors(
                 containerColor =
-                    MaterialTheme.colorScheme.surface
+                    AuthColors.Background
             ),
 
         border =
@@ -601,7 +599,7 @@ private fun PolicySection(
                         text =
                             title,
                         color =
-                            PatientColors.TextPrimary,
+                            AuthColors.TextPrimary,
                         fontSize =
                             13.5.sp,
                         fontWeight =
@@ -621,7 +619,7 @@ private fun PolicySection(
                 text =
                     body,
                 color =
-                    PatientColors.TextSecondary,
+                    AuthColors.TextSecondary,
                 fontSize =
                     11.sp,
                 lineHeight =

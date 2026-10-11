@@ -264,16 +264,64 @@ fun DoctorDashboard(
             DoctorLiveConsultationRepository
                 .getLiveRequests()
                 .onSuccess {
+
                     liveRequests = it
+
+                    liveRequestMessage =
+                        if (it.isEmpty()) {
+                            null
+                        } else {
+                            null
+                        }
+
                     isLoadingLiveRequests = false
+
+                    android.util.Log.d(
+                        "LiveConsultation",
+                        "Loaded ${it.size} live request(s): $it"
+                    )
                 }
-                .onFailure {
-                    isLoadingLiveRequests = false
+                .onFailure { error ->
+
+                    if (error is kotlinx.coroutines.CancellationException) {
+                        throw error
+                    }
+
+                    android.util.Log.e(
+                        "LiveConsultation",
+                        "Failed to load live requests",
+                        error
+                    )
                 }
 
             delay(5000)
         }
     }
+    LaunchedEffect(Unit) {
+
+        while (true) {
+
+            DoctorLiveConsultationRepository
+                .sendHeartbeat()
+                .onSuccess {
+                    android.util.Log.d(
+                        "DoctorHeartbeat",
+                        "Heartbeat refreshed"
+                    )
+                }
+                .onFailure { error ->
+                    android.util.Log.e(
+                        "DoctorHeartbeat",
+                        "Heartbeat refresh failed",
+                        error
+                    )
+                }
+
+            // Refresh every 30 seconds
+            delay(30_000)
+        }
+    }
+
 
     // Bridges DoctorAppointmentsTab's plain callback to the suspend
     // update function MainActivity actually provides, and re-fetches on

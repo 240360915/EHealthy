@@ -45,16 +45,29 @@ object DoctorLiveConsultationRepository {
         SupabaseClientProvider.client
 
     suspend fun getLiveRequests():
-            Result<List<DoctorLiveConsultationRequest>> =
-        runCatching {
+            Result<List<DoctorLiveConsultationRequest>> {
 
-            supabase
-                .postgrest
-                .rpc(
-                    "doctor_get_live_consultation_requests"
-                )
-                .decodeList<DoctorLiveConsultationRequest>()
+        return try {
+
+            val requests =
+                supabase
+                    .postgrest
+                    .rpc(
+                        "doctor_get_live_consultation_requests"
+                    )
+                    .decodeList<DoctorLiveConsultationRequest>()
+
+            Result.success(requests)
+
+        } catch (error: kotlinx.coroutines.CancellationException) {
+
+            throw error
+
+        } catch (error: Exception) {
+
+            Result.failure(error)
         }
+    }
 
 
     suspend fun acceptRequest(
@@ -121,5 +134,51 @@ object DoctorLiveConsultationRepository {
                 ?: error(
                     "The consultation could not be declined."
                 )
+        }
+    suspend fun sendHeartbeat(): Result<Unit> =
+        runCatching {
+
+            supabase
+                .postgrest
+                .rpc(
+                    function = "doctor_heartbeat"
+                )
+
+            android.util.Log.d(
+                "DoctorHeartbeat",
+                "Heartbeat sent successfully"
+            )
+
+            Unit
+        }.onFailure { error ->
+
+            android.util.Log.e(
+                "DoctorHeartbeat",
+                "Heartbeat failed",
+                error
+            )
+        }
+
+    suspend fun endConsultation(
+        requestId: String
+    ): Result<Unit> =
+        runCatching {
+
+            val parameters =
+                buildJsonObject {
+                    put(
+                        "p_request_id",
+                        requestId
+                    )
+                }
+
+            supabase
+                .postgrest
+                .rpc(
+                    function = "end_consultation",
+                    parameters = parameters
+                )
+
+            Unit
         }
 }

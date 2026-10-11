@@ -71,6 +71,9 @@ import ehealthy.connect.data.patient.PatientRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.UUID
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import kotlin.time.Duration.Companion.milliseconds
 
 private enum class ConsultationScreenMode {
     PRIVATE,
@@ -100,7 +103,9 @@ fun OnDemandConsultationScreen(
         doctorId: String
     ) -> Unit
 ) {
-
+    val statusSnackbar = remember {
+        SnackbarHostState()
+    }
     val scope =
         rememberCoroutineScope()
 
@@ -407,7 +412,7 @@ fun OnDemandConsultationScreen(
             }
 
             delay(
-                1500
+                1500.milliseconds
             )
         }
     }
@@ -442,7 +447,7 @@ fun OnDemandConsultationScreen(
             }
 
             delay(
-                1000
+                1000.milliseconds
             )
 
             secondsRemaining--
@@ -453,10 +458,15 @@ fun OnDemandConsultationScreen(
 
     Scaffold(
 
+
         containerColor =
             MaterialTheme
                 .colorScheme
                 .background,
+
+        snackbarHost = {
+            SnackbarHost(statusSnackbar)
+        },
 
         topBar = {
 
@@ -479,6 +489,7 @@ fun OnDemandConsultationScreen(
                         )
                     }
                 },
+
 
                 title = {
 
@@ -517,16 +528,14 @@ fun OnDemandConsultationScreen(
 
     ) { innerPadding ->
 
-        AnimatedContent(
-            targetState =
-                activeRequest != null,
-            label =
-                "consultation-state"
-        ) { hasRequest ->
 
-            if (
-                hasRequest
-            ) {
+
+        AnimatedContent(
+            targetState = activeRequest,
+            label = "consultation-state"
+        ) { requestSnapshot ->
+
+            if (requestSnapshot != null) {
 
                 ActiveConsultationRequestScreen(
                     modifier =
@@ -535,8 +544,7 @@ fun OnDemandConsultationScreen(
                             .padding(
                                 innerPadding
                             ),
-                    request =
-                        activeRequest!!,
+                    request = requestSnapshot,
                     liveRequest =
                         liveRequest,
                     secondsRemaining =
@@ -546,9 +554,55 @@ fun OnDemandConsultationScreen(
                     error =
                         requestError,
                     onRefresh = {
-
                         scope.launch {
-                            refreshRequest()
+                            val requestId = activeRequest?.request_id
+                                ?: return@launch
+
+                            val result = PatientRepository
+                                .getMyConsultationRequests()
+
+                            if (result.isSuccess) {
+                                val updatedRequest = result.getOrNull()
+                                    ?.firstOrNull { it.id == requestId }
+
+                                liveRequest = updatedRequest
+
+                                val message = when (updatedRequest?.status?.lowercase()) {
+                                    "pending" ->
+                                        "Your request is waiting for a doctor to accept."
+
+                                    "claimed" ->
+                                        "A doctor has accepted your consultation!"
+
+                                    "no_doctors" ->
+                                        "No doctors are currently available."
+
+                                    "expired" ->
+                                        "Your request has expired. Please try again."
+
+                                    "declined" ->
+                                        "The doctor declined your request."
+
+                                    "cancelled" ->
+                                        "Your request has been cancelled."
+
+                                    "completed" ->
+                                        "Your consultation has ended."
+
+                                    "failed" ->
+                                        "The consultation could not be completed."
+
+                                    else ->
+                                        "Your consultation status is currently unavailable."
+                                }
+
+                                statusSnackbar.showSnackbar(message)
+
+                            } else {
+                                statusSnackbar.showSnackbar(
+                                    "Unable to check your status. Please try again."
+                                )
+                            }
                         }
                     },
                     onCancel =
@@ -1885,8 +1939,7 @@ private fun ActiveConsultationRequestScreen(
                     cancelling,
                 error =
                     error,
-                onRefresh =
-                    onRefresh,
+                onRefresh = onRefresh,
                 onCancel =
                     onCancel
             )
@@ -2716,7 +2769,7 @@ private fun friendlyConsultationError(
             "Your patient profile could not be found. Please sign in again."
 
         value.isNotBlank() ->
-            value
+            "We couldn't process your consultation request. Please try again."
 
         else ->
             "We couldn't create the consultation request. Please try again."

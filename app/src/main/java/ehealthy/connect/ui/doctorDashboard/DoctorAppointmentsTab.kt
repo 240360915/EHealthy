@@ -41,6 +41,7 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -79,6 +80,8 @@ private val AppointmentBorder = Color(0xFFE2E7ED)
 enum class DoctorAppointmentFilter(val label: String) {
     UPCOMING("Upcoming"),
     COMPLETED("Completed"),
+
+    EXPIRED("Expired"),
     CANCELLED("Cancelled")
 }
 private fun isAppointmentExpired(
@@ -130,37 +133,23 @@ private fun matchesFilter(
             ?.lowercase()
             .orEmpty()
 
-    val expired =
-        isAppointmentExpired(
-            appointment
-        ) &&
-                status != "completed" &&
-                status != "cancelled" &&
-                status != "declined"
-
     return when (filter) {
 
-        DoctorAppointmentFilter.UPCOMING -> {
-
-            !expired &&
-                    status != "completed" &&
+        DoctorAppointmentFilter.UPCOMING ->
+            status != "completed" &&
                     status != "cancelled" &&
-                    status != "declined"
-        }
+                    status != "declined" &&
+                    status != "expired"
 
-
-        DoctorAppointmentFilter.COMPLETED -> {
-
+        DoctorAppointmentFilter.COMPLETED ->
             status == "completed"
-        }
 
+        DoctorAppointmentFilter.EXPIRED ->
+            status == "expired"
 
-        DoctorAppointmentFilter.CANCELLED -> {
-
+        DoctorAppointmentFilter.CANCELLED ->
             status == "cancelled" ||
-                    status == "declined" ||
-                    expired
-        }
+                    status == "declined"
     }
 }
 @RequiresApi(Build.VERSION_CODES.O)
@@ -178,6 +167,14 @@ fun DoctorAppointmentsTab(
     // Receives the appointment ID; patient identity is validated by the backend RPC.
     onOpenPatientFile: (appointmentId: String) -> Unit = {}
 ) {
+
+    val pageBackground = MaterialTheme.colorScheme.background
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val textPrimary = MaterialTheme.colorScheme.onBackground
+    val textSecondary = MaterialTheme.colorScheme.onSurfaceVariant
+    val borderColor = MaterialTheme.colorScheme.outlineVariant
+
+
     var selectedFilter by remember {
         mutableStateOf(DoctorAppointmentFilter.UPCOMING)
     }
@@ -192,19 +189,17 @@ fun DoctorAppointmentsTab(
 
     val upcomingCount = remember(appointments) {
 
-        appointments.count { appointment ->
+        appointments.count {
 
             val status =
-                appointment.status
+                it.status
                     ?.lowercase()
                     .orEmpty()
 
-            !isAppointmentExpired(
-                appointment
-            ) &&
-                    status != "completed" &&
+            status != "completed" &&
                     status != "cancelled" &&
-                    status != "declined"
+                    status != "declined" &&
+                    status != "expired"
         }
     }
 
@@ -230,7 +225,7 @@ fun DoctorAppointmentsTab(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(AppointmentsBackground)
+            .background(pageBackground)
     ) {
 
         // PAGE TITLE
@@ -243,7 +238,7 @@ fun DoctorAppointmentsTab(
         ) {
             Text(
                 text = "Appointments",
-                color = AppointmentInk,
+                color = textPrimary,
                 fontSize = 22.sp,
                 fontWeight = FontWeight.ExtraBold
             )
@@ -252,7 +247,7 @@ fun DoctorAppointmentsTab(
 
             Text(
                 text = "Manage patient bookings and consultations",
-                color = AppointmentMuted,
+                color = textSecondary,
                 fontSize = 10.5.sp
             )
         }
@@ -293,13 +288,13 @@ fun DoctorAppointmentsTab(
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = AppointmentBlueSoft,
                         selectedLabelColor = AppointmentBlue,
-                        containerColor = Color.White,
-                        labelColor = AppointmentMuted
+                        containerColor = surfaceColor,
+                        labelColor = textSecondary
                     ),
                     border = FilterChipDefaults.filterChipBorder(
                         enabled = true,
                         selected = selectedFilter == filter,
-                        borderColor = AppointmentBorder,
+                        borderColor = borderColor,
                         selectedBorderColor = AppointmentBlue.copy(alpha = 0.20f)
                     )
                 )
@@ -598,11 +593,15 @@ private fun EmptyAppointmentsState(
 
             Text(
                 text = when (filter) {
+
                     DoctorAppointmentFilter.UPCOMING ->
                         "No upcoming appointments"
 
                     DoctorAppointmentFilter.COMPLETED ->
                         "No completed appointments"
+
+                    DoctorAppointmentFilter.EXPIRED ->
+                        "No expired appointments"
 
                     DoctorAppointmentFilter.CANCELLED ->
                         "No cancelled appointments"
@@ -645,6 +644,9 @@ private fun DoctorAppointmentListCard(
         "completed" ->
             AppointmentBlue
 
+        "expired" ->
+            AppointmentMuted
+
         "cancelled", "declined" ->
             AppointmentRed
 
@@ -662,6 +664,9 @@ private fun DoctorAppointmentListCard(
         "completed" ->
             AppointmentBlueSoft
 
+        "expired" ->
+            Color(0xFFECEFF3)
+
         "cancelled", "declined" ->
             AppointmentRedSoft
 
@@ -678,6 +683,9 @@ private fun DoctorAppointmentListCard(
 
         "completed" ->
             Color(0xFFF2F6FF)
+
+        "expired" ->
+            Color(0xFFF5F6F8)
 
         "cancelled", "declined" ->
             Color(0xFFFFF7F7)

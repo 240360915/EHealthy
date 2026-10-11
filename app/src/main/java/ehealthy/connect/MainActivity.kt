@@ -135,6 +135,8 @@ import ehealthy.connect.ui.patientDashboard.PatientInvoicesScreen
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import ehealthy.connect.ui.doctorDashboard.DoctorPatientCareHub
+import kotlinx.serialization.json.put
+
 private object BookingConfirmationHolder {
     var confirmation: BookingConfirmation? = null
 }
@@ -1322,6 +1324,14 @@ fun AppNavGraph(pendingRoute: String? = null) {
                         }
                     }
                 },
+                onOpenLiveConsultation = { requestId ->
+
+                    navController.navigate(
+                        "consultationCall/$requestId/doctor"
+                    ) {
+                        launchSingleTop = true
+                    }
+                },
                 fetchAppointments = { doctorId ->
                     try {
                         val data = SupabaseClientProvider.client.postgrest
@@ -1334,14 +1344,43 @@ fun AppNavGraph(pendingRoute: String? = null) {
                     }
                 },
                 onUpdateAppointmentStatus = { appointmentId, newStatus ->
+
                     try {
-                        SupabaseClientProvider.client.postgrest.from("appointments")
-                            .update({ set("status", newStatus) }) {
-                                filter { eq("id", appointmentId) }
+
+                        val parameters =
+                            buildJsonObject {
+
+                                put(
+                                    "p_appointment_id",
+                                    appointmentId
+                                )
+
+                                put(
+                                    "p_new_status",
+                                    newStatus
+                                )
                             }
+
+
+                        SupabaseClientProvider.client
+                            .postgrest
+                            .rpc(
+                                function =
+                                    "doctor_update_appointment_status",
+                                parameters =
+                                    parameters
+                            )
+
+
                         Result.success(Unit)
+
                     } catch (e: Exception) {
-                        Result.failure(Exception(friendlyAuthError(e)))
+
+                        Result.failure(
+                            Exception(
+                                friendlyAuthError(e)
+                            )
+                        )
                     }
                 },
                 onNavigatePrescriptions = { navController.navigate("doctorPrescriptions") },

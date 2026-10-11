@@ -101,7 +101,16 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.material.icons.outlined.Info
-
+import ehealthy.connect.data.DoctorLiveConsultationRequest
+import ehealthy.connect.data.DoctorLiveConsultationRepository
+import kotlinx.coroutines.delay
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.outlined.VideoCall
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import kotlinx.coroutines.launch
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 private val DoctorScreenBackground = Color(0xFFF7F9FC)
 private val DoctorInk = Color(0xFF171B27)
 private val DoctorMuted = Color(0xFF6C7280)
@@ -153,6 +162,37 @@ fun DoctorProfileRow.toDoctorProfile(): DoctorProfile = DoctorProfile(
     verificationStatus = verificationStatus
 )
 
+private fun doctorFriendlyError(
+    message: String?
+): String {
+
+    val raw =
+        message
+            .orEmpty()
+            .lowercase()
+
+    return when {
+
+        raw.contains("already processed") ->
+            "This appointment has already been processed."
+
+        raw.contains("does not belong to this doctor") ->
+            "You cannot update this appointment."
+
+        raw.contains("authentication required") ->
+            "Your session has expired. Please sign in again."
+
+        raw.contains("appointment not found") ->
+            "This appointment is no longer available."
+
+        raw.contains("expired") ->
+            "This appointment has expired and can no longer be changed."
+
+        else ->
+            "Something went wrong. Please try again."
+    }
+}
+
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -167,6 +207,7 @@ fun DoctorDashboard(
     onNavigatePrescriptions: () -> Unit,
     onNavigateSettings: () -> Unit,
     onNavigateTimeSlots: () -> Unit,
+    onOpenLiveConsultation: (requestId: String) -> Unit,
     onNavigateEarnings: () -> Unit = {},
     onOpenPatientCareHub: (appointmentId: String, patientName: String) -> Unit,
     onNavigateAvailability: () -> Unit = {},
@@ -179,6 +220,9 @@ fun DoctorDashboard(
     val green = MaterialTheme.colorScheme.primary
     val accent = MaterialTheme.colorScheme.primary
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val surface = MaterialTheme.colorScheme.surface
+    val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant
+    val border = MaterialTheme.colorScheme.outlineVariant
 
     val scope = rememberCoroutineScope()
     var selectedTab by remember { mutableStateOf(DoctorTab.HOME) }
@@ -187,6 +231,17 @@ fun DoctorDashboard(
     var isLoadingAppointments by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf<String?>(null) }
     var refreshTrigger by remember { mutableStateOf(0) }
+    var liveRequests by remember {
+        mutableStateOf<List<DoctorLiveConsultationRequest>>(emptyList())
+    }
+
+    var isLoadingLiveRequests by remember {
+        mutableStateOf(true)
+    }
+
+    var liveRequestMessage by remember {
+        mutableStateOf<String?>(null)
+    }
 
     LaunchedEffect(doctorProfile?.id, refreshTrigger) {
         val doctorId = doctorProfile?.id
@@ -194,8 +249,30 @@ fun DoctorDashboard(
         isLoadingAppointments = true
         fetchAppointments(doctorId)
             .onSuccess { appointments = it; loadError = null }
-            .onFailure { loadError = it.message ?: "Failed to load appointments." }
+            .onFailure {
+                loadError =
+                    doctorFriendlyError(
+                        it.message
+                    )
+            }
         isLoadingAppointments = false
+    }
+    LaunchedEffect(Unit) {
+
+        while (true) {
+
+            DoctorLiveConsultationRepository
+                .getLiveRequests()
+                .onSuccess {
+                    liveRequests = it
+                    isLoadingLiveRequests = false
+                }
+                .onFailure {
+                    isLoadingLiveRequests = false
+                }
+
+            delay(5000)
+        }
     }
 
     // Bridges DoctorAppointmentsTab's plain callback to the suspend
@@ -205,7 +282,12 @@ fun DoctorDashboard(
         scope.launch {
             onUpdateAppointmentStatus(appointmentId, newStatus)
                 .onSuccess { refreshTrigger++ }
-                .onFailure { loadError = it.message ?: "Couldn't update that appointment." }
+                .onFailure {
+                    loadError =
+                        doctorFriendlyError(
+                            it.message
+                        )
+                }
         }
     }
 
@@ -297,14 +379,99 @@ fun DoctorDashboard(
                     navy = navy,
                     accent = accent,
                     muted = muted,
+
                     appointments = appointments,
                     isLoadingAppointments = isLoadingAppointments,
                     loadError = loadError,
-                    onNavigateAppointments = { selectedTab = DoctorTab.APPOINTMENTS },
-                    onNavigatePrescriptions = onNavigatePrescriptions,
-                    onNavigateTimeSlots = onNavigateTimeSlots,
-                    onNavigateAvailability = onNavigateAvailability
+
+                    liveRequests = liveRequests,
+                    isLoadingLiveRequests = isLoadingLiveRequests,
+                    liveRequestMessage = liveRequestMessage,
+
+                    onNavigateAppointments = {
+                        selectedTab = DoctorTab.APPOINTMENTS
+                    },
+
+                    onNavigatePrescriptions =
+                        onNavigatePrescriptions,
+
+                    onNavigateTimeSlots =
+                        onNavigateTimeSlots,
+
+                    onNavigateAvailability =
+                        onNavigateAvailability,
+
+                    onAcceptLiveRequest = { request ->
+
+                        DoctorLiveConsultationRepository
+                            .acceptRequest(
+                                request.request_id
+                            )
+                            .onSuccess { result ->
+
+                                if (
+                                    result.claim_result.equals(
+                                        "claimed",
+                                        ignoreCase = true
+                                    ) ||
+                                    result.claim_result.equals(
+                                        "already_claimed_by_you",
+                                        ignoreCase = true
+                                    )
+                                ) {
+
+                                    onOpenLiveConsultation(
+                                        request.request_id
+                                    )
+
+                                } else {
+
+                                    liveRequestMessage =
+                                        "This consultation was already accepted by another doctor."
+
+                                    liveRequests =
+                                        liveRequests.filterNot {
+                                            it.request_id ==
+                                                    request.request_id
+                                        }
+                                }
+                            }
+                            .onFailure {
+
+                                liveRequestMessage =
+                                    "This consultation is no longer available."
+
+                                liveRequests =
+                                    liveRequests.filterNot {
+                                        it.request_id ==
+                                                request.request_id
+                                    }
+                            }
+                    },
+
+                    onDeclineLiveRequest = { request ->
+
+                        DoctorLiveConsultationRepository
+                            .declineRequest(
+                                request.request_id
+                            )
+                            .onSuccess {
+
+                                liveRequests =
+                                    liveRequests.filterNot {
+                                        it.request_id ==
+                                                request.request_id
+                                    }
+                            }
+                            .onFailure {
+
+                                liveRequestMessage =
+                                    "Could not decline this request."
+                            }
+                    }
                 )
+
+
 
                 DoctorTab.APPOINTMENTS -> DoctorAppointmentsTab(
                     modifier = Modifier.padding(paddingValues),
@@ -356,13 +523,25 @@ private fun HomeTabContent(
     navy: Color,
     accent: Color,
     muted: Color,
+
     appointments: List<Appointment>,
     isLoadingAppointments: Boolean,
     loadError: String?,
+
+    liveRequests: List<DoctorLiveConsultationRequest>,
+    isLoadingLiveRequests: Boolean,
+    liveRequestMessage: String?,
+
     onNavigateAppointments: () -> Unit,
     onNavigatePrescriptions: () -> Unit,
     onNavigateTimeSlots: () -> Unit,
-    onNavigateAvailability: () -> Unit
+    onNavigateAvailability: () -> Unit,
+
+    onAcceptLiveRequest:
+    suspend (DoctorLiveConsultationRequest) -> Unit,
+
+    onDeclineLiveRequest:
+    suspend (DoctorLiveConsultationRequest) -> Unit
 ) {
     val pending = remember(appointments) {
         appointments.filter { it.status.equals("pending", ignoreCase = true) }
@@ -373,15 +552,28 @@ private fun HomeTabContent(
     val upcoming = remember(appointments) {
         appointments
             .filter {
-                !it.status.equals("cancelled", ignoreCase = true) &&
-                        !it.status.equals("completed", ignoreCase = true)
+                val status =
+                    it.status
+                        ?.lowercase()
+                        .orEmpty()
+
+                status != "cancelled" &&
+                        status != "declined" &&
+                        status != "completed" &&
+                        status != "expired"
             }
-            .sortedWith(compareBy({ it.date ?: "9999-99-99" }, { it.time ?: "99:99" }))
+            .sortedWith(
+                compareBy(
+                    { it.date ?: "9999-99-99" },
+                    { it.time ?: "99:99" }
+                )
+            )
     }
     val patientCount = remember(appointments) {
         appointments.mapNotNull { it.patient_name?.takeIf(String::isNotBlank) }.distinct().size
     }
     val nextAppointment = upcoming.firstOrNull()
+    val liveRequestScope = rememberCoroutineScope()
 
     val greeting = remember {
         when (LocalTime.now().hour) {
@@ -408,6 +600,165 @@ private fun HomeTabContent(
                 nextAppointment = nextAppointment,
                 onViewSchedule = onNavigateAppointments
             )
+        }
+
+        if (
+            liveRequests.isNotEmpty() ||
+            isLoadingLiveRequests ||
+            liveRequestMessage != null
+        ) {
+
+            item {
+
+                Spacer(
+                    modifier = Modifier.height(18.dp)
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 18.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
+
+                        Text(
+                            text = "Live consultation requests",
+                            color = MaterialTheme.colorScheme.onBackground,
+                            fontSize = 19.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+
+                        Text(
+                            text = "Patients looking for an available doctor now",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp
+                        )
+                    }
+
+                    if (liveRequests.isNotEmpty()) {
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(
+                                    DoctorTeal.copy(
+                                        alpha = 0.12f
+                                    )
+                                )
+                                .padding(
+                                    horizontal = 10.dp,
+                                    vertical = 6.dp
+                                )
+                        ) {
+
+                            Text(
+                                text = "${liveRequests.size} LIVE",
+                                color = DoctorTeal,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+
+
+            if (
+                isLoadingLiveRequests &&
+                liveRequests.isEmpty()
+            ) {
+
+                item {
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+
+                        CircularProgressIndicator(
+                            color = DoctorTeal,
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+                }
+            }
+
+
+            if (liveRequestMessage != null) {
+
+                item {
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                horizontal = 18.dp,
+                                vertical = 8.dp
+                            ),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor =
+                                MaterialTheme
+                                    .colorScheme
+                                    .surfaceVariant
+                        ),
+                        elevation = CardDefaults.cardElevation(
+                            defaultElevation = 0.dp
+                        )
+                    ) {
+
+                        Text(
+                            text = liveRequestMessage,
+                            color =
+                                MaterialTheme
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(14.dp)
+                        )
+                    }
+                }
+            }
+
+
+            items(
+                items = liveRequests,
+                key = {
+                    it.request_id
+                }
+            ) { request ->
+
+                LiveConsultationRequestCard(
+                    request = request,
+
+                    onAccept = {
+
+                        liveRequestScope.launch {
+
+                            onAcceptLiveRequest(
+                                request
+                            )
+                        }
+                    },
+
+                    onDecline = {
+
+                        liveRequestScope.launch {
+
+                            onDeclineLiveRequest(
+                                request
+                            )
+                        }
+                    }
+                )
+            }
         }
 
         if (!isLoadingProfile && doctorProfile?.verificationStatus == "pending") {
@@ -659,6 +1010,356 @@ private fun HomeTabContent(
     }
 }
 
+@Composable
+private fun LiveConsultationRequestCard(
+    request: DoctorLiveConsultationRequest,
+    onAccept: () -> Unit,
+    onDecline: () -> Unit
+) {
+
+    val surface =
+        MaterialTheme.colorScheme.surface
+
+    val textPrimary =
+        MaterialTheme.colorScheme.onSurface
+
+    val textSecondary =
+        MaterialTheme.colorScheme.onSurfaceVariant
+
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                horizontal = 18.dp,
+                vertical = 8.dp
+            ),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = surface
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = DoctorTeal.copy(
+                alpha = 0.20f
+            )
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 0.dp
+        )
+    ) {
+
+        Column(
+            modifier = Modifier.padding(18.dp)
+        ) {
+
+            Row(
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+
+                Box(
+                    modifier = Modifier
+                        .size(50.dp)
+                        .clip(
+                            RoundedCornerShape(16.dp)
+                        )
+                        .background(
+                            DoctorTeal.copy(
+                                alpha = 0.12f
+                            )
+                        ),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+
+                    Icon(
+                        imageVector =
+                            Icons.Outlined.VideoCall,
+                        contentDescription = null,
+                        tint = DoctorTeal,
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
+
+
+                Spacer(
+                    modifier = Modifier.width(13.dp)
+                )
+
+
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+
+                    Row(
+                        verticalAlignment =
+                            Alignment.CenterVertically
+                    ) {
+
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    Color(0xFF10B981)
+                                )
+                        )
+
+                        Spacer(
+                            modifier =
+                                Modifier.width(6.dp)
+                        )
+
+                        Text(
+                            text = "LIVE REQUEST",
+                            color = DoctorTeal,
+                            fontSize = 10.sp,
+                            fontWeight =
+                                FontWeight.ExtraBold
+                        )
+                    }
+
+
+                    Spacer(
+                        modifier = Modifier.height(4.dp)
+                    )
+
+
+                    Text(
+                        text =
+                            request.patient_name
+                                .ifBlank {
+                                    "Patient"
+                                },
+                        color = textPrimary,
+                        fontSize = 16.sp,
+                        fontWeight =
+                            FontWeight.ExtraBold
+                    )
+
+
+                    Text(
+                        text =
+                            request.service
+                                .replaceFirstChar {
+                                    if (
+                                        it.isLowerCase()
+                                    ) {
+                                        it.titlecase()
+                                    } else {
+                                        it.toString()
+                                    }
+                                },
+                        color = textSecondary,
+                        fontSize = 11.sp
+                    )
+                }
+
+
+                Box(
+                    modifier = Modifier
+                        .clip(
+                            RoundedCornerShape(50)
+                        )
+                        .background(
+                            DoctorTeal.copy(
+                                alpha = 0.10f
+                            )
+                        )
+                        .padding(
+                            horizontal = 10.dp,
+                            vertical = 6.dp
+                        )
+                ) {
+
+                    Text(
+                        text =
+                            if (
+                                request.request_mode.equals(
+                                    "broadcast",
+                                    ignoreCase = true
+                                )
+                            ) {
+                                "Broadcast"
+                            } else {
+                                "Private"
+                            },
+                        color = DoctorTeal,
+                        fontSize = 10.sp,
+                        fontWeight =
+                            FontWeight.Bold
+                    )
+                }
+            }
+
+
+            Spacer(
+                modifier = Modifier.height(16.dp)
+            )
+
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement =
+                    Arrangement.spacedBy(10.dp)
+            ) {
+
+                LiveRequestInfoBox(
+                    modifier =
+                        Modifier.weight(1f),
+                    label = "Consultation",
+                    value =
+                        request.service
+                            .replaceFirstChar {
+                                it.titlecase()
+                            }
+                )
+
+
+                LiveRequestInfoBox(
+                    modifier =
+                        Modifier.weight(1f),
+                    label = "Fee",
+                    value =
+                        "R %.2f".format(
+                            request.price_minor /
+                                    100.0
+                        )
+                )
+            }
+
+
+            Spacer(
+                modifier = Modifier.height(17.dp)
+            )
+
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement =
+                    Arrangement.spacedBy(10.dp)
+            ) {
+
+                OutlinedButton(
+                    onClick = onDecline,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp),
+                    shape =
+                        RoundedCornerShape(15.dp),
+                    border = BorderStroke(
+                        1.dp,
+                        MaterialTheme
+                            .colorScheme
+                            .outlineVariant
+                    )
+                ) {
+
+                    Text(
+                        text = "Decline",
+                        color =
+                            MaterialTheme
+                                .colorScheme
+                                .onSurface,
+                        fontWeight =
+                            FontWeight.Bold
+                    )
+                }
+
+
+                Button(
+                    onClick = onAccept,
+                    modifier = Modifier
+                        .weight(1.4f)
+                        .height(48.dp),
+                    shape =
+                        RoundedCornerShape(15.dp),
+                    colors =
+                        ButtonDefaults
+                            .buttonColors(
+                                containerColor =
+                                    DoctorTeal,
+                                contentColor =
+                                    Color.White
+                            )
+                ) {
+
+                    Icon(
+                        imageVector =
+                            Icons.Outlined.VideoCall,
+                        contentDescription = null,
+                        modifier =
+                            Modifier.size(18.dp)
+                    )
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(7.dp)
+                    )
+
+                    Text(
+                        text =
+                            "Accept consultation",
+                        fontWeight =
+                            FontWeight.Bold,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LiveRequestInfoBox(
+    modifier: Modifier = Modifier,
+    label: String,
+    value: String
+) {
+
+    Column(
+        modifier = modifier
+            .clip(
+                RoundedCornerShape(15.dp)
+            )
+            .background(
+                MaterialTheme
+                    .colorScheme
+                    .surfaceVariant
+                    .copy(alpha = 0.55f)
+            )
+            .padding(
+                horizontal = 12.dp,
+                vertical = 10.dp
+            )
+    ) {
+
+        Text(
+            text = label.uppercase(),
+            color =
+                MaterialTheme
+                    .colorScheme
+                    .onSurfaceVariant,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold
+        )
+
+        Spacer(
+            modifier = Modifier.height(4.dp)
+        )
+
+        Text(
+            text = value,
+            color =
+                MaterialTheme
+                    .colorScheme
+                    .onSurface,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
 @Composable
 private fun PremiumDoctorHero(
     doctorProfile: DoctorProfile?,

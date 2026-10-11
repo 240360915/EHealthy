@@ -42,6 +42,7 @@ android {
 dependencies {
     implementation("androidx.work:work-runtime-ktx:2.10.1")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
+    implementation(libs.androidx.material3)
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 
     implementation(platform("io.github.jan-tennert.supabase:bom:3.2.6"))

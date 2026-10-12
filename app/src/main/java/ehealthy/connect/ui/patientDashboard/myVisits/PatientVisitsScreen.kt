@@ -196,6 +196,71 @@ fun PatientVisitsScreen(
         )
     }
 
+    var completionCodeAppointment by remember {
+        mutableStateOf<PatientAppointment?>(null)
+    }
+
+    var completionCode by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    var completionCodeError by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    var isRequestingCompletionCode by remember {
+        mutableStateOf(false)
+    }
+
+    suspend fun requestCompletionCode(
+        appointment: PatientAppointment
+    ) {
+        isRequestingCompletionCode = true
+        completionCodeError = null
+        completionCode = null
+
+        PatientRepository
+            .requestCompletionCode(
+                appointment.id
+            )
+            .onSuccess { result ->
+
+                completionCode =
+                    result.completion_code
+
+                appointments =
+                    appointments.map {
+
+                        if (it.id == appointment.id) {
+                            it.copy(
+                                completion_code =
+                                    result.completion_code
+                            )
+                        } else {
+                            it
+                        }
+                    }
+            }
+            .onFailure { error ->
+
+                completionCodeError =
+                    when {
+
+                        error.message
+                            ?.contains(
+                                "Both patient and doctor must join",
+                                ignoreCase = true
+                            ) == true ->
+                            "Both you and the doctor must join the consultation before it can be completed."
+
+                        else ->
+                            "Could not generate the completion code. Please try again."
+                    }
+            }
+
+        isRequestingCompletionCode = false
+    }
+
     suspend fun loadAppointments(
         refreshing: Boolean = false
     ) {
@@ -561,6 +626,202 @@ fun PatientVisitsScreen(
             )
         }
 
+    completionCodeAppointment
+        ?.let { appointment ->
+
+            AlertDialog(
+                onDismissRequest = {
+                    if (!isRequestingCompletionCode) {
+                        completionCodeAppointment = null
+                        completionCode = null
+                        completionCodeError = null
+                    }
+                },
+
+                title = {
+                    Text(
+                        "Complete consultation"
+                    )
+                },
+
+                text = {
+
+                    Column {
+
+                        when {
+
+                            isRequestingCompletionCode -> {
+
+                                Row(
+                                    verticalAlignment =
+                                        Alignment.CenterVertically
+                                ) {
+
+                                    CircularProgressIndicator(
+                                        modifier =
+                                            Modifier.size(22.dp),
+                                        strokeWidth = 2.dp
+                                    )
+
+                                    Spacer(
+                                        modifier =
+                                            Modifier.width(10.dp)
+                                    )
+
+                                    Text(
+                                        "Generating completion code..."
+                                    )
+                                }
+                            }
+
+                            completionCode != null -> {
+
+                                Text(
+                                    text =
+                                        "Give this 6-digit code to your doctor:",
+                                    color =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurfaceVariant
+                                )
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.height(16.dp)
+                                )
+
+                                Surface(
+                                    modifier =
+                                        Modifier.fillMaxWidth(),
+                                    shape =
+                                        RoundedCornerShape(16.dp),
+                                    color =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .primaryContainer
+                                ) {
+
+                                    Text(
+                                        text =
+                                            completionCode.orEmpty(),
+                                        modifier =
+                                            Modifier.padding(20.dp),
+                                        textAlign =
+                                            TextAlign.Center,
+                                        fontSize =
+                                            30.sp,
+                                        fontWeight =
+                                            FontWeight.ExtraBold,
+                                        color =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .primary
+                                    )
+                                }
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.height(12.dp)
+                                )
+
+                                Text(
+                                    text =
+                                        "The doctor will enter this code to confirm that the consultation was completed.",
+                                    fontSize =
+                                        11.5.sp,
+                                    color =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurfaceVariant
+                                )
+                            }
+
+                            completionCodeError != null -> {
+
+                                Text(
+                                    text =
+                                        completionCodeError.orEmpty(),
+                                    color =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .error
+                                )
+                            }
+                        }
+                    }
+                },
+
+                confirmButton = {
+
+                    if (completionCode == null) {
+
+                        Button(
+                            onClick = {
+
+                                scope.launch {
+                                    requestCompletionCode(
+                                        appointment
+                                    )
+                                }
+                            },
+                            enabled =
+                                !isRequestingCompletionCode
+                        ) {
+
+                            Text(
+                                "Generate code"
+                            )
+                        }
+
+                    } else {
+
+                        Button(
+                            onClick = {
+
+                                completionCodeAppointment =
+                                    null
+
+                                completionCode =
+                                    null
+
+                                completionCodeError =
+                                    null
+                            }
+                        ) {
+
+                            Text(
+                                "Done"
+                            )
+                        }
+                    }
+                },
+
+                dismissButton = {
+
+                    TextButton(
+                        onClick = {
+
+                            completionCodeAppointment =
+                                null
+
+                            completionCode =
+                                null
+
+                            completionCodeError =
+                                null
+                        },
+                        enabled =
+                            !isRequestingCompletionCode
+                    ) {
+
+                        Text(
+                            "Close"
+                        )
+                    }
+                }
+            )
+        }
+
 
     Scaffold(
 
@@ -811,6 +1072,17 @@ fun PatientVisitsScreen(
                                     onJoinScheduledCall(
                                         appointment
                                     )
+                                },
+                                onCompleteConsultation = {
+
+                                    completionCodeAppointment =
+                                        appointment
+
+                                    completionCode =
+                                        appointment.completion_code
+
+                                    completionCodeError =
+                                        null
                                 },
 
                                 onRate = {
@@ -1136,6 +1408,7 @@ private fun VisitCard(
     onReschedule: () -> Unit,
     onCancel: () -> Unit,
     onJoinCall: () -> Unit,
+    onCompleteConsultation: () -> Unit,
     onRate: () -> Unit,
     linkedPrescription: Boolean?,
     onOpenPrescriptions: () -> Unit,
@@ -1504,7 +1777,9 @@ private fun VisitCard(
                         onCancel =
                             onCancel,
                         onJoinCall =
-                            onJoinCall
+                            onJoinCall,
+                        onCompleteConsultation =
+                            onCompleteConsultation
                     )
                 }
 
@@ -2439,7 +2714,8 @@ private fun ActiveVisitActions(
     onMessage: () -> Unit,
     onReschedule: () -> Unit,
     onCancel: () -> Unit,
-    onJoinCall: () -> Unit
+    onJoinCall: () -> Unit,
+    onCompleteConsultation: () -> Unit
 ) {
 
     Column(
@@ -2479,6 +2755,38 @@ private fun ActiveVisitActions(
                 Text(
                     "Open scheduled call"
                 )
+            }
+            if (online) {
+
+                OutlinedButton(
+                    onClick =
+                        onCompleteConsultation,
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    shape =
+                        RoundedCornerShape(
+                            13.dp
+                        )
+                ) {
+
+                    Icon(
+                        imageVector =
+                            Icons.Filled.CheckCircle,
+                        contentDescription =
+                            null
+                    )
+
+                    Spacer(
+                        modifier =
+                            Modifier.width(
+                                7.dp
+                            )
+                    )
+
+                    Text(
+                        "Finish consultation"
+                    )
+                }
             }
         }
 

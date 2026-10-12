@@ -473,7 +473,6 @@ fun DoctorAppointmentActionSheet(
             }
 
             if (
-                appointment.appointment_type != "online" &&
                 status == "confirmed"
             ) {
                 Spacer(
@@ -482,7 +481,12 @@ fun DoctorAppointmentActionSheet(
 
                 DoctorSheetActionCard(
                     icon = Icons.Outlined.CheckCircle,
-                    label = "Complete in-person visit",
+                    label =
+                        if (appointment.appointment_type == "online") {
+                            "Complete consultation"
+                        } else {
+                            "Complete in-person visit"
+                        },
                     description =
                         "Enter the patient's 6-digit completion code",
                     tint = ActionTeal,

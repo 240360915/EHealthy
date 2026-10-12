@@ -506,13 +506,27 @@ fun BookAppointmentScreen(
                         showDemoPayCheckout = false
                     }
                     .onFailure { error ->
-                        showDemoPayCheckout = false
-                        bookingError = friendlyBookingError(error.message)
-                        demoPayNotice = DemoPayNotice(
-                            title = "Payment not completed",
-                            message = "We couldn't finish your appointment payment and booking. " +
-                                    "No real money was charged. Please check your details and try again."
+
+                        android.util.Log.e(
+                            "BookingPayment",
+                            "Appointment booking failed",
+                            error
                         )
+
+                        showDemoPayCheckout = false
+
+                        bookingError =
+                            friendlyBookingError(
+                                error.message
+                            )
+
+                        demoPayNotice =
+                            DemoPayNotice(
+                                title = "Payment not completed",
+                                message =
+                                    "We couldn't finish your appointment payment and booking. " +
+                                            "No real money was charged. Please check your details and try again."
+                            )
                     }
             } catch (error: Exception) {
                 if (error is kotlinx.coroutines.CancellationException) throw error

@@ -114,6 +114,12 @@ fun CallScreen(
                 screenState = CallScreenState.Error(it.message ?: "Could not start the call.")
                 return@LaunchedEffect
             }
+            android.util.Log.d(
+                "ScheduledCall",
+                "role=${if (isDoctorView) "doctor" else "patient"} " +
+                        "appointmentId=$appointmentId " +
+                        "streamUserId=${tokenResponse.userId}"
+            )
 
             // Always tear down any previous client before building a new one —
             // otherwise retries and re-entering this screen leave stale

@@ -805,8 +805,48 @@ fun AppNavGraph(pendingRoute: String? = null) {
                                 popUpTo("choose") { inclusive = false }
                             }
                         } catch (e: Exception) {
+
                             isLoading = false
-                            errorMessage = "Registration failed: ${e.message}"
+
+                            android.util.Log.e(
+                                "PatientRegistration",
+                                "Patient registration failed",
+                                e
+                            )
+
+                            val raw =
+                                e.message
+                                    .orEmpty()
+                                    .lowercase()
+
+                            errorMessage =
+                                when {
+
+                                    raw.contains("user_already_exists") ||
+                                            raw.contains("already registered") ->
+
+                                        "An account with this email already exists. Please log in instead."
+
+                                    raw.contains("invalid_email") ||
+                                            raw.contains("unable to validate email") ->
+
+                                        "Please enter a valid email address."
+
+                                    raw.contains("password") &&
+                                            raw.contains("weak") ->
+
+                                        "Your password is too weak. Please choose a stronger password."
+
+                                    raw.contains("network") ||
+                                            raw.contains("timeout") ||
+                                            raw.contains("connection") ->
+
+                                        "Please check your internet connection and try again."
+
+                                    else ->
+
+                                        "Registration could not be completed. Please try again."
+                                }
                         }
                     }
                 }

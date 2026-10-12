@@ -222,12 +222,14 @@ object ConsultationRepository {
      */
     suspend fun heartbeat(): DoctorPresence {
 
-        return db
-            .rpc(
-                "doctor_heartbeat"
-            )
-            .decodeList<DoctorPresence>()
-            .single()
+        // The RPC returns a boolean (true), not a DoctorPresence JSON array.
+        db.rpc(
+            "doctor_heartbeat"
+        )
+
+        // After refreshing the heartbeat, read the actual presence record.
+        return presence()
+            ?: error("Doctor presence could not be loaded.")
     }
 
     suspend fun create(

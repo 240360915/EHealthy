@@ -916,6 +916,8 @@ object PatientRepository {
         mode: ConsultationMode,
         targetDoctorId: String? = null,
         service: String = "general",
+        symptomNotes: String,
+        urgency: String = "routine",
         idempotencyKey: String =
             UUID.randomUUID().toString()
     ): Result<ConsultationRequestResult> =
@@ -979,12 +981,14 @@ object PatientRepository {
                         "p_idempotency_key",
                         idempotencyKey
                     )
+                    put("p_symptom_notes", symptomNotes.trim())
+                    put("p_urgency", urgency)
                 }
 
             supabase.postgrest
                 .rpc(
                     function =
-                        "create_consultation_request",
+                        "create_triaged_consultation_request",
                     parameters =
                         parameters
                 )

@@ -511,13 +511,46 @@ fun BookAppointmentScreen(
                         showDemoPayCheckout = false
                     }
                     .onFailure { error ->
+
                         showDemoPayCheckout = false
-                        bookingError = friendlyBookingError(error.message)
-                        demoPayNotice = DemoPayNotice(
-                            title = "Payment not completed",
-                            message = "We couldn't finish your appointment payment and booking. " +
-                                    "No real money was charged. Please check your details and try again."
-                        )
+
+                        val friendlyMessage =
+                            friendlyBookingError(
+                                error.message
+                            )
+
+                        bookingError =
+                            friendlyMessage
+
+                        demoPayNotice =
+                            DemoPayNotice(
+                                title =
+                                    when {
+                                        friendlyMessage.contains(
+                                            "already have an appointment",
+                                            ignoreCase = true
+                                        ) ->
+                                            "Appointment already exists"
+
+                                        friendlyMessage.contains(
+                                            "slot",
+                                            ignoreCase = true
+                                        ) ->
+                                            "Time no longer available"
+
+                                        friendlyMessage.contains(
+                                            "past",
+                                            ignoreCase = true
+                                        ) ->
+                                            "Appointment time unavailable"
+
+                                        else ->
+                                            "Booking could not be completed"
+                                    },
+
+                                message =
+                                    friendlyMessage
+                            )
                     }
             } catch (error: Exception) {
                 if (error is kotlinx.coroutines.CancellationException) throw error

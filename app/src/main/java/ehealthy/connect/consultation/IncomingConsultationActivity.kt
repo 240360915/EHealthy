@@ -1122,6 +1122,7 @@ private fun IncomingInvitationContent(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(
                     horizontal = 24.dp,
                     vertical = 18.dp
@@ -1169,9 +1170,7 @@ private fun IncomingInvitationContent(
                 }
             }
 
-            Spacer(
-                modifier = Modifier.weight(0.6f)
-            )
+            Spacer(modifier = Modifier.height(12.dp))
 
 
             /*
@@ -1419,9 +1418,7 @@ private fun IncomingInvitationContent(
             }
 
 
-            Spacer(
-                modifier = Modifier.weight(1f)
-            )
+            Spacer(modifier = Modifier.height(16.dp))
 
 
             /*

@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -36,6 +37,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -129,6 +132,10 @@ fun OnDemandConsultationScreen(
             }
         )
     }
+
+    var selectedSpecialty by remember { mutableStateOf("general") }
+    var symptomNotes by remember { mutableStateOf("") }
+    var selectedUrgency by remember { mutableStateOf("routine") }
 
     var selectedDoctorId by remember {
         mutableStateOf(
@@ -308,6 +315,11 @@ fun OnDemandConsultationScreen(
             return
         }
 
+        if (symptomNotes.trim().length !in 10..800) {
+            requestError = "Please describe your symptoms or reason for consulting (10-800 characters)."
+            return
+        }
+
         requestError =
             null
 
@@ -338,8 +350,9 @@ fun OnDemandConsultationScreen(
                             null
                         },
 
-                    service =
-                        "general",
+                    service = selectedSpecialty,
+                    symptomNotes = symptomNotes.trim(),
+                    urgency = selectedUrgency,
 
                     idempotencyKey =
                         requestIdempotencyKey
@@ -846,6 +859,12 @@ fun OnDemandConsultationScreen(
                             ),
                     selectedMode =
                         selectedMode,
+                    selectedSpecialty = selectedSpecialty,
+                    symptomNotes = symptomNotes,
+                    selectedUrgency = selectedUrgency,
+                    onSpecialtySelected = { selectedSpecialty = it },
+                    onNotesChanged = { symptomNotes = it.take(800) },
+                    onUrgencySelected = { selectedUrgency = it },
                     selectedDoctor =
                         selectedDoctor,
                     loadingDoctor =
@@ -879,10 +898,103 @@ fun OnDemandConsultationScreen(
     }
 }
 
+private val consultationSpecialties = listOf(
+    "general" to "General / primary care",
+    "dental" to "Dental",
+    "heart" to "Heart / cardiac",
+    "mental_health" to "Mental health",
+    "womens_health" to "Women's health",
+    "children" to "Children",
+    "skin" to "Skin",
+    "eyes" to "Eye care"
+)
+
+@Composable
+private fun ConsultationTriageCard(
+    specialty: String,
+    notes: String,
+    urgency: String,
+    onSpecialtySelected: (String) -> Unit,
+    onNotesChanged: (String) -> Unit,
+    onUrgencySelected: (String) -> Unit
+) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                "Tell the right doctor what you need",
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 18.sp,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                "Select the specialty and describe your concern. Only matching available doctors receive a broadcast; they can review this note before accepting.",
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text("Consultation specialty", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(consultationSpecialties.size) { index ->
+                    val option = consultationSpecialties[index]
+                    FilterChip(
+                        selected = specialty == option.first,
+                        onClick = { onSpecialtySelected(option.first) },
+                        label = { Text(option.second) }
+                    )
+                }
+            }
+            OutlinedTextField(
+                value = notes,
+                onValueChange = { onNotesChanged(it.take(800)) },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Symptoms or reason for consultation") },
+                placeholder = { Text("Describe what is happening, how long it has been happening, and what help you need...") },
+                minLines = 3,
+                maxLines = 5,
+                supportingText = { Text("\${notes.length}/800 characters - at least 10 required") },
+                shape = RoundedCornerShape(16.dp)
+            )
+            Text("How soon do you need help?", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val options = listOf("routine" to "Routine", "soon" to "Soon", "urgent" to "Urgent")
+                items(options.size) { index ->
+                    val option = options[index]
+                    FilterChip(
+                        selected = urgency == option.first,
+                        onClick = { onUrgencySelected(option.first) },
+                        label = { Text(option.second) }
+                    )
+                }
+            }
+            Text(
+                "This is not an emergency service. For serious symptoms or immediate danger, seek emergency medical help instead of waiting for a broadcast.",
+                fontSize = 11.sp,
+                lineHeight = 16.sp,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+    }
+}
+
 @Composable
 private fun ConsultationSetupScreen(
     modifier: Modifier,
     selectedMode: ConsultationScreenMode,
+    selectedSpecialty: String,
+    symptomNotes: String,
+    selectedUrgency: String,
+    onSpecialtySelected: (String) -> Unit,
+    onNotesChanged: (String) -> Unit,
+    onUrgencySelected: (String) -> Unit,
     selectedDoctor: PatientDoctorSummary?,
     loadingDoctor: Boolean,
     doctorError: String?,
@@ -1064,6 +1176,17 @@ private fun ConsultationSetupScreen(
                         onChooseDoctor
                 )
             }
+        }
+
+        item {
+            ConsultationTriageCard(
+                specialty = selectedSpecialty,
+                notes = symptomNotes,
+                urgency = selectedUrgency,
+                onSpecialtySelected = onSpecialtySelected,
+                onNotesChanged = onNotesChanged,
+                onUrgencySelected = onUrgencySelected
+            )
         }
 
         item {

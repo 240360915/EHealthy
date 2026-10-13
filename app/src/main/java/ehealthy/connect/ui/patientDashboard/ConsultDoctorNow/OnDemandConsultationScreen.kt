@@ -930,6 +930,12 @@ private fun ConsultationTriageCard(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
+                "EHEALTHY CONSULTATION • v1.1",
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+                fontSize = 10.sp
+            )
+            Text(
                 "Tell the right doctor what you need",
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 18.sp,

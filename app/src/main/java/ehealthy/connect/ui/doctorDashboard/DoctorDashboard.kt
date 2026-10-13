@@ -395,6 +395,12 @@ fun DoctorDashboard(
                         throw error
                     }
 
+                    // Never leave the doctor staring at an endless spinner when
+                    // the authenticated live-requests RPC has failed.
+                    isLoadingLiveRequests = false
+                    liveRequestMessage =
+                        "Could not check incoming broadcasts. Check your connection and sign-in, then retry."
+
                     android.util.Log.e(
                         "LiveConsultation",
                         "Failed to load live requests",
@@ -485,6 +491,84 @@ fun DoctorDashboard(
                 }
             }
         }
+
+    // Foreground fallback for broadcast invitations: the doctor must see a
+    // request even when Firebase push delivery fails or notifications are off.
+    var dismissedIncomingRequestId by remember { mutableStateOf<String?>(null) }
+    var respondingToIncomingRequest by remember { mutableStateOf(false) }
+    val incomingRequest = liveRequests.firstOrNull {
+        it.request_id != dismissedIncomingRequestId
+    }
+
+    if (incomingRequest != null) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!respondingToIncomingRequest) {
+                    dismissedIncomingRequestId = incomingRequest.request_id
+                }
+            },
+            title = { Text("Incoming consultation request") },
+            text = {
+                Text(
+                    "${incomingRequest.patient_name.ifBlank { "A patient" }} is requesting a " +
+                        "${incomingRequest.request_mode} consultation. " +
+                        "Accept to join the waiting room while the patient completes DemoPay. " +
+                        "The invitation expires after 60 seconds."
+                )
+            },
+            confirmButton = {
+                Button(
+                    enabled = !respondingToIncomingRequest,
+                    onClick = {
+                        if (!respondingToIncomingRequest) {
+                            respondingToIncomingRequest = true
+                            scope.launch {
+                                try {
+                                    DoctorLiveConsultationRepository
+                                        .acceptRequest(incomingRequest.request_id)
+                                        .onSuccess { result ->
+                                            if (
+                                                result.claim_result.equals("claimed", ignoreCase = true) ||
+                                                result.claim_result.equals("already_claimed_by_you", ignoreCase = true)
+                                            ) {
+                                                liveRequests = liveRequests.filterNot {
+                                                    it.request_id == incomingRequest.request_id
+                                                }
+                                                dismissedIncomingRequestId = incomingRequest.request_id
+                                                onOpenLiveConsultation(incomingRequest.request_id)
+                                            } else {
+                                                liveRequestMessage =
+                                                    "This consultation is no longer available. Please wait for another broadcast."
+                                                liveRequests = liveRequests.filterNot {
+                                                    it.request_id == incomingRequest.request_id
+                                                }
+                                            }
+                                        }
+                                        .onFailure { error ->
+                                            liveRequestMessage =
+                                                "Could not accept this request: ${error.message ?: "Please try again."}"
+                                            dismissedIncomingRequestId = incomingRequest.request_id
+                                        }
+                                } finally {
+                                    respondingToIncomingRequest = false
+                                }
+                            }
+                        }
+                    }
+                ) {
+                    Text(if (respondingToIncomingRequest) "Accepting..." else "Accept")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !respondingToIncomingRequest,
+                    onClick = {
+                        dismissedIncomingRequestId = incomingRequest.request_id
+                    }
+                ) { Text("Later") }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {

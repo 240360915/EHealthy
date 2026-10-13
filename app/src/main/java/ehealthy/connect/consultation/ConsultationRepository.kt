@@ -17,6 +17,8 @@ data class ConsultationRow(
     val patient_id: String,
     val mode: String,
     val service: String,
+    val symptom_notes: String? = null,
+    val urgency: String = "routine",
     val status: String,
     val price_minor: Int,
     val currency: String,

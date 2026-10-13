@@ -145,12 +145,27 @@ fun PatientPrescriptionsScreen(
                         )
                         ?.use { output ->
 
-                            PrescriptionPdfExporter.writePrescriptionPdf(
-                                context = context,
-                                prescription = prescription,
-                                fallbackDoctorName = fallbackDoctorName,
-                                output = output
-                            )
+
+                            val signed =
+                                prescription.is_official &&
+                                        !prescription.doctor_signature_data.isNullOrBlank() &&
+                                        !prescription.doctor_stamp_data.isNullOrBlank()
+
+                            if (signed) {
+                                PrescriptionPdfExporter.writePrescriptionPdf(
+                                    context = context,
+                                    prescription = prescription,
+                                    fallbackDoctorName = fallbackDoctorName,
+                                    output = output
+                                )
+                            } else {
+                                writeUnsignedMedicationSummary(
+                                    prescription = prescription,
+                                    doctorName = fallbackDoctorName,
+                                    output = output
+                                )
+                            }
+
                         }
                         ?: error(
                             "Could not open the selected file."
@@ -702,57 +717,41 @@ fun PatientPrescriptionsScreen(
                                 )
                             },
 
+
                             onDownloadPdf = {
+                                pendingPdfPrescription = prescription
 
-                                val hasOfficialPdf =
-                                    prescription.is_official &&
-                                            !prescription.doctor_signature_data
-                                                .isNullOrBlank() &&
-                                            !prescription.doctor_stamp_data
-                                                .isNullOrBlank()
+                                pendingPdfDoctorName =
+                                    prescription.doctor_name
+                                        ?: prescription.doctor_id?.let {
+                                            doctorNames[it]
+                                        }
 
-                                if (
-                                    !hasOfficialPdf
-                                ) {
+                                val reference =
+                                    prescription.prescription_reference
+                                        ?.takeIf { it.isNotBlank() }
+                                        ?: prescription.id.take(8)
 
-                                    Toast
-                                        .makeText(
-                                            context,
-                                            "This older prescription does not have the official signed PDF details.",
-                                            Toast.LENGTH_LONG
-                                        )
-                                        .show()
-
-                                } else {
-
-                                    pendingPdfPrescription =
-                                        prescription
-
-                                    pendingPdfDoctorName =
-                                        prescription.doctor_name
-                                            ?: prescription.doctor_id
-                                                ?.let {
-                                                    doctorNames[
-                                                        it
-                                                    ]
-                                                }
-
-                                    val reference =
-                                        prescription
-                                            .prescription_reference
-                                            ?.takeIf {
-                                                it.isNotBlank()
-                                            }
-                                            ?: prescription.id
-                                                .take(
-                                                    8
-                                                )
-
-                                    createPdfLauncher.launch(
-                                        "EHealthy_Prescription_$reference.pdf"
+                                val safeReference =
+                                    reference.replace(
+                                        Regex("[^A-Za-z0-9_-]"),
+                                        "_"
                                     )
-                                }
+
+                                val signed =
+                                    prescription.is_official &&
+                                            !prescription.doctor_signature_data.isNullOrBlank() &&
+                                            !prescription.doctor_stamp_data.isNullOrBlank()
+
+                                val type =
+                                    if (signed) "Prescription"
+                                    else "MedicationSummary"
+
+                                createPdfLauncher.launch(
+                                    "EHealthy_${type}_${safeReference}.pdf"
+                                )
                             }
+
                         )
                     }
 
@@ -1217,7 +1216,7 @@ private fun PrescriptionCard(
                     onClick =
                         onDownloadPdf,
                     enabled =
-                        officialPdfReady,
+                        true,
                     modifier =
                         Modifier
                             .fillMaxWidth()
@@ -1254,8 +1253,11 @@ private fun PrescriptionCard(
 
 
                     Text(
-                        text =
-                            "Download signed PDF",
+                        text = if (officialPdfReady) {
+                            "Download signed PDF"
+                        } else {
+                            "Download medication summary"
+                        },
                         color =
                             PatientColors.Purple,
                         fontWeight =
@@ -1773,5 +1775,165 @@ private fun formatPrescriptionDate(isoTimestamp: String?): String {
         "Prescribed ${months[month.toInt() - 1]} ${day.toInt()}, $year"
     } catch (e: Exception) {
         isoTimestamp
+    }
+}
+
+
+private fun writeUnsignedMedicationSummary(
+    prescription: Prescription,
+    doctorName: String?,
+    output: java.io.OutputStream
+) {
+    val pdf = android.graphics.pdf.PdfDocument()
+
+    val body = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        color = android.graphics.Color.rgb(30, 41, 59)
+        textSize = 12f
+    }
+
+    val heading = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        color = android.graphics.Color.rgb(15, 23, 42)
+        textSize = 18f
+        typeface = android.graphics.Typeface.DEFAULT_BOLD
+    }
+
+    var pageNumber = 0
+    lateinit var page: android.graphics.pdf.PdfDocument.Page
+    var y = 0f
+
+    fun startPage() {
+        pageNumber++
+
+        page = pdf.startPage(
+            android.graphics.pdf.PdfDocument.PageInfo
+                .Builder(595, 842, pageNumber)
+                .create()
+        )
+
+        y = 52f
+        page.canvas.drawText(
+            "UNSIGNED MEDICATION SUMMARY",
+            42f, y, heading
+        )
+
+        y += 27f
+        page.canvas.drawText(
+            "For records only - NOT VALID FOR DISPENSING",
+            42f, y, body
+        )
+
+        y += 38f
+    }
+
+    fun writeLine(value: String) {
+        var remaining = value
+            .replace('\n', ' ')
+            .trim()
+            .ifEmpty { "Not recorded" }
+
+        while (remaining.isNotEmpty()) {
+            if (y > 790f) {
+                pdf.finishPage(page)
+                startPage()
+            }
+
+            val fit = body.breakText(
+                remaining, true, 505f, null
+            ).coerceAtLeast(1)
+
+            val lastSpace =
+                remaining.take(fit).lastIndexOf(' ')
+
+            val length =
+                if (fit < remaining.length && lastSpace > 20) {
+                    lastSpace
+                } else {
+                    fit
+                }
+
+            page.canvas.drawText(
+                remaining.take(length),
+                42f, y, body
+            )
+
+            remaining = remaining.drop(length).trimStart()
+            y += 19f
+        }
+    }
+
+    try {
+        startPage()
+
+        writeLine(
+            "Patient: ${prescription.patient_name ?: "Not recorded"}"
+        )
+        writeLine(
+            "Doctor: ${prescription.doctor_name ?: doctorName ?: "Not recorded"}"
+        )
+        writeLine(
+            "Date: ${prescription.created_at ?: "Not recorded"}"
+        )
+        writeLine(
+            "Record reference: ${prescription.prescription_reference ?: prescription.id}"
+        )
+
+        y += 20f
+        writeLine("MEDICATION DETAILS")
+
+        val items = prescription.prescription_items
+            ?.takeIf { it.isNotEmpty() }
+            ?: listOf(
+                PrescriptionItem(
+                    medication = prescription.medication.orEmpty()
+                )
+            )
+
+        items.forEachIndexed { index, item ->
+            y += 8f
+
+            writeLine(
+                "${index + 1}. ${item.medication.ifBlank { "Medication not recorded" }}"
+            )
+
+            if (item.dosage.isNotBlank()) {
+                writeLine("Dosage: ${item.dosage}")
+            }
+
+            if (item.frequency.isNotBlank()) {
+                writeLine("Frequency: ${item.frequency}")
+            }
+
+            if (item.duration.isNotBlank()) {
+                writeLine("Duration: ${item.duration}")
+            }
+
+            if (!item.instructions.isNullOrBlank()) {
+                writeLine("Instructions: ${item.instructions}")
+            }
+        }
+
+        prescription.general_instructions
+            ?.takeIf { it.isNotBlank() }
+            ?.let {
+                y += 12f
+                writeLine("Additional notes: $it")
+            }
+
+        y += 24f
+        writeLine(
+            "This is an unsigned summary of existing EHealthy records."
+        )
+        writeLine(
+            "It is not a signed medical prescription."
+        )
+
+        pdf.finishPage(page)
+        pdf.writeTo(output)
+    } finally {
+        pdf.close()
     }
 }

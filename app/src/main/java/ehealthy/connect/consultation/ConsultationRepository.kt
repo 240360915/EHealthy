@@ -220,6 +220,7 @@ object ConsultationRepository {
      *
      * The foreground service calls this repeatedly.
      */
+
     suspend fun heartbeat(): DoctorPresence {
 
         // The RPC returns a boolean (true), not a DoctorPresence JSON array.
@@ -231,6 +232,7 @@ object ConsultationRepository {
         return presence()
             ?: error("Doctor presence could not be loaded.")
     }
+
 
     suspend fun create(
         mode: String,

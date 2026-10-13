@@ -386,7 +386,7 @@ fun DoctorDashboard(
 
                     android.util.Log.d(
                         "LiveConsultation",
-                        "Loaded ${it.size} live request(s): $it"
+                        "Loaded ${it.size} live consultation request(s)"
                     )
                 }
                 .onFailure { error ->

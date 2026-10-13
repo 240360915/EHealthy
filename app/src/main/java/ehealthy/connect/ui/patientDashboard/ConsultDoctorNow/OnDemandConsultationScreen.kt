@@ -960,7 +960,7 @@ private fun ConsultationTriageCard(
                 placeholder = { Text("Describe what is happening, how long it has been happening, and what help you need...") },
                 minLines = 3,
                 maxLines = 5,
-                supportingText = { Text("\${notes.length}/800 characters - at least 10 required") },
+                supportingText = { Text("${notes.length}/800 characters - at least 10 required") },
                 shape = RoundedCornerShape(16.dp)
             )
             Text("How soon do you need help?", fontWeight = FontWeight.Bold, fontSize = 13.sp)

@@ -19,7 +19,9 @@ data class DoctorLiveConsultationRequest(
     val request_status: String,
     val recipient_status: String,
     val created_at: String,
-    val expires_at: String
+    val expires_at: String,
+    val symptom_notes: String? = null,
+    val urgency: String = "routine"
 )
 
 @Serializable
@@ -53,7 +55,7 @@ object DoctorLiveConsultationRepository {
                 supabase
                     .postgrest
                     .rpc(
-                        "doctor_get_live_consultation_requests"
+                        "doctor_get_triaged_consultation_requests"
                     )
                     .decodeList<DoctorLiveConsultationRequest>()
 

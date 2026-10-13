@@ -509,12 +509,21 @@ fun DoctorDashboard(
             },
             title = { Text("Incoming consultation request") },
             text = {
-                Text(
-                    "${incomingRequest.patient_name.ifBlank { "A patient" }} is requesting a " +
-                        "${incomingRequest.request_mode} consultation. " +
-                        "Accept to join the waiting room while the patient completes DemoPay. " +
-                        "The invitation expires after 60 seconds."
-                )
+                Column(
+                    modifier = Modifier.heightIn(max = 350.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        "${incomingRequest.patient_name.ifBlank { "A patient" }} needs a consultation. Review the category and reason before accepting.",
+                        fontWeight = FontWeight.Medium
+                    )
+                    DoctorTriageDetails(incomingRequest)
+                    Text(
+                        "The first doctor to accept wins. Video opens after the patient completes DemoPay. Invitation lasts 60 seconds.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             },
             confirmButton = {
                 Button(
@@ -1444,6 +1453,68 @@ private fun HomeTabContent(
 }
 
 @Composable
+private fun DoctorTriageDetails(request: DoctorLiveConsultationRequest) {
+    val urgency = request.urgency.lowercase()
+    val isUrgent = urgency == "urgent"
+    val urgencyColor = when (urgency) {
+        "urgent" -> MaterialTheme.colorScheme.error
+        "soon" -> Color(0xFFB45309)
+        else -> DoctorTeal
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                request.service.replace("_", " ").replaceFirstChar { it.titlecase() },
+                color = DoctorInk,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp
+            )
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = urgencyColor.copy(alpha = 0.13f)
+            ) {
+                Text(
+                    if (isUrgent) "URGENT" else urgency.uppercase(),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    color = urgencyColor,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+        Text(
+            "PATIENT'S REASON FOR CONSULTING",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.ExtraBold
+        )
+        Text(
+            request.symptom_notes?.takeIf { it.isNotBlank() }
+                ?: "No symptoms or notes were provided for this older request.",
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 13.sp,
+            lineHeight = 19.sp
+        )
+        Text(
+            "Accept only if this concern is within your professional scope.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 11.sp
+        )
+    }
+}
+
+@Composable
 private fun LiveConsultationRequestCard(
     request: DoctorLiveConsultationRequest,
     onAccept: () -> Unit,
@@ -1662,6 +1733,9 @@ private fun LiveConsultationRequestCard(
                 )
             }
 
+
+            Spacer(modifier = Modifier.height(12.dp))
+            DoctorTriageDetails(request)
 
             Spacer(
                 modifier = Modifier.height(17.dp)

@@ -493,7 +493,12 @@ fun DoctorAppointmentActionSheet(
                 )
             }
 
-            if (status != "cancelled") {
+            if (
+                status != "cancelled" &&
+                status != "declined" &&
+                status != "expired" &&
+                status != "completed"
+            ) {
                 Spacer(
                     modifier = Modifier.height(10.dp)
                 )

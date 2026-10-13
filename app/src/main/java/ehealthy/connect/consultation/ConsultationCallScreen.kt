@@ -109,6 +109,8 @@ fun ConsultationCallScreen(
     val context =
         LocalContext.current
 
+    val coroutineScope = rememberCoroutineScope()
+
 
     var screenState by remember {
 
@@ -477,6 +479,42 @@ fun ConsultationCallScreen(
         }
     }
 
+    fun finishConsultation(
+        activeCall: Call
+    ) {
+        coroutineScope.launch {
+
+            DoctorLiveConsultationRepository
+                .endConsultation(requestId)
+                .onFailure { error ->
+
+                    android.util.Log.e(
+                        "ConsultationCall",
+                        "Could not mark consultation as completed",
+                        error
+                    )
+                }
+
+            try {
+                activeCall.leave()
+            } catch (error: Exception) {
+
+                android.util.Log.e(
+                    "ConsultationCall",
+                    "Could not leave Stream call",
+                    error
+                )
+            }
+
+            try {
+                StreamVideo.removeClient()
+            } catch (_: Exception) {
+            }
+
+            onBack()
+        }
+    }
+
 
     VideoTheme {
 
@@ -560,39 +598,16 @@ fun ConsultationCallScreen(
                                         activeCall,
 
                                     onBackPressed = {
-
-                                        try {
-
-                                            activeCall
-                                                .leave()
-
-                                        } catch (
-                                            _: Exception
-                                        ) {
-                                        }
-
-                                        onBack()
+                                        finishConsultation(activeCall)
                                     },
 
-                                    onCallAction = {
-                                            action ->
+                                    onCallAction = { action ->
 
                                         if (
                                             action is
                                                     io.getstream.video.android.core.call.state.LeaveCall
                                         ) {
-
-                                            try {
-
-                                                activeCall
-                                                    .leave()
-
-                                            } catch (
-                                                _: Exception
-                                            ) {
-                                            }
-
-                                            onBack()
+                                            finishConsultation(activeCall)
                                         }
                                     }
                                 )

@@ -123,6 +123,7 @@ import kotlinx.serialization.Serializable
 import ehealthy.connect.ui.patientDashboard.DoctorProfile as PatientDoctorProfile
 import ehealthy.connect.data.patient.PatientAppointment
 import ehealthy.connect.data.patient.PatientRepository
+import ehealthy.connect.ui.doctorDashboard.DoctorPatientCareHub
 import ehealthy.connect.ui.patientDashboard.ConsultDoctorNow.OnDemandConsultationScreen
 import ehealthy.connect.ui.patientDashboard.FindDoctors.DoctorListing
 import ehealthy.connect.ui.patientDashboard.myVisits.PatientVisitsScreen
@@ -133,6 +134,9 @@ import ehealthy.connect.ui.patientDashboard.PatientNotificationsScreen
 import ehealthy.connect.ui.patientDashboard.PatientInvoicesScreen
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import ehealthy.connect.ui.doctorDashboard.DoctorPatientCareHub
+import kotlinx.serialization.json.put
+
 private object BookingConfirmationHolder {
     var confirmation: BookingConfirmation? = null
 }
@@ -1320,6 +1324,14 @@ fun AppNavGraph(pendingRoute: String? = null) {
                         }
                     }
                 },
+                onOpenLiveConsultation = { requestId ->
+
+                    navController.navigate(
+                        "consultationCall/$requestId/doctor"
+                    ) {
+                        launchSingleTop = true
+                    }
+                },
                 fetchAppointments = { doctorId ->
                     try {
                         val data = SupabaseClientProvider.client.postgrest
@@ -1332,20 +1344,55 @@ fun AppNavGraph(pendingRoute: String? = null) {
                     }
                 },
                 onUpdateAppointmentStatus = { appointmentId, newStatus ->
+
                     try {
-                        SupabaseClientProvider.client.postgrest.from("appointments")
-                            .update({ set("status", newStatus) }) {
-                                filter { eq("id", appointmentId) }
+
+                        val parameters =
+                            buildJsonObject {
+
+                                put(
+                                    "p_appointment_id",
+                                    appointmentId
+                                )
+
+                                put(
+                                    "p_new_status",
+                                    newStatus
+                                )
                             }
+
+
+                        SupabaseClientProvider.client
+                            .postgrest
+                            .rpc(
+                                function =
+                                    "doctor_update_appointment_status",
+                                parameters =
+                                    parameters
+                            )
+
+
                         Result.success(Unit)
+
                     } catch (e: Exception) {
-                        Result.failure(Exception(friendlyAuthError(e)))
+
+                        Result.failure(
+                            Exception(
+                                friendlyAuthError(e)
+                            )
+                        )
                     }
                 },
                 onNavigatePrescriptions = { navController.navigate("doctorPrescriptions") },
                 onNavigateEarnings = { navController.navigate("doctorDemoEarnings") },
                 onNavigateSettings = { navController.navigate("doctorSettings") },
                 onNavigateTimeSlots = { navController.navigate("doctorTimeSlots") },
+                onOpenPatientCareHub = { appointmentId, patientName ->
+
+                    navController.navigate(
+                        "doctorPatientCare/$appointmentId/${Uri.encode(patientName)}"
+                    )
+                },
                 onStartCall = { appointmentId -> navController.navigate("doctorCall/$appointmentId") },
                 onOpenPatientFile = { appointmentId ->
                     navController.navigate("doctorPatientCareFile/$appointmentId")
@@ -1441,6 +1488,40 @@ fun AppNavGraph(pendingRoute: String? = null) {
                     }
                 },
                 onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = "doctorPatientCare/{appointmentId}/{patientName}",
+            arguments = listOf(
+                navArgument("appointmentId") {
+                    type = NavType.StringType
+                },
+                navArgument("patientName") {
+                    type = NavType.StringType
+                }
+            )
+        ) { backStackEntry ->
+
+            val appointmentId =
+                backStackEntry.arguments
+                    ?.getString("appointmentId")
+                    .orEmpty()
+
+            val patientName =
+                backStackEntry.arguments
+                    ?.getString("patientName")
+                    ?.let {
+                        Uri.decode(it)
+                    }
+                    ?: "Patient"
+
+            DoctorPatientCareHub(
+                appointmentId = appointmentId,
+                patientName = patientName,
+                onBack = {
+                    navController.popBackStack()
+                }
             )
         }
 

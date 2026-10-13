@@ -356,6 +356,12 @@ fun OnDemandConsultationScreen(
                 }
                 .onFailure { error ->
 
+                    android.util.Log.e(
+                        "PatientConsultation",
+                        "Failed to create consultation request",
+                        error
+                    )
+
                     requestError =
                         friendlyConsultationError(
                             error.message,
@@ -390,9 +396,17 @@ fun OnDemandConsultationScreen(
                 }
                 .onFailure { error ->
 
+                    android.util.Log.e(
+                        "PatientConsultation",
+                        "Failed to cancel consultation request",
+                        error
+                    )
+
                     requestError =
-                        error.message
-                            ?: "Unable to cancel this consultation request."
+                        friendlyConsultationError(
+                            error.message,
+                            selectedMode
+                        )
                 }
 
             cancelling =
@@ -3081,60 +3095,60 @@ private fun friendlyConsultationError(
     val value =
         message
             .orEmpty()
+            .lowercase()
 
     return when {
 
-        value.contains(
-            "price",
-            ignoreCase = true
-        ) &&
-                mode ==
-                ConsultationScreenMode.BROADCAST ->
+        value.contains("active consultation") ||
+                value.contains("active request") ->
 
-            "The standard broadcast consultation price has not been configured on the server yet."
+            "You already have an active consultation. End it before starting another."
 
-        value.contains(
-            "no doctors",
-            ignoreCase = true
-        ) ->
+        value.contains("no doctors") ->
 
             "No eligible doctors are available right now. Please try again shortly."
 
-        value.contains(
-            "available",
-            ignoreCase = true
-        ) &&
-                mode ==
-                ConsultationScreenMode.PRIVATE ->
+        value.contains("price") &&
+                mode == ConsultationScreenMode.BROADCAST ->
+
+            "The broadcast consultation price is currently unavailable."
+
+        value.contains("available") &&
+                mode == ConsultationScreenMode.PRIVATE ->
 
             "This doctor is not currently available for an on-demand consultation."
 
-        value.contains(
-            "approved",
-            ignoreCase = true
-        ) ->
+        value.contains("approved") ->
 
             "This doctor is temporarily unavailable for consultations."
 
-        value.contains(
-            "active request",
-            ignoreCase = true
-        ) ->
-
-            "You already have an active consultation request."
-
-        value.contains(
-            "Patient profile",
-            ignoreCase = true
-        ) ->
+        value.contains("patient profile") ->
 
             "Your patient profile could not be found. Please sign in again."
 
-        value.isNotBlank() ->
-            "We couldn't process your consultation request. Please try again."
+        value.contains("authentication") ||
+                value.contains("401") ||
+                value.contains("jwt") ->
+
+            "Your session has expired. Please sign in again."
+
+        value.contains("expired") ->
+
+            "This consultation request has expired. Please try again."
+
+        value.contains("cancel") ->
+
+            "The consultation request could not be cancelled. Please try again."
+
+        value.contains("network") ||
+                value.contains("timeout") ||
+                value.contains("connection") ->
+
+            "Please check your internet connection and try again."
 
         else ->
-            "We couldn't create the consultation request. Please try again."
+
+            "Something went wrong. Please try again."
     }
 }
 

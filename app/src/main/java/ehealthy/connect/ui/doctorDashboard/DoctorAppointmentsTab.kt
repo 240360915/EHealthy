@@ -160,6 +160,7 @@ fun DoctorAppointmentsTab(
     isLoading: Boolean,
     loadError: String?,
     onUpdateStatus: (appointmentId: String, newStatus: String) -> Unit,
+    onCancelAppointment: (appointmentId: String, reason: String) -> Unit,
     onStartCall: (appointmentId: String) -> Unit = {},
     onVerifyCompletionCode: suspend (appointmentId: String, code: String) -> Result<Unit> = { _, _ ->
         Result.failure(Exception("Not available"))
@@ -407,10 +408,10 @@ fun DoctorAppointmentsTab(
                 )
                 actionTarget = null
             },
-            onCancel = {
-                onUpdateStatus(
+            onCancel = { reason ->
+                onCancelAppointment(
                     appointment.id,
-                    "cancelled"
+                    reason
                 )
                 actionTarget = null
             },
@@ -809,7 +810,20 @@ private fun DoctorAppointmentListCard(
 
                 AppointmentDetailBox(
                     label = "PAYMENT",
-                    value = appointment.payment_method,
+                    value =
+                        when (
+                            appointment.payment_method
+                                ?.lowercase()
+                        ) {
+
+                            "demo_card",
+                            "demo_pay" ->
+                                "DemoPay • Simulated"
+
+                            else ->
+                                appointment.payment_method
+                                    ?: "Not recorded"
+                        },
                     icon = Icons.Outlined.Payments,
                     iconColor = AppointmentGreen,
                     iconBackground = AppointmentGreenSoft,
@@ -856,22 +870,14 @@ private fun DoctorAppointmentListCard(
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(
-                        text =
-                            if (
-                                status == "confirmed" ||
-                                status == "accepted"
-                            ) {
-                                "Consultation ready"
-                            } else {
-                                "Appointment actions"
-                            },
+                        text = "Appointment actions",
                         color = AppointmentInk,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold
                     )
 
                     Text(
-                        text = "View details, confirm, call or update status",
+                        text = "View details or manage this appointment",
                         color = AppointmentMuted,
                         fontSize = 8.5.sp
                     )

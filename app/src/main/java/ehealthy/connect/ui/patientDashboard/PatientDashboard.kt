@@ -177,15 +177,35 @@ private fun Appointment.dateTimeOrNull(): LocalDateTime? {
 }
 
 @RequiresApi(Build.VERSION_CODES.O)
-private fun Appointment.isUpcoming(now: LocalDateTime = LocalDateTime.now()): Boolean {
-    if (status.equals("cancelled", ignoreCase = true) ||
-        status.equals("completed", ignoreCase = true) ||
-        status.equals("declined", ignoreCase = true)
-    ) return false
-    val appointmentDateTime = dateTimeOrNull() ?: return date?.let {
-        runCatching { LocalDate.parse(it) >= now.toLocalDate() }.getOrDefault(false)
-    } ?: false
-    return appointmentDateTime >= now.minusMinutes(60)
+private fun Appointment.isUpcoming(
+    now: LocalDateTime = LocalDateTime.now()
+): Boolean {
+
+    val currentStatus =
+        status
+            ?.lowercase()
+            .orEmpty()
+
+    if (
+        currentStatus !in setOf(
+            "pending",
+            "confirmed",
+            "accepted",
+            "approved",
+            "scheduled",
+            "rescheduled",
+            "in_progress"
+        )
+    ) {
+        return false
+    }
+
+    val appointmentDateTime =
+        dateTimeOrNull()
+            ?: return false
+
+    return appointmentDateTime >=
+            now.minusMinutes(60)
 }
 
 @RequiresApi(Build.VERSION_CODES.O)

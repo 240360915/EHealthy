@@ -921,6 +921,13 @@ object PatientRepository {
     ): Result<ConsultationRequestResult> =
         runCatching {
 
+            // Clean up any old pending on-demand request whose 60-second
+            // server window has already expired. Without this, a stale
+            // "pending" row can block a new broadcast request.
+            supabase.postgrest.rpc(
+                function = "expire_my_stale_consultation_requests"
+            )
+
             if (
                 mode == ConsultationMode.PRIVATE
             ) {

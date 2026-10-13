@@ -128,7 +128,7 @@ fun DoctorAppointmentActionSheet(
     onDismiss: () -> Unit,
     onViewDetails: () -> Unit,
     onConfirm: () -> Unit,
-    onCancel: () -> Unit,
+    onCancel: (reason: String) -> Unit,
     onStartCall: () -> Unit = {},
     onVerifyCompletionCode: suspend (String) -> Result<Unit> = {
         Result.failure(
@@ -146,6 +146,14 @@ fun DoctorAppointmentActionSheet(
 
     var showCancelConfirm by remember {
         mutableStateOf(false)
+    }
+
+    var cancelReason by remember {
+        mutableStateOf("")
+    }
+
+    var cancelReasonError by remember {
+        mutableStateOf<String?>(null)
     }
 
     var showCodeEntry by remember {
@@ -473,7 +481,6 @@ fun DoctorAppointmentActionSheet(
             }
 
             if (
-                appointment.appointment_type != "online" &&
                 status == "confirmed"
             ) {
                 Spacer(
@@ -482,7 +489,12 @@ fun DoctorAppointmentActionSheet(
 
                 DoctorSheetActionCard(
                     icon = Icons.Outlined.CheckCircle,
-                    label = "Complete in-person visit",
+                    label =
+                        if (appointment.appointment_type == "online") {
+                            "Complete consultation"
+                        } else {
+                            "Complete in-person visit"
+                        },
                     description =
                         "Enter the patient's 6-digit completion code",
                     tint = ActionTeal,
@@ -685,6 +697,7 @@ fun DoctorAppointmentActionSheet(
         AlertDialog(
             onDismissRequest = {
                 showCancelConfirm = false
+                cancelReasonError = null
             },
             shape = RoundedCornerShape(26.dp),
             containerColor = Color.White,
@@ -725,19 +738,76 @@ fun DoctorAppointmentActionSheet(
                 }
             },
             text = {
-                Text(
-                    text =
-                        "This booking will be cancelled and the patient will be notified.",
-                    color = ActionMuted,
-                    fontSize = 11.5.sp,
-                    lineHeight = 17.sp
-                )
+                Column {
+                    Text(
+                        text =
+                            "Please give the patient a reason for cancelling this appointment.",
+                        color = ActionMuted,
+                        fontSize = 11.5.sp,
+                        lineHeight = 17.sp
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(14.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = cancelReason,
+                        onValueChange = {
+                            cancelReason = it
+                            cancelReasonError = null
+                        },
+                        label = {
+                            Text("Cancellation reason")
+                        },
+                        placeholder = {
+                            Text(
+                                "e.g. Emergency at the practice"
+                            )
+                        },
+                        minLines = 3,
+                        maxLines = 5,
+                        shape = RoundedCornerShape(15.dp),
+                        colors =
+                            OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor =
+                                    ActionRed,
+                                unfocusedBorderColor =
+                                    ActionBorder
+                            ),
+                        modifier =
+                            Modifier.fillMaxWidth()
+                    )
+
+                    cancelReasonError?.let {
+                        Spacer(
+                            modifier =
+                                Modifier.height(8.dp)
+                        )
+
+                        Text(
+                            text = it,
+                            color = ActionRed,
+                            fontSize = 10.5.sp
+                        )
+                    }
+                }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        showCancelConfirm = false
-                        onCancel()
+                        val cleanReason =
+                            cancelReason.trim()
+
+                        if (cleanReason.length < 3) {
+                            cancelReasonError =
+                                "Please enter a cancellation reason."
+                        } else {
+                            showCancelConfirm = false
+                            cancelReasonError = null
+                            onCancel(cleanReason)
+                            cancelReason = ""
+                        }
                     },
                     shape =
                         RoundedCornerShape(14.dp),
@@ -758,6 +828,7 @@ fun DoctorAppointmentActionSheet(
                 TextButton(
                     onClick = {
                         showCancelConfirm = false
+                        cancelReasonError = null
                     }
                 ) {
                     Text(

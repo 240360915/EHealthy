@@ -223,11 +223,14 @@ object ConsultationRepository {
 
     suspend fun heartbeat(): DoctorPresence {
 
-        db.rpc("doctor_heartbeat")
+        // The RPC returns a boolean (true), not a DoctorPresence JSON array.
+        db.rpc(
+            "doctor_heartbeat"
+        )
+
+        // After refreshing the heartbeat, read the actual presence record.
         return presence()
-            ?: throw IllegalStateException(
-                "Doctor availability could not be loaded."
-            )
+            ?: error("Doctor presence could not be loaded.")
     }
 
 

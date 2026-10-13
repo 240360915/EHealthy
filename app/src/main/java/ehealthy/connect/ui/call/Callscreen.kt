@@ -77,7 +77,8 @@ private sealed class CallScreenState {
  */
 data class CallAppointmentStatus(
     val status: String?,
-    val cancelledReason: String?
+    val cancelledReason: String?,
+    val callEndedAt: String? = null
 )
 
 /**
@@ -92,8 +93,10 @@ fun CallScreen(
     appointmentId: String,
     displayName: String,
     isDoctorView: Boolean = false,
-    fetchAppointmentStatus: suspend () -> Result<CallAppointmentStatus>,
-    onJoined: suspend () -> Unit,
+    fetchAppointmentStatus:
+    suspend () -> Result<CallAppointmentStatus>,
+    onJoined: suspend () -> Result<Unit>,
+    onEndCall: suspend () -> Result<Unit>,
     onBack: () -> Unit,
     onReschedule: () -> Unit = onBack
 ) {
@@ -109,11 +112,38 @@ fun CallScreen(
         screenState = CallScreenState.Loading
 
         try {
+            val appointmentStatus = fetchAppointmentStatus().getOrElse {
+                screenState = CallScreenState.Error(
+                    "Could not verify this appointment. Please try again."
+                )
+                return@LaunchedEffect
+            }
+
+            if (!appointmentStatus.callEndedAt.isNullOrBlank()) {
+                screenState = CallScreenState.Error(
+                    "This consultation has already ended. Please book a new appointment for another consultation."
+                )
+                return@LaunchedEffect
+            }
+
+            if (!appointmentStatus.status.equals("confirmed", ignoreCase = true)) {
+                screenState = CallScreenState.Error(
+                    "This appointment is not available for a scheduled consultation."
+                )
+                return@LaunchedEffect
+            }
+
             val tokenResult = fetchStreamToken()
             val tokenResponse = tokenResult.getOrElse {
                 screenState = CallScreenState.Error(it.message ?: "Could not start the call.")
                 return@LaunchedEffect
             }
+            android.util.Log.d(
+                "ScheduledCall",
+                "role=${if (isDoctorView) "doctor" else "patient"} " +
+                        "appointmentId=$appointmentId " +
+                        "streamUserId=${tokenResponse.userId}"
+            )
 
             // Always tear down any previous client before building a new one —
             // otherwise retries and re-entering this screen leave stale
@@ -146,7 +176,16 @@ fun CallScreen(
             }
 
             call = streamCall
-            onJoined()
+
+            val joinedResult = onJoined()
+            if (joinedResult.isFailure) {
+                streamCall.leave()
+                screenState = CallScreenState.Error(
+                    "This consultation is no longer available. If it has ended, please book a new appointment."
+                )
+                return@LaunchedEffect
+            }
+
             waitingSince = System.currentTimeMillis()
             screenState = CallScreenState.Waiting
         } catch (e: Exception) {
@@ -165,8 +204,6 @@ fun CallScreen(
         }
     }
 
-    // ---- Poll appointment status while waiting, to catch a no-show cancellation ----
-    // ---- Doctor-only: if the patient doesn't answer within 30s, stop ringing ----
     // ---- Doctor-only: if the patient doesn't answer within 30s, stop ringing ----
     LaunchedEffect(waitingSince, retryKey) {
         val since = waitingSince ?: return@LaunchedEffect
@@ -179,18 +216,33 @@ fun CallScreen(
         }
     }
 
-    // ---- Poll appointment status while waiting, to catch a no-show cancellation ----
+    // ---- Poll while waiting or in-call. This synchronizes hang-up across both phones. ----
     LaunchedEffect(screenState) {
-        while (screenState is CallScreenState.Waiting) {
-            delay(15_000.milliseconds)
+        while (
+            screenState is CallScreenState.Waiting ||
+            screenState is CallScreenState.InCall
+        ) {
+            delay(2_000.milliseconds)
+
             val result = fetchAppointmentStatus()
             result.onSuccess { status ->
+
+                if (!status.callEndedAt.isNullOrBlank()) {
+                    call?.leave()
+                    onBack()
+                    return@onSuccess
+                }
+
                 if (status.status == "cancelled") {
-                    screenState = if (status.cancelledReason == "doctor_no_show" || status.cancelledReason == "patient_no_show") {
-                        CallScreenState.OtherPartyNotAvailable
-                    } else {
-                        CallScreenState.AppointmentCancelled
-                    }
+                    screenState =
+                        if (
+                            status.cancelledReason == "doctor_no_show" ||
+                            status.cancelledReason == "patient_no_show"
+                        ) {
+                            CallScreenState.OtherPartyNotAvailable
+                        } else {
+                            CallScreenState.AppointmentCancelled
+                        }
                 }
             }
         }
@@ -226,11 +278,38 @@ fun CallScreen(
                             CallContent(
                                 modifier = Modifier.fillMaxSize(),
                                 call = activeCall,
-                                onBackPressed = onBack,
+                                onBackPressed = {
+                                    scope.launch {
+                                        onEndCall()
+                                            .onFailure { error ->
+                                                android.util.Log.e(
+                                                    "CallScreen",
+                                                    "Failed to end scheduled consultation",
+                                                    error
+                                                )
+                                            }
+
+                                        activeCall.leave()
+                                        onBack()
+                                    }
+                                },
                                 onCallAction = { action ->
-                                    if (action is io.getstream.video.android.core.call.state.LeaveCall) {
+                                    if (
+                                        action is
+                                                io.getstream.video.android.core.call.state.LeaveCall
+                                    ) {
                                         scope.launch {
-                                            activeCall.end()
+
+                                            onEndCall()
+                                                .onFailure { error ->
+                                                    android.util.Log.e(
+                                                        "CallScreen",
+                                                        "Failed to end scheduled consultation",
+                                                        error
+                                                    )
+                                                }
+
+                                            activeCall.leave()
                                             onBack()
                                         }
                                     }

@@ -9,6 +9,8 @@ import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +20,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -1295,10 +1298,50 @@ private fun IncomingInvitationContent(
             }
 
 
-            Spacer(
-                modifier = Modifier.height(24.dp)
-            )
+            request?.let { row ->
+                Surface(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 175.dp),
+                    shape = RoundedCornerShape(18.dp),
+                    color = Color.White.copy(alpha = 0.14f),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .verticalScroll(rememberScrollState())
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp)
+                    ) {
+                        Text(
+                            "PATIENT'S REASON FOR CONSULTING",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF8FF3DA)
+                        )
+                        Text(
+                            row.urgency.uppercase() + " · " + row.service.replace("_", " "),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (row.urgency == "urgent") Color(0xFFFFC2BC) else Color.White
+                        )
+                        Text(
+                            row.symptom_notes?.takeIf { it.isNotBlank() }
+                                ?: "No note was provided for this earlier request.",
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp,
+                            color = Color.White
+                        )
+                        Text(
+                            "Only accept if this concern is within your professional scope.",
+                            fontSize = 10.sp,
+                            color = Color.White.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            }
 
+            Spacer(
+                modifier = Modifier.height(12.dp)
+            )
 
             /*
              * COUNTDOWN

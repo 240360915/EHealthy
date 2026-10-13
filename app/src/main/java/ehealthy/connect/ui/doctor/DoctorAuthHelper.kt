@@ -15,6 +15,7 @@ import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -239,43 +240,114 @@ suspend fun verifyDoctorResetCodeAndSetPassword(
  * A doctor selecting 3 medications for one patient writes 3 rows, all
  * inserted together in a single batch call.
  */
+
 suspend fun savePrescription(
     patientId: String,
     doctorId: String,
     medications: List<PrescribedMedicine>
 ): Result<Unit> {
-    return try {
-        @Serializable
-        data class PrescriptionInsert(
-            val patient_id: String,
-            val doctor_id: String,
-            val medication: String
-        )
 
-        // The current Supabase `prescriptions` table only has a `medication`
-        // text column for the medicine itself, so store the medicine name here.
-        // The richer dosage/frequency/duration/instructions values remain in
-        // PrescribedMedicine and will need matching database columns before
-        // they can be persisted separately.
-        val rows = medications.map { med ->
-            PrescriptionInsert(
-                patient_id = patientId,
-                doctor_id = doctorId,
-                medication = med.medicine
+    return try {
+
+        // Ensure a patient and doctor are selected.
+        require(patientId.isNotBlank()) {
+            "Please select a patient."
+        }
+
+        require(doctorId.isNotBlank()) {
+            "Doctor profile is missing."
+        }
+
+        // Supabase accepts 1 to 10 medications.
+        require(medications.size in 1..10) {
+            "Select between 1 and 10 medications."
+        }
+
+        // Every medication must have complete details.
+        require(medications.all {
+            it.medicine.trim().length >= 2 &&
+                    it.dosage.isNotBlank() &&
+                    it.frequency.isNotBlank() &&
+                    it.duration.isNotBlank()
+        }) {
+            "Every medication requires a name, dosage, frequency and duration."
+        }
+
+        // Convert selected medications to JSON.
+        val items = buildJsonArray {
+
+            medications.forEach { med ->
+
+                add(
+                    buildJsonObject {
+
+                        put(
+                            "medication",
+                            med.medicine.trim()
+                        )
+
+                        put(
+                            "dosage",
+                            med.dosage.trim()
+                        )
+
+                        put(
+                            "frequency",
+                            med.frequency.trim()
+                        )
+
+                        put(
+                            "duration",
+                            med.duration.trim()
+                        )
+
+                        put(
+                            "instructions",
+                            med.instructions.trim()
+                        )
+                    }
+                )
+            }
+        }
+
+        // Parameters for the secure Supabase function.
+        val params = buildJsonObject {
+
+            put("p_patient_id", patientId)
+
+            put("p_items", items)
+
+            put(
+                "p_general_instructions",
+                ""
             )
         }
 
-        SupabaseClientProvider.client.postgrest
-            .from("prescriptions")
-            .insert(rows)
+        // The server verifies the signed-in doctor,
+        // checks the treatment relationship,
+        // and attaches the saved signature and stamp.
+        SupabaseClientProvider.client.postgrest.rpc(
+            "doctor_issue_web_prescription",
+            params
+        )
 
         Result.success(Unit)
+
     } catch (e: kotlinx.coroutines.CancellationException) {
+
         throw e
+
     } catch (e: Exception) {
-        Result.failure(Exception(friendlyAuthError(e)))
+
+        Result.failure(
+            Exception(
+                e.message
+                    ?: "Could not issue prescription."
+            )
+        )
     }
 }
+
 
 /** Distinct patients this doctor has a CONFIRMED appointment with — same
  *  scoping your teammate's version used. Queries appointments directly

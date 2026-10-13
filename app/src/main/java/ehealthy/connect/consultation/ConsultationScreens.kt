@@ -3,11 +3,11 @@ package ehealthy.connect.consultation
 import android.Manifest
 import android.app.NotificationManager
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -38,8 +38,6 @@ import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.VideoCall
-import androidx.compose.material3.Button
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -47,7 +45,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -70,11 +67,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
@@ -195,7 +192,7 @@ fun DoctorAvailabilityScreen(
 
             presence =
                 withTimeout(
-                    8_000
+                    8_000.milliseconds
                 ) {
 
                     ConsultationRepository
@@ -214,6 +211,48 @@ fun DoctorAvailabilityScreen(
 
             errorMessage =
                 null
+
+            if (presence?.is_available == true) {
+
+                val serviceState =
+                    DoctorAvailabilityService.status.value
+
+                val needsRestart =
+                    serviceState == "Unavailable" ||
+                            serviceState == "Heartbeat service stopped" ||
+                            serviceState.startsWith("Connection lost")
+
+                if (needsRestart) {
+
+                    try {
+                        ContextCompat.startForegroundService(
+                            context,
+                            Intent(
+                                context,
+                                DoctorAvailabilityService::class.java
+                            )
+                        )
+
+                        android.util.Log.d(
+                            "DoctorAvailability",
+                            "Restarting doctor heartbeat service"
+                        )
+
+                    } catch (e: Exception) {
+
+                        android.util.Log.e(
+                            "DoctorAvailability",
+                            "Could not restart heartbeat service",
+                            e
+                        )
+
+                        errorMessage =
+                            "Could not restart availability service: " +
+                                    (e.message ?: "Unknown error")
+                    }
+                }
+            }
+
 
         } catch (
             e: CancellationException
@@ -238,6 +277,7 @@ fun DoctorAvailabilityScreen(
             false
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     fun requestNotificationPermission() {
 
         if (
@@ -314,7 +354,7 @@ fun DoctorAvailabilityScreen(
 
                 val enabledPresence =
                     withTimeout(
-                        10_000
+                        10_000.milliseconds
                     ) {
 
                         ConsultationRepository
@@ -350,7 +390,7 @@ fun DoctorAvailabilityScreen(
                     runCatching {
 
                         withTimeout(
-                            5_000
+                            5_000.milliseconds
                         ) {
 
                             ConsultationRepository
@@ -443,7 +483,7 @@ fun DoctorAvailabilityScreen(
 
                 presence =
                     withTimeout(
-                        8_000
+                        8_000.milliseconds
                     ) {
 
                         ConsultationRepository
@@ -510,7 +550,7 @@ fun DoctorAvailabilityScreen(
                     refreshPresence()
 
                     delay(
-                        15_000
+                        15_000.milliseconds
                     )
                 }
             }
@@ -720,9 +760,7 @@ fun DoctorAvailabilityScreen(
                             Intent(
                                 Settings
                                     .ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
-                                Uri.parse(
-                                    "package:${context.packageName}"
-                                )
+                                "package:${context.packageName}".toUri()
                             )
                         )
                     }
@@ -1795,89 +1833,79 @@ private fun AvailabilityMessageCard(
     }
 }
 
+
+private fun parseHeartbeat(
+    timestamp: String?
+): Instant? {
+
+    if (timestamp.isNullOrBlank()) {
+        return null
+    }
+
+    // Accept both PostgreSQL and ISO-8601 timestamps.
+    val normalized = timestamp
+        .trim()
+        .replace(' ', 'T')
+        .replace(
+            Regex("([+-][0-9]{2})$"),
+            "$1:00"
+        )
+        .replace(
+            Regex("([+-][0-9]{2})([0-9]{2})$"),
+            "$1:$2"
+        )
+
+    return runCatching {
+        Instant.parse(normalized)
+    }.getOrElse {
+        runCatching {
+            java.time.OffsetDateTime
+                .parse(normalized)
+                .toInstant()
+        }.getOrNull()
+    }
+}
+
 private fun isHeartbeatFresh(
     timestamp: String?
 ): Boolean {
 
-    if (
-        timestamp.isNullOrBlank()
-    ) {
-        return false
-    }
+    val heartbeat =
+        parseHeartbeat(timestamp) ?: return false
 
-    return try {
+    val ageSeconds = Duration.between(
+        heartbeat,
+        Instant.now()
+    ).seconds
 
-        val heartbeat =
-            Instant.parse(
-                timestamp
-            )
-
-        val age =
-            Duration.between(
-                heartbeat,
-                Instant.now()
-            )
-
-        !age.isNegative &&
-                age.seconds <= 120
-
-    } catch (
-        _: Exception
-    ) {
-
-        false
-    }
+    // Allow a little clock difference between devices.
+    return ageSeconds in -15L..120L
 }
 
 private fun heartbeatDescription(
     timestamp: String?
 ): String {
 
-    if (
-        timestamp.isNullOrBlank()
-    ) {
+    if (timestamp.isNullOrBlank()) {
         return "No heartbeat yet"
     }
 
-    return try {
+    val heartbeat = parseHeartbeat(timestamp)
+        ?: return "Invalid heartbeat timestamp"
 
-        val heartbeat =
-            Instant.parse(
-                timestamp
-            )
+    val seconds = Duration.between(
+        heartbeat,
+        Instant.now()
+    ).seconds.coerceAtLeast(0L)
 
-        val seconds =
-            Duration.between(
-                heartbeat,
-                Instant.now()
-            )
-                .seconds
-                .coerceAtLeast(
-                    0
-                )
-
-        when {
-
-            seconds < 10 ->
-                "Just now"
-
-            seconds < 60 ->
-                "$seconds seconds ago"
-
-            seconds < 120 ->
-                "${seconds / 60} minute ago"
-
-            else ->
-                "${seconds / 60} minutes ago"
-        }
-
-    } catch (
-        _: Exception
-    ) {
-
-        "Unknown"
+    return when {
+        seconds < 10 -> "Just now"
+        seconds < 60 -> "$seconds seconds ago"
+        seconds < 120 -> "1 minute ago"
+        else -> "${seconds / 60} minutes ago"
     }
 }
+
 
 private fun canUseFullScreenIntent(
     context: android.content.Context

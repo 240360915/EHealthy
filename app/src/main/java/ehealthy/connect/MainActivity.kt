@@ -2909,24 +2909,78 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 onBack = { navController.popBackStack() },
                 doctorNames = doctorNames,
                 doctorPhotos = doctorPhotos,
+
                 onRequestRefill = { prescription ->
+
                     scope.launch {
+
                         try {
-                            SupabaseClientProvider.client.postgrest.from("prescriptions")
-                                .update({
-                                    set("refill_status", "requested")
-                                    set("refill_requested_at", java.time.Instant.now().toString())
-                                }) {
-                                    filter { eq("id", prescription.id) }
-                                }
-                            prescriptions = prescriptions.map {
-                                if (it.id == prescription.id) it.copy(refill_status = "requested") else it
+
+                            // Request a refill through the secure backend.
+                            val params = buildJsonObject {
+                                put(
+                                    "p_prescription_id",
+                                    JsonPrimitive(prescription.id)
+                                )
                             }
-                        } catch (_: Exception) {
-                            Log.e("RefillRequest", "Failed to request refill")
+
+                            val response =
+                                SupabaseClientProvider.client
+                                    .postgrest
+                                    .rpc(
+                                        function = "patient_request_prescription_refill",
+                                        parameters = params
+                                    )
+                                    .decodeList<Map<String, String>>()
+                                    .firstOrNull()
+
+                            // Only update the screen after the server confirms.
+                            if (response?.get("request_status") != "requested") {
+                                throw IllegalStateException(
+                                    "The server did not confirm the refill request."
+                                )
+                            }
+
+                            prescriptions = prescriptions.map { item ->
+
+                                if (item.id == prescription.id) {
+                                    item.copy(
+                                        refill_status = "requested"
+                                    )
+                                } else {
+                                    item
+                                }
+                            }
+
+                            Toast.makeText(
+                                appContext,
+                                "Refill request sent to your doctor",
+                                Toast.LENGTH_LONG
+                            ).show()
+
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+
+                            throw e
+
+                        } catch (e: Exception) {
+
+                            Log.e(
+                                "RefillRequest",
+                                "Could not request prescription refill",
+                                e
+                            )
+
+                            Toast.makeText(
+                                appContext,
+                                "Refill request failed: ${
+                                    e.message ?: "Please try again."
+                                }",
+                                Toast.LENGTH_LONG
+                            ).show()
                         }
                     }
                 }
+
             )
         }
         composable(

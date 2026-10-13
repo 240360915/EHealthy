@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -24,6 +25,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
@@ -78,6 +81,9 @@ import kotlinx.serialization.Serializable
 import java.util.Calendar
 import java.util.UUID
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+
 @Serializable
 data class DoctorBookingInfo(
     val id: String,
@@ -567,115 +573,35 @@ fun BookAppointmentScreen(
 
     // Payment is requested only after the patient explicitly taps Complete Payment.
     // The existing backend still uses DemoPay: a virtual transaction, not a bank charge.
+
+
     if (showDemoPayCheckout && bookingResult == null) {
-        AlertDialog(
-            onDismissRequest = {
-                if (!isBooking) cancelCheckout()
-            },
-            icon = {
-                Icon(
-                    imageVector = Icons.Outlined.Payments,
-                    contentDescription = null,
-                    tint = PatientColors.AppointmentAccent
-                )
-            },
-            title = {
-                Text(
-                    "EHealthy Checkout",
-                    fontWeight = FontWeight.ExtraBold
-                )
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        "Review your appointment details before completing payment.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 13.sp
-                    )
 
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = PatientColors.AppointmentCard
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(9.dp)
-                        ) {
-                            Text(
-                                doctor?.fullName ?: "Your doctor",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp
-                            )
-                            HorizontalDivider(
-                                color = PatientColors.AppointmentAccent.copy(alpha = 0.12f)
-                            )
-                            Text("Date: ${selectedSlot?.date.orEmpty()}")
-                            Text("Time: ${selectedSlot?.time?.let(::displayTime).orEmpty()}")
-                            Text("Consultation: Online")
-                            HorizontalDivider(
-                                color = PatientColors.AppointmentAccent.copy(alpha = 0.12f)
-                            )
-                            Text(
-                                "Amount: ${doctor?.hourlyRate?.let { "R %.2f".format(it) } ?: "Confirmed by server"}",
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 18.sp,
-                                color = PatientColors.AppointmentAccent
-                            )
-                        }
-                    }
+        EHealthyPaymentCheckout(
+            amountLabel = "R %.2f".format(
+                java.util.Locale.US,
+                doctor?.hourlyRate ?: 0.0
+            ),
 
-                    Row(
-                        verticalAlignment = Alignment.Top,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Lock,
-                            contentDescription = null,
-                            modifier = Modifier.size(17.dp),
-                            tint = PatientColors.Purple
-                        )
-                        Text(
-                            "DemoPay checkout: no actual bank or card payment is taken. " +
-                                    "Completing this step records a demonstration payment and " +
-                                    "books your appointment, subject to availability. " +
-                                    "The final fee is confirmed by the server.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 11.sp,
-                            lineHeight = 16.sp
-                        )
-                    }
-                }
+            description = "Scheduled online consultation",
+
+            doctorName = doctor?.fullName,
+
+            isProcessing = isBooking,
+
+            onCancel = {
+                cancelCheckout()
             },
-            confirmButton = {
-                Button(
-                    onClick = { submitBooking() },
-                    enabled = !isBooking
-                ) {
-                    if (isBooking) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(17.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
-                        Spacer(modifier = Modifier.width(7.dp))
-                        Text("Processing...")
-                    } else {
-                        Text("Complete Payment")
-                    }
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = ::cancelCheckout,
-                    enabled = !isBooking
-                ) {
-                    Text("Cancel")
+
+            onResult = { outcome ->
+                if (outcome == "success" && !isBooking) {
+                    submitBooking()
                 }
             }
         )
     }
+
+
 
     // Cancellation or a failed checkout request must produce immediate visible feedback.
     demoPayNotice?.let { notice ->

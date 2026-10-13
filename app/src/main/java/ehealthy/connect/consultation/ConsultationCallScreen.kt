@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.VideoCall
+import ehealthy.connect.data.ProfileRepository
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -45,9 +46,7 @@ import io.getstream.video.android.core.StreamVideo
 import io.getstream.video.android.core.StreamVideoBuilder
 import io.getstream.video.android.model.User
 import kotlinx.coroutines.CancellationException
-import androidx.compose.runtime.rememberCoroutineScope
-import ehealthy.connect.data.DoctorLiveConsultationRepository
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 
 private val consultationBackground =
@@ -88,6 +87,9 @@ private sealed class ConsultationCallState {
 
 
     data object Waiting :
+        ConsultationCallState()
+
+    data object AwaitingPayment :
         ConsultationCallState()
 
 
@@ -151,28 +153,106 @@ fun ConsultationCallScreen(
 
 
         try {
+            // A claimed consultation is still awaiting payment until
+            // Supabase creates its paid consultation_sessions row.
+            // Never treat a missing room (HTTP 409) as a failed call.
+            val myDoctorId = if (isDoctorView) {
+                ProfileRepository.doctorId()
+            } else {
+                null
+            }
 
-            val result =
-                ConsultationStreamRepository
-                    .getCredentials(
-                        requestId
+            var pendingCredentials: ConsultationStreamCredentials? = null
+
+            while (pendingCredentials == null) {
+                val request = ConsultationRepository.request(requestId)
+
+                if (request == null) {
+                    screenState = ConsultationCallState.Error(
+                        "Consultation not found. Please return to your dashboard."
                     )
-
-
-            val credentials =
-                result.getOrElse {
-                        error ->
-
-                    screenState =
-                        ConsultationCallState.Error(
-                            consultationCallMessage(
-                                error
-                            )
-                        )
-
                     return@LaunchedEffect
                 }
 
+                if (request.status != "claimed") {
+                    screenState = ConsultationCallState.Error(
+                        when (request.status) {
+                            "cancelled", "failed", "declined" ->
+                                "This consultation was cancelled or its DemoPay payment failed."
+                            "completed" -> "This consultation has already ended."
+                            "pending" -> "The doctor has not accepted this consultation yet."
+                            else -> "This consultation is no longer available."
+                        }
+                    )
+                    return@LaunchedEffect
+                }
+
+                if (isDoctorView && request.claimed_doctor_id != myDoctorId) {
+                    screenState = ConsultationCallState.Error(
+                        "This consultation is assigned to another doctor."
+                    )
+                    return@LaunchedEffect
+                }
+
+                val session = ConsultationRepository.session(requestId)
+
+                if (session == null) {
+                    // No consultation_sessions row means no confirmed
+                    // DemoPay yet. Patient must finish checkout; doctor waits.
+                    if (!isDoctorView) {
+                        screenState = ConsultationCallState.Error(
+                            "Please return to Consult Doctor Now and finish " +
+                                    "DemoPay before joining the video call."
+                        )
+                        return@LaunchedEffect
+                    }
+                    screenState = ConsultationCallState.AwaitingPayment
+                    delay(3_000L)
+                    continue
+                }
+
+                if (session.status == "closed" || session.status == "failed") {
+                    screenState = ConsultationCallState.Error(
+                        "This consultation video room is already closed."
+                    )
+                    return@LaunchedEffect
+                }
+
+                val tokenResult = ConsultationStreamRepository.getCredentials(requestId)
+                val tokenError = tokenResult.exceptionOrNull()
+
+                if (tokenError != null) {
+                    val errorText = tokenError.message.orEmpty()
+                    val roomIsStillPreparing =
+                        errorText.contains("409") ||
+                                errorText.contains("402") ||
+                                errorText.contains("still being prepared", ignoreCase = true) ||
+                                errorText.contains("DemoPay required", ignoreCase = true)
+
+                    if (roomIsStillPreparing && isDoctorView) {
+                        // Protect against the short race between the
+                        // payment transaction and Stream room provisioning.
+                        screenState = ConsultationCallState.AwaitingPayment
+                        delay(3_000L)
+                        continue
+                    }
+
+                    screenState = ConsultationCallState.Error(
+                        if (roomIsStillPreparing) {
+                            "Please finish DemoPay in Consult Doctor Now, " +
+                                    "then try joining the video again."
+                        } else {
+                            consultationCallMessage(tokenError)
+                        }
+                    )
+                    return@LaunchedEffect
+                }
+
+                pendingCredentials = tokenResult.getOrThrow()
+            }
+
+            val credentials = pendingCredentials
+                ?: return@LaunchedEffect
 
             /*
              * Remove any old Stream client.
@@ -474,6 +554,14 @@ fun ConsultationCallScreen(
                 }
 
 
+                ConsultationCallState.AwaitingPayment -> {
+
+                    ConsultationAwaitingPayment(
+                        onBack = onBack
+                    )
+                }
+
+
                 ConsultationCallState.Waiting -> {
 
                     ConsultationWaiting(
@@ -526,6 +614,55 @@ fun ConsultationCallScreen(
                             }
                         }
                 }
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun ConsultationAwaitingPayment(onBack: () -> Unit) {
+
+    Box(
+        modifier = Modifier.fillMaxSize().padding(28.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                imageVector = Icons.Outlined.VideoCall,
+                contentDescription = null,
+                tint = consultationTeal
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "Waiting for patient payment",
+                color = consultationText,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = "You have accepted the consultation. " +
+                        "The patient is completing DemoPay. " +
+                        "The video room will connect automatically after payment.",
+                color = consultationMuted,
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            CircularProgressIndicator(color = consultationTeal)
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            OutlinedButton(onClick = onBack) {
+                Text("Leave waiting screen")
             }
         }
     }
@@ -949,6 +1086,10 @@ private fun consultationCallMessage(
 
 
     return when {
+
+        message.contains("402") ||
+                message.contains("DemoPay required", ignoreCase = true) ->
+            "Waiting for the patient to finish DemoPay before joining. Try again shortly."
 
         message.contains(
             "403"

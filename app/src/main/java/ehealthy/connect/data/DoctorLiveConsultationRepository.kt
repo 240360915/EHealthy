@@ -1,6 +1,7 @@
 package ehealthy.connect.data
 
 import ehealthy.connect.util.SupabaseClientProvider
+import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
@@ -50,6 +51,13 @@ object DoctorLiveConsultationRepository {
             Result<List<DoctorLiveConsultationRequest>> {
 
         return try {
+
+            // Do not invoke this authenticated RPC with an anonymous/expired
+            // session during app startup or after an account switch.
+            supabase.auth.awaitInitialization()
+            check(supabase.auth.currentUserOrNull() != null) {
+                "Doctor sign-in is required to receive consultations."
+            }
 
             val requests =
                 supabase

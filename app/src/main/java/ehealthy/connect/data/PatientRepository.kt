@@ -1980,6 +1980,9 @@ data class ConsultationRequestRow(
 
     val service: String,
 
+    val symptom_notes: String? = null,
+    val urgency: String = "routine",
+
     val target_doctor_id: String? = null,
 
     val claimed_doctor_id: String? = null,

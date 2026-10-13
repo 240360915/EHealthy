@@ -578,7 +578,9 @@ Deno.serve(
               id,
               patient_id,
               status,
-              claimed_doctor_id
+              claimed_doctor_id,
+              price_minor,
+              currency
             `
           )
           .eq(
@@ -808,6 +810,36 @@ Deno.serve(
       }
 
 
+      // Authoritative DemoPay gate for BOTH patient and doctor.
+      // Authorization alone does not permit a claimed but unpaid request to enter video.
+      const { data: paidPayment, error: paidPaymentError } = await admin
+        .from("payments")
+        .select("id")
+        .eq("consultation_request_id", consultationRequestId)
+        .eq("patient_id", consultation.patient_id)
+        .eq("doctor_id", consultation.claimed_doctor_id)
+        .eq("gateway_provider", "ehealthy_demo")
+        .eq("payment_method", "demo_card")
+        .eq("status", "paid")
+        .eq("currency", consultation.currency)
+        .eq("amount", Number(consultation.price_minor) / 100)
+        .limit(1)
+        .maybeSingle();
+
+      if (paidPaymentError) {
+        console.error("On-demand DemoPay verification failed:", paidPaymentError.message);
+        return new Response(JSON.stringify({ error: "Could not verify DemoPay for this consultation." }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (!paidPayment) {
+        return new Response(JSON.stringify({ error: "DemoPay required before entering the video consultation." }), {
+          status: 402,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
       // -----------------------------------------------------------------------
       // Load consultation session
       // -----------------------------------------------------------------------
@@ -859,30 +891,59 @@ Deno.serve(
       }
 
 
-      if (
-        !session
-          ?.stream_call_id
-      ) {
+      const callId =
+        session?.stream_call_id ||
+        `consultation-${consultationRequestId}`;
 
-        return new Response(
-          JSON.stringify({
-            error:
-              "The consultation video room is still being prepared.",
-          }),
-          {
-            status: 409,
+      /*
+       * Self-heal an older/missing consultation_sessions row.
+       * claim_consultation_request normally creates it, but if a race or
+       * older client left it missing we can safely recreate it because
+       * the request is already securely claimed.
+       */
+      if (!session?.stream_call_id) {
+        const {
+          error: sessionUpsertError,
+        } =
+          await admin
+            .from("consultation_sessions")
+            .upsert(
+              {
+                request_id:
+                  consultationRequestId,
+                stream_call_id:
+                  callId,
+                status:
+                  "pending",
+              },
+              {
+                onConflict:
+                  "request_id",
+              }
+            );
 
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
-          }
-        );
+        if (sessionUpsertError) {
+          console.error(
+            "Session self-heal failed:",
+            sessionUpsertError.message
+          );
+
+          return new Response(
+            JSON.stringify({
+              error:
+                "The consultation video room is still being prepared.",
+            }),
+            {
+              status: 409,
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+            }
+          );
+        }
       }
 
-
-      const callId =
-        session.stream_call_id;
 
       const callType =
         "consultation";

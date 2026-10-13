@@ -188,6 +188,17 @@ fun AppNavGraph(pendingRoute: String? = null) {
         }
     }
 
+    fun doctorBackToDashboard() {
+        val wentBack =
+            navController.popBackStack()
+
+        if (!wentBack) {
+            navController.navigate("doctorDashboard") {
+                launchSingleTop = true
+            }
+        }
+    }
+
     NavHost(navController = navController, startDestination = "splash") {
         composable(
             route = "consultationCall/{requestId}/{role}",
@@ -1348,6 +1359,7 @@ fun AppNavGraph(pendingRoute: String? = null) {
 
             DoctorDashboard(
                 onNavigateAvailability = { navController.navigate("doctorAvailability") },
+                onNavigateNotifications = { navController.navigate("doctorNotifications") },
                 doctorProfile = doctorProfile,
                 isLoadingProfile = isLoadingProfile,
                 isUploadingPhoto = isUploadingPhoto,
@@ -1471,7 +1483,19 @@ fun AppNavGraph(pendingRoute: String? = null) {
 
         // Doctor virtual earnings + simulated EHealthy commission.
         composable("doctorDemoEarnings") {
-            DoctorDemoEarningsScreen(onBack = { navController.popBackStack() })
+            DoctorDemoEarningsScreen(
+                onBack = {
+                    doctorBackToDashboard()
+                }
+            )
+        }
+
+        composable("doctorNotifications") {
+            ehealthy.connect.ui.doctorDashboard.DoctorNotificationsScreen(
+                onBack = {
+                    doctorBackToDashboard()
+                }
+            )
         }
 
         // Doctor's authorized view: permission is checked by Supabase RPC.
@@ -1485,7 +1509,9 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 appointmentId = backStackEntry.arguments
                     ?.getString("appointmentId")
                     .orEmpty(),
-                onBack = { navController.popBackStack() }
+                onBack = {
+                    doctorBackToDashboard()
+                }
             )
         }
 
@@ -1503,14 +1529,22 @@ fun AppNavGraph(pendingRoute: String? = null) {
                     try {
                         val row = SupabaseClientProvider.client.postgrest
                             .from("appointments")
-                            .select(columns = Columns.list("status", "cancelled_reason")) {
+                            .select(
+                                columns = Columns.list(
+                                    "status",
+                                    "cancelled_reason",
+                                    "call_ended_at"
+                                )
+                            ) {
                                 filter { eq("id", appointmentId) }
                             }
                             .decodeSingleOrNull<Map<String, String?>>()
+
                         Result.success(
                             ehealthy.connect.ui.call.CallAppointmentStatus(
                                 status = row?.get("status"),
-                                cancelledReason = row?.get("cancelled_reason")
+                                cancelledReason = row?.get("cancelled_reason"),
+                                callEndedAt = row?.get("call_ended_at")
                             )
                         )
                     } catch (e: Exception) {
@@ -1519,15 +1553,43 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 },
                 onJoined = {
                     try {
-                        SupabaseClientProvider.client.postgrest.from("appointments")
-                            .update({ set("call_joined_doctor_at", java.time.Instant.now().toString()) }) {
-                                filter { eq("id", appointmentId) }
+                        SupabaseClientProvider.client.postgrest.rpc(
+                            function = "doctor_mark_scheduled_call_joined",
+                            parameters = buildJsonObject {
+                                put("p_appointment_id", appointmentId)
                             }
-                    } catch (_: Exception) {
-                        Log.e("CallScreen", "Failed to mark doctor joined")
+                        )
+                        Result.success(Unit)
+                    } catch (e: Exception) {
+                        Log.e(
+                            "CallScreen",
+                            "Failed to mark doctor joined",
+                            e
+                        )
+                        Result.failure(e)
                     }
                 },
-                onBack = { navController.popBackStack() }
+                onEndCall = {
+                    try {
+                        SupabaseClientProvider.client.postgrest.rpc(
+                            function = "end_scheduled_call",
+                            parameters = buildJsonObject {
+                                put("p_appointment_id", appointmentId)
+                            }
+                        )
+                        Result.success(Unit)
+                    } catch (e: Exception) {
+                        Log.e(
+                            "CallScreen",
+                            "Failed to end doctor scheduled call",
+                            e
+                        )
+                        Result.failure(e)
+                    }
+                },
+                onBack = {
+                    doctorBackToDashboard()
+                }
             )
         }
 
@@ -1560,7 +1622,7 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 appointmentId = appointmentId,
                 patientName = patientName,
                 onBack = {
-                    navController.popBackStack()
+                    doctorBackToDashboard()
                 }
             )
         }
@@ -1887,9 +1949,7 @@ fun AppNavGraph(pendingRoute: String? = null) {
                     saveError,
 
                 onBack = {
-
-                    navController
-                        .popBackStack()
+                    doctorBackToDashboard()
                 },
 
 
@@ -2071,7 +2131,9 @@ fun AppNavGraph(pendingRoute: String? = null) {
             }
             DoctorTimeSlots(
                 doctorId = doctorId,
-                onBack = { navController.popBackStack() },
+                onBack = {
+                    doctorBackToDashboard()
+                },
                 fetchSlots = { id, date -> fetchDoctorTimeSlots(id, date) },
                 saveSlots = { id, date, openOrBookedRows, closedTimes ->
                     saveDoctorTimeSlots(id, date, openOrBookedRows, closedTimes)
@@ -2100,7 +2162,9 @@ fun AppNavGraph(pendingRoute: String? = null) {
             DoctorSettingsScreen(
                 isDarkMode = ThemeManager.isDarkMode,
                 onToggleDarkMode = { ThemeManager.updateDarkMode(it) },
-                onBack = { navController.popBackStack() },
+                onBack = {
+                    doctorBackToDashboard()
+                },
                 onViewPrivacyPolicy = { navController.navigate("privacyPolicy") },
                 onLogout = {
                     scope.launch {
@@ -2434,14 +2498,22 @@ fun AppNavGraph(pendingRoute: String? = null) {
                     try {
                         val row = SupabaseClientProvider.client.postgrest
                             .from("appointments")
-                            .select(columns = Columns.list("status", "cancelled_reason")) {
+                            .select(
+                                columns = Columns.list(
+                                    "status",
+                                    "cancelled_reason",
+                                    "call_ended_at"
+                                )
+                            ) {
                                 filter { eq("id", appointmentId) }
                             }
                             .decodeSingleOrNull<Map<String, String?>>()
+
                         Result.success(
                             ehealthy.connect.ui.call.CallAppointmentStatus(
                                 status = row?.get("status"),
-                                cancelledReason = row?.get("cancelled_reason")
+                                cancelledReason = row?.get("cancelled_reason"),
+                                callEndedAt = row?.get("call_ended_at")
                             )
                         )
                     } catch (e: Exception) {
@@ -2450,12 +2522,38 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 },
                 onJoined = {
                     try {
-                        SupabaseClientProvider.client.postgrest.from("appointments")
-                            .update({ set("call_joined_patient_at", java.time.Instant.now().toString()) }) {
-                                filter { eq("id", appointmentId) }
+                        SupabaseClientProvider.client.postgrest.rpc(
+                            function = "patient_mark_scheduled_call_joined",
+                            parameters = buildJsonObject {
+                                put("p_appointment_id", appointmentId)
                             }
+                        )
+                        Result.success(Unit)
                     } catch (e: Exception) {
-                        Log.e("CallScreen", "Failed to mark patient joined")
+                        Log.e(
+                            "CallScreen",
+                            "Failed to mark patient joined",
+                            e
+                        )
+                        Result.failure(e)
+                    }
+                },
+                onEndCall = {
+                    try {
+                        SupabaseClientProvider.client.postgrest.rpc(
+                            function = "end_scheduled_call",
+                            parameters = buildJsonObject {
+                                put("p_appointment_id", appointmentId)
+                            }
+                        )
+                        Result.success(Unit)
+                    } catch (e: Exception) {
+                        Log.e(
+                            "CallScreen",
+                            "Failed to end patient scheduled call",
+                            e
+                        )
+                        Result.failure(e)
                     }
                 },
                 onBack = { navController.popBackStack() },
@@ -2563,7 +2661,11 @@ fun AppNavGraph(pendingRoute: String? = null) {
             )
         }
         composable("doctorAvailability") {
-            ehealthy.connect.consultation.DoctorAvailabilityScreen(onBack = { navController.popBackStack() })
+            ehealthy.connect.consultation.DoctorAvailabilityScreen(
+                onBack = {
+                    doctorBackToDashboard()
+                }
+            )
         }
         composable("findDoctors") {
             FindDoctorsScreen(

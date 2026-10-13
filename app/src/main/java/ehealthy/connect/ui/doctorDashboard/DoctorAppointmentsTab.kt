@@ -160,6 +160,7 @@ fun DoctorAppointmentsTab(
     isLoading: Boolean,
     loadError: String?,
     onUpdateStatus: (appointmentId: String, newStatus: String) -> Unit,
+    onCancelAppointment: (appointmentId: String, reason: String) -> Unit,
     onStartCall: (appointmentId: String) -> Unit = {},
     onVerifyCompletionCode: suspend (appointmentId: String, code: String) -> Result<Unit> = { _, _ ->
         Result.failure(Exception("Not available"))
@@ -407,10 +408,10 @@ fun DoctorAppointmentsTab(
                 )
                 actionTarget = null
             },
-            onCancel = {
-                onUpdateStatus(
+            onCancel = { reason ->
+                onCancelAppointment(
                     appointment.id,
-                    "cancelled"
+                    reason
                 )
                 actionTarget = null
             },

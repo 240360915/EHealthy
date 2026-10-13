@@ -1,5 +1,7 @@
 package ehealthy.connect.ui.doctorDashboard
 
+import androidx.activity.compose.BackHandler
+
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.animateContentSize
@@ -52,6 +54,8 @@ import androidx.compose.material.icons.outlined.Medication
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Payments
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -87,6 +91,10 @@ import androidx.compose.ui.unit.sp
 import ehealthy.connect.ui.patientDashboard.Appointment
 import ehealthy.connect.ui.patientDashboard.PatientAvatar
 import kotlinx.coroutines.launch
+import ehealthy.connect.util.SupabaseClientProvider
+import io.github.jan.supabase.postgrest.postgrest
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.time.LocalDate
@@ -107,6 +115,7 @@ import kotlinx.coroutines.delay
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.outlined.VideoCall
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import kotlinx.coroutines.launch
 import androidx.compose.material3.Button
@@ -211,6 +220,7 @@ fun DoctorDashboard(
     onNavigateEarnings: () -> Unit = {},
     onOpenPatientCareHub: (appointmentId: String, patientName: String) -> Unit,
     onNavigateAvailability: () -> Unit = {},
+    onNavigateNotifications: () -> Unit = {},
     onStartCall: (appointmentId: String) -> Unit = {},
     onVerifyCompletionCode: suspend (appointmentId: String, code: String) -> Result<Unit> = { _, _ -> Result.failure(Exception("Not available")) },
     onOpenPatientFile: (appointmentId: String) -> Unit = {}
@@ -243,7 +253,36 @@ fun DoctorDashboard(
         mutableStateOf<String?>(null)
     }
 
+    // Presentation-friendly in-app notification:
+    // when a patient generates a completion code, show it automatically to the doctor.
+    var completionCodeNotice by remember {
+        mutableStateOf<Appointment?>(null)
+    }
+
+    var notifiedCompletionCodeAppointmentIds by remember {
+        mutableStateOf<Set<String>>(emptySet())
+    }
+
+    var unreadDoctorNotifications by remember {
+        mutableStateOf(0)
+    }
+
+    BackHandler(enabled = true) {
+        // Keep the doctor session/dashboard alive. Internal tabs go back Home;
+        // Home itself does not accidentally close the app.
+        if (selectedTab != DoctorTab.HOME) {
+            selectedTab = DoctorTab.HOME
+        }
+    }
+
     LaunchedEffect(doctorProfile?.id, refreshTrigger) {
+
+        DoctorNotificationRepository
+            .getUnreadCount()
+            .onSuccess {
+                unreadDoctorNotifications = it
+            }
+
         val doctorId = doctorProfile?.id
         if (doctorId.isNullOrBlank()) return@LaunchedEffect
         isLoadingAppointments = true
@@ -257,6 +296,75 @@ fun DoctorDashboard(
             }
         isLoadingAppointments = false
     }
+    LaunchedEffect(doctorProfile?.id) {
+
+        val doctorId =
+            doctorProfile?.id
+                ?.takeIf { it.isNotBlank() }
+                ?: return@LaunchedEffect
+
+        while (true) {
+
+            DoctorNotificationRepository
+                .getUnreadCount()
+                .onSuccess {
+                    unreadDoctorNotifications = it
+                }
+
+            fetchAppointments(doctorId)
+                .onSuccess { latestAppointments ->
+
+                    appointments =
+                        latestAppointments
+
+                    val newCodeAppointment =
+                        latestAppointments
+                            .firstOrNull { appointment ->
+
+                                val codeReady =
+                                    !appointment
+                                        .completion_code
+                                        .isNullOrBlank()
+
+                                val stillNeedsCompletion =
+                                    !appointment.status.equals(
+                                        "completed",
+                                        ignoreCase = true
+                                    )
+
+                                codeReady &&
+                                        stillNeedsCompletion &&
+                                        appointment.id !in
+                                        notifiedCompletionCodeAppointmentIds
+                            }
+
+                    if (newCodeAppointment != null) {
+
+                        completionCodeNotice =
+                            newCodeAppointment
+
+                        notifiedCompletionCodeAppointmentIds =
+                            notifiedCompletionCodeAppointmentIds +
+                                    newCodeAppointment.id
+                    }
+                }
+                .onFailure { error ->
+
+                    if (error is kotlinx.coroutines.CancellationException) {
+                        throw error
+                    }
+
+                    android.util.Log.e(
+                        "DoctorCompletionCode",
+                        "Could not refresh appointments for completion-code notification",
+                        error
+                    )
+                }
+
+            delay(3000)
+        }
+    }
+
     LaunchedEffect(Unit) {
 
         while (true) {
@@ -339,6 +447,45 @@ fun DoctorDashboard(
         }
     }
 
+    val handleDoctorCancellation: (String, String) -> Unit =
+        { appointmentId, reason ->
+
+            scope.launch {
+
+                try {
+
+                    SupabaseClientProvider
+                        .client
+                        .postgrest
+                        .rpc(
+                            function =
+                                "doctor_cancel_appointment",
+                            parameters =
+                                buildJsonObject {
+                                    put(
+                                        "p_appointment_id",
+                                        appointmentId
+                                    )
+                                    put(
+                                        "p_reason",
+                                        reason
+                                    )
+                                }
+                        )
+
+                    loadError = null
+                    refreshTrigger++
+
+                } catch (e: Exception) {
+
+                    loadError =
+                        doctorFriendlyError(
+                            e.message
+                        )
+                }
+            }
+        }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -359,6 +506,62 @@ fun DoctorDashboard(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = {
+                            refreshTrigger++
+                        },
+                        enabled = !isLoadingAppointments
+                    ) {
+                        if (isLoadingAppointments) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Outlined.Refresh,
+                                contentDescription = "Refresh doctor dashboard",
+                                tint = DoctorTeal
+                            )
+                        }
+                    }
+
+                    Box {
+                        IconButton(
+                            onClick = onNavigateNotifications
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Notifications,
+                                contentDescription = "Doctor notifications",
+                                tint = DoctorTeal
+                            )
+                        }
+
+                        if (unreadDoctorNotifications > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(top = 4.dp, end = 4.dp)
+                                    .size(16.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.error),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text =
+                                        if (unreadDoctorNotifications > 9) {
+                                            "9+"
+                                        } else {
+                                            unreadDoctorNotifications.toString()
+                                        },
+                                    color = MaterialTheme.colorScheme.onError,
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                            }
+                        }
+                    }
+
                     IconButton(onClick = onNavigateEarnings) {
                         Icon(
                             imageVector = Icons.Outlined.Payments,
@@ -527,6 +730,7 @@ fun DoctorDashboard(
                     isLoading = isLoadingAppointments,
                     loadError = loadError,
                     onUpdateStatus = handleStatusUpdate,
+                    onCancelAppointment = handleDoctorCancellation,
                     onStartCall = onStartCall,
                     onVerifyCompletionCode = onVerifyCompletionCode,
                     onOpenPatientFile = onOpenPatientFile
@@ -559,6 +763,103 @@ fun DoctorDashboard(
                 )
             }
         }
+    }
+    completionCodeNotice?.let { appointment ->
+
+        AlertDialog(
+            onDismissRequest = {
+                completionCodeNotice = null
+            },
+            title = {
+                Text(
+                    text = "Completion code ready",
+                    fontWeight = FontWeight.ExtraBold
+                )
+            },
+            text = {
+
+                Column {
+
+                    Text(
+                        text =
+                            "${appointment.patient_name ?: "The patient"} has generated a completion code.",
+                        color = DoctorMuted,
+                        fontSize = 11.5.sp
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(14.dp)
+                    )
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = DoctorTealSoft
+                        ),
+                        elevation = CardDefaults.cardElevation(
+                            defaultElevation = 0.dp
+                        )
+                    ) {
+
+                        Text(
+                            text =
+                                appointment.completion_code.orEmpty(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(18.dp),
+                            textAlign = TextAlign.Center,
+                            color = DoctorTeal,
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+
+                    Spacer(
+                        modifier = Modifier.height(10.dp)
+                    )
+
+                    Text(
+                        text =
+                            "Use this 6-digit code to verify and complete the consultation.",
+                        color = DoctorMuted,
+                        fontSize = 10.5.sp
+                    )
+                }
+            },
+            confirmButton = {
+
+                Button(
+                    onClick = {
+                        completionCodeNotice = null
+                        selectedTab = DoctorTab.APPOINTMENTS
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = DoctorTeal
+                    )
+                ) {
+
+                    Text(
+                        text = "Open appointment",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+
+                TextButton(
+                    onClick = {
+                        completionCodeNotice = null
+                    }
+                ) {
+
+                    Text(
+                        text = "Dismiss",
+                        color = DoctorMuted
+                    )
+                }
+            }
+        )
     }
 }
 

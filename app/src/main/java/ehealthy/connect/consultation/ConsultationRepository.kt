@@ -220,15 +220,16 @@ object ConsultationRepository {
      *
      * The foreground service calls this repeatedly.
      */
+
     suspend fun heartbeat(): DoctorPresence {
 
-        return db
-            .rpc(
-                "doctor_heartbeat"
+        db.rpc("doctor_heartbeat")
+        return presence()
+            ?: throw IllegalStateException(
+                "Doctor availability could not be loaded."
             )
-            .decodeList<DoctorPresence>()
-            .single()
     }
+
 
     suspend fun create(
         mode: String,

@@ -3,6 +3,8 @@ package ehealthy.connect.ui.patientDashboard.ConsultDoctorNow
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +31,7 @@ import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Verified
 import androidx.compose.material.icons.outlined.VideoCall
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -68,11 +71,17 @@ import ehealthy.connect.data.patient.ConsultationRequestResult
 import ehealthy.connect.data.patient.ConsultationRequestRow
 import ehealthy.connect.data.patient.PatientDoctorSummary
 import ehealthy.connect.data.patient.PatientRepository
+import ehealthy.connect.data.patient.OnDemandPaymentResult
+import ehealthy.connect.util.SupabaseClientProvider
+import io.github.jan.supabase.postgrest.postgrest
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.UUID
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import ehealthy.connect.ui.patientDashboard.EHealthyPaymentCheckout
 import kotlin.time.Duration.Companion.milliseconds
 
 private enum class ConsultationScreenMode {
@@ -157,6 +166,13 @@ fun OnDemandConsultationScreen(
         )
     }
 
+    // A previous session is not a new incoming doctor acceptance.
+    // Give the patient an explicit choice to resume or close it.
+    var previousRequest by remember { mutableStateOf<ConsultationRequestRow?>(null) }
+    var previousRequestLoading by remember { mutableStateOf(true) }
+    var closingPreviousRequest by remember { mutableStateOf(false) }
+    var showEndPreviousConfirmation by remember { mutableStateOf(false) }
+
     var requestError by remember {
         mutableStateOf<String?>(null)
     }
@@ -168,6 +184,11 @@ fun OnDemandConsultationScreen(
     var secondsRemaining by remember {
         mutableIntStateOf(60)
     }
+
+    var paymentResult by remember { mutableStateOf<OnDemandPaymentResult?>(null) }
+    var paymentBusy by remember { mutableStateOf(false) }
+    var paymentLoading by remember { mutableStateOf(false) }
+    var paymentError by remember { mutableStateOf<String?>(null) }
 
     var requestIdempotencyKey by remember {
         mutableStateOf(
@@ -240,6 +261,9 @@ fun OnDemandConsultationScreen(
     }
 
     fun resetRequest() {
+        paymentResult = null
+        paymentError = null
+        paymentLoading = false
 
         activeRequest =
             null
@@ -259,6 +283,17 @@ fun OnDemandConsultationScreen(
     }
 
     fun createRequest() {
+        paymentResult = null
+        paymentError = null
+
+        if (previousRequestLoading) {
+            requestError = "Checking for an existing consultation. Please try again in a moment."
+            return
+        }
+        if (previousRequest != null) {
+            requestError = "You have a previous active consultation. Resume it or end it first."
+            return
+        }
 
         if (
             selectedMode ==
@@ -365,6 +400,146 @@ fun OnDemandConsultationScreen(
         }
     }
 
+    suspend fun refreshPaymentStatus(requestId: String) {
+        paymentLoading = true
+        paymentError = null
+        PatientRepository.getOnDemandPaymentStatus(requestId)
+            .onSuccess { response ->
+                if (activeRequest?.request_id == requestId) paymentResult = response
+            }
+            .onFailure { error ->
+                if (activeRequest?.request_id == requestId) {
+                    paymentResult = null // Fail closed if payment cannot be verified.
+                    paymentError = error.message ?: "Unable to verify DemoPay status."
+                }
+            }
+        paymentLoading = false
+    }
+
+    fun simulatePayment(outcome: String) {
+        val requestId = liveRequest?.takeIf {
+            it.status.equals("claimed", ignoreCase = true) &&
+                    !it.claimed_doctor_id.isNullOrBlank()
+        }?.id ?: return
+        if (paymentBusy || paymentLoading || paymentResult?.payment_status == "paid") return
+        paymentBusy = true
+        paymentError = null
+        scope.launch {
+            PatientRepository.payOnDemandConsultation(requestId, outcome)
+                .onSuccess { response ->
+                    if (activeRequest?.request_id == requestId) paymentResult = response
+                    refreshRequest()
+                }
+                .onFailure { error ->
+                    paymentError = error.message ?: "DemoPay could not complete."
+                    refreshRequest()
+                }
+            paymentBusy = false
+        }
+    }
+
+    fun enterPaidConsultation() {
+        val request = liveRequest ?: return
+        val doctorId = request.claimed_doctor_id ?: return
+        if (!request.status.equals("claimed", ignoreCase = true) ||
+            paymentResult?.payment_status != "paid" || paymentBusy || paymentLoading) return
+        scope.launch {
+            // Recheck server state, not simply a Compose variable.
+            paymentLoading = true
+            PatientRepository.getOnDemandPaymentStatus(request.id)
+                .onSuccess { verified ->
+                    if (verified.payment_status == "paid" &&
+                        activeRequest?.request_id == request.id) {
+                        paymentResult = verified
+                        onConsultationReady(request.id, doctorId)
+                    } else {
+                        paymentResult = verified
+                        paymentError = "DemoPay has not been confirmed."
+                    }
+                }
+                .onFailure { error ->
+                    paymentResult = null
+                    paymentError = error.message ?: "Could not verify payment."
+                }
+            paymentLoading = false
+        }
+    }
+
+    // An old claimed request remains in Supabase until it is explicitly
+    // completed. Never auto-display "Doctor accepted" for that old request
+    // when the user opens a fresh Consult Doctor Now screen.
+    LaunchedEffect(Unit) {
+        previousRequestLoading = true
+        PatientRepository.getMyConsultationRequests()
+            .onSuccess { requests ->
+                if (activeRequest == null) {
+                    previousRequest = requests.firstOrNull {
+                        it.status.lowercase() in listOf("claimed", "pending")
+                    }
+                }
+            }
+            .onFailure { error ->
+                requestError = error.message ?: "Could not check for existing consultations."
+            }
+        previousRequestLoading = false
+    }
+
+    fun resumePreviousConsultation() {
+        val existing = previousRequest ?: return
+        previousRequest = null
+        selectedMode = if (existing.mode.equals("private", ignoreCase = true)) {
+            ConsultationScreenMode.PRIVATE
+        } else {
+            ConsultationScreenMode.BROADCAST
+        }
+        activeRequest = ConsultationRequestResult(
+            request_id = existing.id,
+            request_status = existing.status,
+            request_mode = existing.mode,
+            recipient_count = 0,
+            amount_minor = existing.price_minor,
+            payment_currency = existing.currency,
+            expires_at = existing.expires_at,
+            request_version = existing.version
+        )
+        liveRequest = existing
+        requestError = null
+    }
+
+    fun endPreviousConsultation() {
+        val existing = previousRequest ?: return
+        if (closingPreviousRequest) return
+        closingPreviousRequest = true
+        scope.launch {
+            runCatching {
+                if (existing.status.equals("pending", ignoreCase = true)) {
+                    PatientRepository.cancelConsultationRequest(existing.id).getOrThrow()
+                } else {
+                    // Explicitly ended by the patient; never automatically end
+                    // a claimed / previously paid consultation on screen launch.
+                    SupabaseClientProvider.client.postgrest.rpc(
+                        "end_consultation_request",
+                        buildJsonObject { put("p_request_id", existing.id) }
+                    )
+                }
+            }.onSuccess {
+                previousRequest = null
+                requestError = null
+                statusSnackbar.showSnackbar("Previous consultation closed. You can start a new request.")
+            }.onFailure { error ->
+                requestError = error.message ?: "Could not close the previous consultation."
+            }
+            closingPreviousRequest = false
+        }
+    }
+
+    LaunchedEffect(liveRequest?.id, liveRequest?.status) {
+        val request = liveRequest
+        if (request?.status.equals("claimed", ignoreCase = true) && request != null) {
+            refreshPaymentStatus(request.id)
+        }
+    }
+
     LaunchedEffect(
         selectedDoctorId
     ) {
@@ -454,6 +629,31 @@ fun OnDemandConsultationScreen(
         }
 
         refreshRequest()
+    }
+
+    if (showEndPreviousConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showEndPreviousConfirmation = false },
+            title = { Text("End previous consultation?") },
+            text = {
+                Text(
+                    "This closes the previous consultation and releases the doctor. " +
+                            "If you have already paid, ending it does not automatically " +
+                            "issue a refund. Only end it if the previous consultation is finished."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showEndPreviousConfirmation = false
+                    endPreviousConsultation()
+                }) { Text("End previous consultation") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEndPreviousConfirmation = false }) {
+                    Text("Keep consultation")
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -607,29 +807,18 @@ fun OnDemandConsultationScreen(
                     },
                     onCancel =
                         ::cancelRequest,
-                    onTryAgain =
-                        ::resetRequest,
-                    onContinue = {
-
-                        val request =
-                            liveRequest
-
-                        val doctorId =
-                            request
-                                ?.claimed_doctor_id
-
-                        if (
-                            request != null &&
-                            !doctorId
-                                .isNullOrBlank()
-                        ) {
-
-                            onConsultationReady(
-                                request.id,
-                                doctorId
-                            )
+                    onTryAgain = ::resetRequest,
+                    payment = paymentResult,
+                    paymentBusy = paymentBusy,
+                    paymentLoading = paymentLoading,
+                    paymentError = paymentError,
+                    onPay = ::simulatePayment,
+                    onRefreshPayment = {
+                        liveRequest?.id?.let { id ->
+                            scope.launch { refreshPaymentStatus(id) }
                         }
-                    }
+                    },
+                    onContinue = ::enterPaidConsultation
                 )
 
             } else {
@@ -653,6 +842,11 @@ fun OnDemandConsultationScreen(
                         isCreating,
                     requestError =
                         requestError,
+                    previousRequest = previousRequest,
+                    previousRequestLoading = previousRequestLoading,
+                    closingPreviousRequest = closingPreviousRequest,
+                    onResumePrevious = ::resumePreviousConsultation,
+                    onEndPrevious = { showEndPreviousConfirmation = true },
                     onModeSelected = {
 
                         selectedMode =
@@ -680,6 +874,11 @@ private fun ConsultationSetupScreen(
     doctorError: String?,
     isCreating: Boolean,
     requestError: String?,
+    previousRequest: ConsultationRequestRow?,
+    previousRequestLoading: Boolean,
+    closingPreviousRequest: Boolean,
+    onResumePrevious: () -> Unit,
+    onEndPrevious: () -> Unit,
     onModeSelected: (ConsultationScreenMode) -> Unit,
     onChooseDoctor: () -> Unit,
     onCreate: () -> Unit
@@ -702,6 +901,52 @@ private fun ConsultationSetupScreen(
         item {
 
             ConsultationHero()
+        }
+
+        if (previousRequest != null) {
+            item {
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(Modifier.padding(18.dp)) {
+                        Text(
+                            "Previous consultation still active",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            if (previousRequest.status.equals("claimed", ignoreCase = true)) {
+                                "A doctor accepted an EARLIER request. " +
+                                        "This is not a new call. Resume that consultation, " +
+                                        "or end it before starting a new one."
+                            } else {
+                                "Your earlier request is still waiting for a doctor. " +
+                                        "Resume it or cancel it before starting another."
+                            },
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(14.dp))
+                        Button(
+                            onClick = onResumePrevious,
+                            enabled = !closingPreviousRequest,
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Resume previous consultation") }
+                        Spacer(Modifier.height(6.dp))
+                        OutlinedButton(
+                            onClick = onEndPrevious,
+                            enabled = !closingPreviousRequest,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                if (previousRequest.status.equals("pending", ignoreCase = true))
+                                    "Cancel previous request" else "End previous consultation"
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         item {
@@ -844,7 +1089,7 @@ private fun ConsultationSetupScreen(
                 onClick =
                     onCreate,
                 enabled =
-                    !isCreating &&
+                    !isCreating && !previousRequestLoading && previousRequest == null &&
                             (
                                     selectedMode ==
                                             ConsultationScreenMode.BROADCAST ||
@@ -1881,6 +2126,12 @@ private fun ActiveConsultationRequestScreen(
     onRefresh: () -> Unit,
     onCancel: () -> Unit,
     onTryAgain: () -> Unit,
+    payment: OnDemandPaymentResult?,
+    paymentBusy: Boolean,
+    paymentLoading: Boolean,
+    paymentError: String?,
+    onPay: (String) -> Unit,
+    onRefreshPayment: () -> Unit,
     onContinue: () -> Unit
 ) {
 
@@ -1903,8 +2154,13 @@ private fun ActiveConsultationRequestScreen(
                     request,
                 liveRequest =
                     liveRequest,
-                onContinue =
-                    onContinue
+                payment = payment,
+                paymentBusy = paymentBusy,
+                paymentLoading = paymentLoading,
+                paymentError = paymentError,
+                onPay = onPay,
+                onRefreshPayment = onRefreshPayment,
+                onContinue = onContinue
             )
         }
 
@@ -2217,227 +2473,333 @@ private fun WaitingForDoctorScreen(
     }
 }
 
+
 @Composable
 private fun ConsultationClaimedScreen(
     modifier: Modifier,
     request: ConsultationRequestResult,
     liveRequest: ConsultationRequestRow?,
+    payment: OnDemandPaymentResult?,
+    paymentBusy: Boolean,
+    paymentLoading: Boolean,
+    paymentError: String?,
+    onPay: (String) -> Unit,
+    onRefreshPayment: () -> Unit,
     onContinue: () -> Unit
 ) {
+    var showPaymentCheckout by remember(request.request_id) {
+        mutableStateOf(false)
+    }
+
+    val paid = payment?.payment_status
+        ?.equals("paid", ignoreCase = true) == true
+
+    val doctorAccepted =
+        !liveRequest?.claimed_doctor_id.isNullOrBlank()
+
+    val canProcessPayment =
+        doctorAccepted &&
+                !paymentBusy &&
+                !paymentLoading
 
     Box(
-        modifier =
-            modifier
-                .padding(
-                    20.dp
-                ),
-        contentAlignment =
-            Alignment.Center
+        modifier = modifier.padding(20.dp),
+        contentAlignment = Alignment.Center
     ) {
-
         ElevatedCard(
-            modifier =
-                Modifier.fillMaxWidth(),
-            shape =
-                RoundedCornerShape(
-                    26.dp
-                )
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp)
         ) {
-
             Column(
-                modifier =
-                    Modifier.padding(
-                        24.dp
-                    ),
-                horizontalAlignment =
-                    Alignment.CenterHorizontally
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(22.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
 
+                // Doctor accepted icon.
                 Surface(
-                    shape =
-                        CircleShape,
-                    color =
-                        ConsultationGreen.copy(
-                            alpha =
-                                0.12f
-                        )
+                    shape = CircleShape,
+                    color = ConsultationGreen.copy(alpha = 0.12f)
                 ) {
-
                     Icon(
-                        imageVector =
-                            Icons.Filled.CheckCircle,
-                        contentDescription =
-                            null,
-                        tint =
-                            ConsultationGreen,
-                        modifier =
-                            Modifier
-                                .padding(
-                                    16.dp
-                                )
-                                .size(
-                                    44.dp
-                                )
+                        imageVector = Icons.Filled.CheckCircle,
+                        contentDescription = null,
+                        tint = ConsultationGreen,
+                        modifier = Modifier
+                            .padding(14.dp)
+                            .size(42.dp)
                     )
                 }
 
-                Spacer(
-                    modifier =
-                        Modifier.height(
-                            16.dp
-                        )
-                )
+                Spacer(Modifier.height(16.dp))
 
                 Text(
-                    text =
-                        "Doctor accepted",
-                    fontSize =
-                        22.sp,
-                    fontWeight =
-                        FontWeight.Bold
+                    text = "Doctor accepted",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
 
-                Spacer(
-                    modifier =
-                        Modifier.height(
-                            6.dp
-                        )
-                )
+                Spacer(Modifier.height(8.dp))
 
                 Text(
-                    text =
-                        "A doctor has securely claimed your consultation. Other broadcast invitations are now closed.",
-                    textAlign =
-                        TextAlign.Center,
-                    color =
-                        MaterialTheme
-                            .colorScheme
-                            .onSurfaceVariant
+                    text = "A doctor has accepted your consultation. " +
+                            "You can now complete payment and " +
+                            "proceed to your video consultation.",
+                    textAlign = TextAlign.Center,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                Spacer(
-                    modifier =
-                        Modifier.height(
-                            20.dp
-                        )
-                )
+                Spacer(Modifier.height(20.dp))
 
+                // Amount comes from the existing server result.
                 PriceRow(
-                    amountMinor =
-                        request.amount_minor,
-                    currency =
-                        request.payment_currency
+                    amountMinor = request.amount_minor,
+                    currency = request.payment_currency
                 )
 
-                Spacer(
-                    modifier =
-                        Modifier.height(
-                            18.dp
-                        )
-                )
+                Spacer(Modifier.height(18.dp))
 
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .background(
-                                MaterialTheme
-                                    .colorScheme
-                                    .secondaryContainer
-                                    .copy(
-                                        alpha =
-                                            0.55f
-                                    ),
-                                RoundedCornerShape(
-                                    14.dp
-                                )
-                            )
-                            .padding(
-                                13.dp
-                            ),
-                    verticalAlignment =
-                        Alignment.Top
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme
+                        .secondaryContainer.copy(alpha = 0.55f)
                 ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Lock,
+                            contentDescription = null,
+                            modifier = Modifier.size(19.dp)
+                        )
+
+                        Spacer(Modifier.width(10.dp))
+
+                        Text(
+                            text = "Your consultation is reserved " +
+                                    "for the doctor who accepted it.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(18.dp))
+
+                if (paid) {
 
                     Icon(
-                        imageVector =
-                            Icons.Outlined.Lock,
-                        contentDescription =
-                            null,
-                        modifier =
-                            Modifier.size(
-                                18.dp
-                            )
+                        imageVector = Icons.Filled.CheckCircle,
+                        contentDescription = null,
+                        tint = ConsultationGreen,
+                        modifier = Modifier.size(30.dp)
                     )
 
-                    Spacer(
-                        modifier =
-                            Modifier.width(
-                                8.dp
-                            )
-                    )
+                    Spacer(Modifier.height(8.dp))
 
                     Text(
-                        text =
-                            "The server selected exactly one winning doctor. The consultation room will only allow the patient and that doctor.",
-                        fontSize =
-                            11.sp,
-                        lineHeight =
-                            15.sp
+                        text = "Payment successful",
+                        fontSize = 19.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ConsultationGreen
+                    )
+
+                    Spacer(Modifier.height(6.dp))
+
+                    Text(
+                        text = "Reference: " +
+                                payment?.payment_reference.orEmpty(),
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Text(
+                        text = "Test transaction completed. " +
+                                "No real money was charged.",
+                        fontSize = 11.sp,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(Modifier.height(22.dp))
+
+                    Button(
+                        onClick = onContinue,
+                        enabled = canProcessPayment,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(54.dp),
+                        shape = RoundedCornerShape(15.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.VideoCall,
+                            contentDescription = null
+                        )
+
+                        Spacer(Modifier.width(8.dp))
+
+                        Text(
+                            "Join video consultation",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                } else {
+
+                    Text(
+                        text = "Complete payment",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Spacer(Modifier.height(6.dp))
+
+                    Text(
+                        text = "Enter your fictional card details " +
+                                "to complete the sandbox checkout.",
+                        textAlign = TextAlign.Center,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(Modifier.height(18.dp))
+
+                    Button(
+                        onClick = {
+                            showPaymentCheckout = true
+                        },
+                        enabled = canProcessPayment,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(54.dp),
+                        shape = RoundedCornerShape(15.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Lock,
+                            contentDescription = null
+                        )
+
+                        Spacer(Modifier.width(8.dp))
+
+                        Text(
+                            text = "Proceed to payment",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(Modifier.height(10.dp))
+
+                    OutlinedButton(
+                        onClick = onRefreshPayment,
+                        enabled = !paymentBusy && !paymentLoading,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Refresh,
+                            contentDescription = null
+                        )
+
+                        Spacer(Modifier.width(8.dp))
+
+                        Text("Check payment status")
+                    }
+
+                    Spacer(Modifier.height(6.dp))
+
+                    TextButton(
+                        onClick = {
+                            showPaymentCheckout = false
+                            onPay("cancelled")
+                        },
+                        enabled = canProcessPayment,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "Cancel consultation",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+
+                if (paymentBusy || paymentLoading) {
+                    Spacer(Modifier.height(14.dp))
+
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(28.dp),
+                        strokeWidth = 3.dp
+                    )
+
+                    Spacer(Modifier.height(7.dp))
+
+                    Text(
+                        text = "Processing...",
+                        fontSize = 12.sp
                     )
                 }
 
-                Spacer(
-                    modifier =
-                        Modifier.height(
-                            20.dp
-                        )
-                )
+                paymentError?.let { error ->
+                    Spacer(Modifier.height(14.dp))
 
-                Button(
-                    onClick =
-                        onContinue,
-                    enabled =
-                        !liveRequest
-                            ?.claimed_doctor_id
-                            .isNullOrBlank(),
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .height(
-                                54.dp
-                            ),
-                    shape =
-                        RoundedCornerShape(
-                            15.dp
-                        )
-                ) {
-
-                    Icon(
-                        imageVector =
-                            Icons.Outlined.VideoCall,
-                        contentDescription =
-                            null
-                    )
-
-                    Spacer(
-                        modifier =
-                            Modifier.width(
-                                8.dp
-                            )
-                    )
-
-                    Text(
-                        text =
-                            "Continue to consultation",
-                        fontWeight =
-                            FontWeight.Bold
+                    ConsultationErrorCard(
+                        message = error
                     )
                 }
             }
         }
     }
+
+    // Professional checkout opens over the existing screen.
+    if (showPaymentCheckout && !paid) {
+
+        EHealthyPaymentCheckout(
+            amountLabel = formatConsultationPrice(
+                request.amount_minor,
+                request.payment_currency
+            ),
+
+            description = if (
+                request.request_mode.equals(
+                    "broadcast",
+                    ignoreCase = true
+                )
+            ) {
+                "Broadcast video consultation"
+            } else {
+                "Private video consultation"
+            },
+
+            doctorName = null,
+
+            isProcessing = paymentBusy || paymentLoading,
+
+            onCancel = {
+                showPaymentCheckout = false
+            },
+
+            onResult = { outcome ->
+
+                // Never send card details.
+                // Pass only the simulated payment result.
+                showPaymentCheckout = false
+
+                if (canProcessPayment) {
+                    onPay(outcome)
+                }
+            }
+        )
+    }
 }
+
+
+
 
 @Composable
 private fun ConsultationFinishedScreen(

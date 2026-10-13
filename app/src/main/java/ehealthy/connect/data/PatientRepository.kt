@@ -415,6 +415,7 @@ object PatientRepository {
     }
 
 
+
     suspend fun bookScheduledAppointment(
         slotId: String,
         appointmentType: String,
@@ -423,74 +424,94 @@ object PatientRepository {
         idempotencyKey: String = UUID.randomUUID().toString()
     ): Result<BookScheduledAppointmentResult> = runCatching {
 
-        require(
-            appointmentType == "online" ||
-                    appointmentType == "in_person"
-        ) {
-            "Appointment type must be online or in_person."
+        require(appointmentType == "online") {
+            "Only online appointments are supported by this checkout."
         }
 
-        require(
-            paymentChoice == "demo_pay" ||
-                    paymentChoice == "pay_at_clinic"
-        ) {
-            "Payment choice must be demo_pay or pay_at_clinic."
-        }
-
-        require(
-            appointmentType != "online" ||
-                    paymentChoice == "demo_pay"
-        ) {
+        require(paymentChoice == "demo_pay") {
             "Online appointments must use DemoPay."
         }
 
         require(slotId.isNotBlank()) {
-            "A time slot is required."
+            "Please select an available time."
         }
 
         require(reason.trim().length >= 3) {
-            "Please provide a short reason for the appointment."
+            "Please provide a consultation reason."
         }
 
-        val parameters = buildJsonObject {
+        // STEP 1: Reserve the appointment.
+        // This function does NOT create a paid payment.
+        val reservation = reserveSlot(
+            slotId = slotId,
+            appointmentType = appointmentType,
+            reason = reason.trim(),
+            idempotencyKey = idempotencyKey
+        ).getOrThrow()
+
+        require(
+            reservation.appointment_status.lowercase()
+                    in setOf("pending", "confirmed")
+        ) {
+            "This appointment is no longer eligible for payment."
+        }
+
+        // STEP 2: Record a simulated payment.
+        // This function is called only after the
+        // approved test card passes the checkout screen.
+        val paymentParameters = buildJsonObject {
 
             put(
-                "p_slot_id",
-                slotId
+                "p_source_type",
+                "appointment"
             )
 
             put(
-                "p_appointment_type",
-                appointmentType
+                "p_source_id",
+                reservation.appointment_id
             )
 
             put(
-                "p_payment_choice",
-                paymentChoice
-            )
-
-            put(
-                "p_reason",
-                reason.trim()
-            )
-
-            put(
-                "p_idempotency_key",
-                idempotencyKey
+                "p_outcome",
+                "success"
             )
         }
 
-        supabase.postgrest
+        val payment = supabase.postgrest
             .rpc(
-                function = "book_scheduled_appointment_demo",
-                parameters = parameters
+                function = "create_demo_payment",
+                parameters = paymentParameters
             )
-            .decodeList<BookScheduledAppointmentResult>()
+            .decodeList<DemoScheduledPaymentResult>()
             .firstOrNull()
             ?: error(
-                "The booking server returned no appointment."
+                "The server did not return a DemoPay transaction."
             )
+
+        require(
+            payment.payment_status.equals(
+                "paid",
+                ignoreCase = true
+            )
+        ) {
+            "Demo payment was not completed."
+        }
+
+        // STEP 3: Return the combined result
+        // to the existing booking confirmation screen.
+        BookScheduledAppointmentResult(
+            appointment_id = reservation.appointment_id,
+            payment_id = payment.payment_id,
+            payment_reference = payment.payment_reference,
+            appointment_status = reservation.appointment_status,
+            payment_status = payment.payment_status,
+            amount = payment.payment_amount,
+            currency = payment.payment_currency,
+            appointment_kind = appointmentType,
+            payment_method = "demo_card"
+        )
     }
+
 
     /**
      * Patient cancellation must go through the protected database function.
@@ -966,6 +987,33 @@ object PatientRepository {
                     "The consultation server returned no request."
                 )
         }
+
+    /** Only after the winning doctor has accepted: simulated, server-authorized checkout. */
+    suspend fun payOnDemandConsultation(
+        requestId: String,
+        outcome: String = "success"
+    ): Result<OnDemandPaymentResult> = runCatching {
+        require(outcome in setOf("success", "failed", "cancelled"))
+        supabase.auth.awaitInitialization()
+        supabase.postgrest.rpc(
+            "pay_on_demand_consultation",
+            buildJsonObject {
+                put("p_request_id", requestId)
+                put("p_outcome", outcome)
+            }
+        ).decodeList<OnDemandPaymentResult>().single()
+    }
+
+    /** Server is authoritative; a local success flag never unlocks video. */
+    suspend fun getOnDemandPaymentStatus(
+        requestId: String
+    ): Result<OnDemandPaymentResult> = runCatching {
+        supabase.auth.awaitInitialization()
+        supabase.postgrest.rpc(
+            "get_on_demand_payment_status",
+            buildJsonObject { put("p_request_id", requestId) }
+        ).decodeList<OnDemandPaymentResult>().single()
+    }
 
     suspend fun cancelConsultationRequest(
         requestId: String
@@ -1892,6 +1940,15 @@ data class ConsultationRequestResult(
 )
 
 @Serializable
+data class OnDemandPaymentResult(
+    val request_id: String,
+    val payment_status: String,
+    val payment_reference: String? = null,
+    val amount_minor: Int,
+    val payment_currency: String
+)
+
+@Serializable
 data class ConsultationCancelResult(
 
     val request_id: String,
@@ -1931,4 +1988,15 @@ data class ConsultationRequestRow(
     val claimed_at: String? = null,
 
     val cancelled_at: String? = null
+)
+
+
+@Serializable
+data class DemoScheduledPaymentResult(
+    val payment_id: String,
+    val payment_reference: String,
+    val payment_status: String,
+    val payment_amount: Double,
+    val payment_currency: String,
+    val payment_kind: String
 )

@@ -71,6 +71,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import ehealthy.connect.data.ProfileRepository
+import ehealthy.connect.ui.common.AppPinStore
+import ehealthy.connect.ui.common.AppPinGate
 import ehealthy.connect.ui.theme.EHealthyTheme
 import ehealthy.connect.util.SupabaseClientProvider
 import io.github.jan.supabase.auth.auth
@@ -173,6 +175,7 @@ class IncomingConsultationActivity : ComponentActivity() {
             )
 
         setContent {
+            var pinUnlocked by remember(owner) { mutableStateOf(false) }
 
             EHealthyTheme {
 
@@ -200,6 +203,16 @@ class IncomingConsultationActivity : ComponentActivity() {
 
                             finish()
                         }
+                    )
+                }
+
+                // Full-screen incoming invites may launch as a separate Activity.
+                // Apply the same optional PIN gate before showing clinical notes.
+                if (!pinUnlocked && AppPinStore.hasPin(this@IncomingConsultationActivity, owner)) {
+                    AppPinGate(
+                        context = this@IncomingConsultationActivity,
+                        accountId = owner,
+                        onUnlocked = { pinUnlocked = true }
                     )
                 }
             }

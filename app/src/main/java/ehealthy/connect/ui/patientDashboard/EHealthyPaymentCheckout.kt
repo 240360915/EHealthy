@@ -13,6 +13,7 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import ehealthy.connect.ui.theme.AdaptiveColors
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import ehealthy.connect.util.SupabaseClientProvider
@@ -37,10 +38,10 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import java.util.Calendar
 
-private val PayNavy = Color(0xFF102445)
+private val PayNavy get() = AdaptiveColors.ink
 private val PayBlue = Color(0xFF2563EB)
 private val PayGreen = Color(0xFF059669)
-private val PayMuted = Color(0xFF64748B)
+private val PayMuted get() = AdaptiveColors.muted
 
 @Composable
 fun EHealthyPaymentCheckout(
@@ -128,7 +129,7 @@ fun EHealthyPaymentCheckout(
                 .padding(horizontal = 12.dp)
                 .imePadding(),
             shape = RoundedCornerShape(24.dp),
-            color = Color.White,
+            color = AdaptiveColors.surface,
             tonalElevation = 8.dp
         ) {
             Column(
@@ -178,7 +179,7 @@ fun EHealthyPaymentCheckout(
                 }
 
                 Surface(
-                    color = Color(0xFFEFF6FF),
+                    color = AdaptiveColors.blueSoft,
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Text(
@@ -207,7 +208,7 @@ fun EHealthyPaymentCheckout(
                 )
 
                 Surface(
-                    color = Color(0xFFF8FAFC),
+                    color = AdaptiveColors.background,
                     shape = RoundedCornerShape(15.dp)
                 ) {
                     Column(
@@ -241,7 +242,7 @@ fun EHealthyPaymentCheckout(
                         }
 
                         HorizontalDivider(
-                            color = Color(0xFFE2E8F0)
+                            color = AdaptiveColors.border
                         )
 
                         Row(
@@ -353,7 +354,7 @@ fun EHealthyPaymentCheckout(
                 if (savedCard != null) {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        color = Color(0xFFEFF6FF),
+                        color = AdaptiveColors.blueSoft,
                         shape = RoundedCornerShape(13.dp)
                     ) {
                         Column(Modifier.padding(12.dp)) {

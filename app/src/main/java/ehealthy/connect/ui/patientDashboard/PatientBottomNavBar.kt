@@ -87,6 +87,15 @@ fun PatientBottomNavBar(
 
         PatientTab.entries.forEach { tab ->
 
+            // Enum constructors run only once. Resolve the accent at
+            // composition time so dark-mode toggles refresh selected icons.
+            val activeAccent = when (tab) {
+                PatientTab.HOME -> PatientColors.Primary
+                PatientTab.FIND_DOCTORS -> PatientColors.DoctorAccent
+                PatientTab.APPOINTMENTS -> PatientColors.AppointmentAccent
+                PatientTab.PROFILE -> PatientColors.RecordsAccent
+            }
+
             val selected =
                 selectedTab == tab
 
@@ -133,7 +142,7 @@ fun PatientBottomNavBar(
             animateColorAsState(
                 targetValue =
                     if (selected) {
-                        tab.accentColor.copy(
+                        activeAccent.copy(
                             alpha = 0.13f
                         )
                     } else {
@@ -148,7 +157,7 @@ fun PatientBottomNavBar(
             animateColorAsState(
                 targetValue =
                     if (selected) {
-                        tab.accentColor
+                        activeAccent
                     } else {
                         MaterialTheme
                             .colorScheme

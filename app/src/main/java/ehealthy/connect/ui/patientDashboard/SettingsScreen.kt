@@ -85,6 +85,7 @@ fun SettingsScreen(
     onNavigateInvoices: () -> Unit,
     onViewPrivacyPolicy: () -> Unit,
     onNavigateContactUs: () -> Unit,
+    onNavigateAppPin: () -> Unit,
     onLogout: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -378,6 +379,26 @@ fun SettingsScreen(
                     )
             )
 
+
+            /*
+             * Optional app security
+             */
+            SettingsSection(
+                title = "Security",
+                subtitle = "Control access to your private medical information",
+                accent = PatientColors.DoctorAccent,
+                background = PatientColors.DoctorCard
+            ) {
+                SettingsLinkRow(
+                    icon = Icons.Outlined.Lock,
+                    label = "Optional app PIN",
+                    description = "Enable, change or disable a six-digit app lock",
+                    accent = PatientColors.DoctorAccent,
+                    background = PatientColors.DoctorCard,
+                    onClick = onNavigateAppPin
+                )
+            }
+            Spacer(Modifier.height(18.dp))
 
             /*
              * Account

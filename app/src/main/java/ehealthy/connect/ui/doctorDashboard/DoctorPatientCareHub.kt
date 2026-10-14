@@ -41,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import ehealthy.connect.ui.theme.AdaptiveColors
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -1872,7 +1873,7 @@ private fun DeclinePhysicalVisitDialog(
             }
         },
 
-        containerColor = Color.White,
+        containerColor = AdaptiveColors.surface,
 
         shape = RoundedCornerShape(24.dp)
     )

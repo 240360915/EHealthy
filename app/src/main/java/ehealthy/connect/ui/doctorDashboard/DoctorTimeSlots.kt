@@ -1410,7 +1410,7 @@ private fun timeSlotFieldColors() =
     OutlinedTextFieldDefaults.colors(
         focusedBorderColor = TimeSlotsTeal,
         unfocusedBorderColor = TimeSlotsBorder,
-        focusedContainerColor = Color.White,
-        unfocusedContainerColor = Color.White,
+        focusedContainerColor = AdaptiveColors.surface,
+        unfocusedContainerColor = AdaptiveColors.surface,
         cursorColor = TimeSlotsTeal
     )

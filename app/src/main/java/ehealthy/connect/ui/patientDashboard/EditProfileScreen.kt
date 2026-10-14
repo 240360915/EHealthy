@@ -1381,7 +1381,7 @@ fun EditProfileScreen(
                 colors =
                     ButtonDefaults.buttonColors(
                         containerColor =
-                            PatientColors.DoctorAccent,
+                            PatientColors.DoctorAccentFill,
                         contentColor =
                             Color.White
                     )
@@ -1647,7 +1647,7 @@ fun EditProfileScreen(
                     colors =
                         ButtonDefaults.buttonColors(
                             containerColor =
-                                PatientColors.Purple,
+                                PatientColors.PurpleFill,
                             contentColor =
                                 Color.White
                         ),

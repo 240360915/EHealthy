@@ -2926,7 +2926,15 @@ fun AppNavGraph(pendingRoute: String? = null) {
                                 .select { filter { eq("patient_id", patientId) } }
                                 .decodeList<Prescription>()
 
-                            val doctorIds = (records.mapNotNull { it.doctor_id } + prescriptions.mapNotNull { it.doctor_id }).distinct()
+                            // The medical timeline includes existing appointments and
+                            // the doctor's patient-visible care notes, without copying them
+                            // into extra medical_records rows.
+                            val appointments = ehealthy.connect.data.PatientRepository
+                                .getMyAppointments().getOrThrow()
+                            val careNotes = ehealthy.connect.data.CareFileRepository
+                                .getMyCareNotes().getOrDefault(emptyList())
+
+                            val doctorIds = (records.mapNotNull { it.doctor_id } + prescriptions.mapNotNull { it.doctor_id } + appointments.mapNotNull { it.doctor_id }).distinct()
                             val doctorNames: Map<String, String>
                             val doctorPhotos: Map<String, String>
                             if (doctorIds.isEmpty()) {
@@ -2966,7 +2974,43 @@ fun AppNavGraph(pendingRoute: String? = null) {
                                 )
                             }
 
-                            val display = (recordDisplays + prescriptionDisplays)
+                            val appointmentDisplays = appointments.map { appt ->
+                                MedicalRecordDisplay(
+                                    record = MedicalRecord(
+                                        id = "appointment-" + appt.id,
+                                        record_type = "appointment",
+                                        notes = listOfNotNull(
+                                            ("Appointment: " + appt.date.orEmpty() + " " + appt.time.orEmpty()).trim(),
+                                            "Status: " + appt.status.orEmpty(),
+                                            appt.reason?.takeIf { it.isNotBlank() }?.let { "Reason: " + it }
+                                        ).joinToString("\n"),
+                                        created_at = appt.created_at ?: (appt.date?.plus("T00:00:00") ?: ""),
+                                        doctor_id = appt.doctor_id
+                                    ),
+                                    doctorName = doctorNames[appt.doctor_id] ?: "Doctor",
+                                    doctorPhoto = appt.doctor_id?.let { doctorPhotos[it] }
+                                )
+                            }
+
+                            val careNoteDisplays = careNotes.map { note ->
+                                MedicalRecordDisplay(
+                                    record = MedicalRecord(
+                                        id = "care-note-" + note.appointment_id,
+                                        record_type = "care_note",
+                                        notes = listOfNotNull(
+                                            note.consultation_summary.takeIf { it.isNotBlank() }
+                                                ?.let { "Consultation summary: " + it },
+                                            note.care_plan.takeIf { it.isNotBlank() }
+                                                ?.let { "Care plan: " + it }
+                                        ).joinToString("\n\n"),
+                                        created_at = note.updated_at ?: (note.visit_date?.plus("T00:00:00") ?: ""),
+                                        doctor_id = null
+                                    ),
+                                    doctorName = note.doctor_name ?: "Doctor"
+                                )
+                            }
+
+                            val display = (recordDisplays + prescriptionDisplays + appointmentDisplays + careNoteDisplays)
                                 .sortedByDescending { it.record.created_at }
 
                             Result.success(display)

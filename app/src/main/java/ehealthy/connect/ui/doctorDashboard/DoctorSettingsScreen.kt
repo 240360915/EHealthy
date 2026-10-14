@@ -90,6 +90,7 @@ fun DoctorSettingsScreen(
     isDarkMode: Boolean,
     onToggleDarkMode: (Boolean) -> Unit,
     onViewPrivacyPolicy: () -> Unit,
+    onNavigateAppPin: () -> Unit,
     onLogout: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -360,6 +361,17 @@ fun DoctorSettingsScreen(
                 Spacer(
                     modifier = Modifier.height(10.dp)
                 )
+
+                DoctorSettingsLinkRow(
+                    icon = Icons.Outlined.Lock,
+                    label = "Optional app PIN",
+                    description = "Add a six-digit lock to protect your medical workspace",
+                    accent = SettingsGreen,
+                    soft = SettingsGreenSoft,
+                    onClick = onNavigateAppPin
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
 
                 DoctorSettingsLinkRow(
                     icon = Icons.Outlined.Lock,

@@ -117,21 +117,31 @@ fun ConsultationCallScreen(
 
     val coroutineScope = rememberCoroutineScope()
 
-    var microphoneAllowed by remember {
+    // Stream needs both Android runtime permissions to publish two-way video.
+    var mediaPermissionsGranted by remember {
         mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
-                PackageManager.PERMISSION_GRANTED
+            listOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO).all { permission ->
+                ContextCompat.checkSelfPermission(context, permission) ==
+                    PackageManager.PERMISSION_GRANTED
+            }
         )
     }
-    val microphonePermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        microphoneAllowed = granted
+    val mediaPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        mediaPermissionsGranted =
+            listOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO).all { permission ->
+                ContextCompat.checkSelfPermission(context, permission) ==
+                    PackageManager.PERMISSION_GRANTED
+            }
     }
     LaunchedEffect(Unit) {
-        if (!microphoneAllowed) microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        if (!mediaPermissionsGranted) {
+            mediaPermissionLauncher.launch(
+                arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
+            )
+        }
     }
-
 
 
     var screenState by remember {
@@ -168,13 +178,13 @@ fun ConsultationCallScreen(
     LaunchedEffect(
         requestId,
         retryKey,
-        microphoneAllowed
+        mediaPermissionsGranted
     ) {
 
-        if (!microphoneAllowed) {
+        if (!mediaPermissionsGranted) {
             screenState = ConsultationCallState.Error(
-                "Microphone access is required so the doctor and patient can hear each other. " +
-                    "Allow microphone access in Android Settings, then try again."
+                "Camera and microphone permissions are required for two-way video. " +
+                    "Allow both permissions in Android Settings, then retry."
             )
             return@LaunchedEffect
         }
@@ -410,8 +420,12 @@ fun ConsultationCallScreen(
             }
 
 
-            // Publish local audio before the other participant arrives.
+            // Publish both local media tracks before the other participant arrives.
+            // A disabled camera produces a black/empty tile on the other side.
             streamCall.microphone.setEnabled(true)
+            streamCall.camera.setEnabled(true)
+            // Default to loudspeaker for clear two-way audio; user can change routing in-call.
+            streamCall.speaker.setSpeakerPhone(true)
 
             call =
                 streamCall

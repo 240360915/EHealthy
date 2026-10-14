@@ -14,51 +14,52 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import ehealthy.connect.ui.theme.adaptiveColor
 
 object PatientColors {
-    val DoctorCard = Color(0xFFE8F7F5)
-    val DoctorAccent = Color(0xFF0F766E)
+    val DoctorCard get() = adaptiveColor(Color(0xFFE8F7F5), Color(0xFF173E3D))
+    val DoctorAccent get() = adaptiveColor(Color(0xFF0F766E), Color(0xFF54DFCF))
 
-    val AppointmentCard = Color(0xFFEDF4FF)
-    val AppointmentAccent = Color(0xFF2563EB)
+    val AppointmentCard get() = adaptiveColor(Color(0xFFEDF4FF), Color(0xFF1B3150))
+    val AppointmentAccent get() = adaptiveColor(Color(0xFF2563EB), Color(0xFF93C5FD))
 
-    val RecordsCard = Color(0xFFF4EEFF)
-    val RecordsAccent = Color(0xFF7C3AED)
+    val RecordsCard get() = adaptiveColor(Color(0xFFF4EEFF), Color(0xFF332747))
+    val RecordsAccent get() = adaptiveColor(Color(0xFF7C3AED), Color(0xFFC4B5FD))
 
-    val TipsCard = Color(0xFFFFF7E8)
-    val TipsAccent = Color(0xFFF59E0B)
+    val TipsCard get() = adaptiveColor(Color(0xFFFFF7E8), Color(0xFF413419))
+    val TipsAccent get() = adaptiveColor(Color(0xFFF59E0B), Color(0xFFFCD34D))
 
-    val SuccessCard = Color(0xFFECFDF3)
-    val SuccessAccent = Color(0xFF059669)
+    val SuccessCard get() = adaptiveColor(Color(0xFFECFDF3), Color(0xFF193D31))
+    val SuccessAccent get() = adaptiveColor(Color(0xFF059669), Color(0xFF6EE7B7))
 
-    val ReviewCard = Color(0xFFFFF8E7)
-    val ReviewAccent = Color(0xFFD97706)
+    val ReviewCard get() = adaptiveColor(Color(0xFFFFF8E7), Color(0xFF413419))
+    val ReviewAccent get() = adaptiveColor(Color(0xFFD97706), Color(0xFFFCD34D))
 
-    val NeutralCard = Color(0xFFF8FAFC)
+    val NeutralCard get() = adaptiveColor(Color(0xFFF8FAFC), Color(0xFF1B2938))
 
-    val Primary = Color(0xFF087F8C)
-    val PrimaryDark = Color(0xFF075985)
+    val Primary get() = adaptiveColor(Color(0xFF087F8C), Color(0xFF38B5C2))
+    val PrimaryDark get() = adaptiveColor(Color(0xFF075985), Color(0xFF70BFF3))
 
-    val Blue = Color(0xFF2563EB)
-    val BlueSoft = Color(0xFFEFF6FF)
+    val Blue get() = adaptiveColor(Color(0xFF2563EB), Color(0xFF93C5FD))
+    val BlueSoft get() = adaptiveColor(Color(0xFFEFF6FF), Color(0xFF1B3150))
 
-    val Teal = Color(0xFF0F766E)
-    val TealSoft = Color(0xFFECFDF5)
+    val Teal get() = adaptiveColor(Color(0xFF0F766E), Color(0xFF54DFCF))
+    val TealSoft get() = adaptiveColor(Color(0xFFECFDF5), Color(0xFF173E3D))
 
-    val Green = Color(0xFF059669)
-    val GreenSoft = Color(0xFFECFDF5)
+    val Green get() = adaptiveColor(Color(0xFF059669), Color(0xFF6EE7B7))
+    val GreenSoft get() = adaptiveColor(Color(0xFFECFDF5), Color(0xFF193D31))
 
-    val Amber = Color(0xFFF59E0B)
-    val AmberSoft = Color(0xFFFFFBEB)
+    val Amber get() = adaptiveColor(Color(0xFFF59E0B), Color(0xFFFCD34D))
+    val AmberSoft get() = adaptiveColor(Color(0xFFFFFBEB), Color(0xFF413419))
 
-    val Red = Color(0xFFDC2626)
-    val RedSoft = Color(0xFFFEF2F2)
+    val Red get() = adaptiveColor(Color(0xFFDC2626), Color(0xFFFCA5A5))
+    val RedSoft get() = adaptiveColor(Color(0xFFFEF2F2), Color(0xFF46282C))
 
-    val Purple = Color(0xFF7C3AED)
-    val PurpleSoft = Color(0xFFF5F3FF)
+    val Purple get() = adaptiveColor(Color(0xFF7C3AED), Color(0xFFC4B5FD))
+    val PurpleSoft get() = adaptiveColor(Color(0xFFF5F3FF), Color(0xFF332747))
 
-    val TextPrimary = Color(0xFF0F172A)
-    val TextSecondary = Color(0xFF64748B)
+    val TextPrimary get() = adaptiveColor(Color(0xFF0F172A), Color(0xFFF1F5F9))
+    val TextSecondary get() = adaptiveColor(Color(0xFF64748B), Color(0xFFB8C6D8))
 
     val HeroGradient = Brush.linearGradient(
         colors = listOf(

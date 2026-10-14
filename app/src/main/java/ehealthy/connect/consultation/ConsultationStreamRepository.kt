@@ -27,7 +27,36 @@ data class ConsultationStreamCredentials(
     val callId: String,
     val callType: String,
     val requestId: String
-)
+) {
+    /**
+     * Reject credentials that do not belong to the signed-in participant or
+     * consultation being opened. The backend signs the Stream JWT and controls
+     * membership and DemoPay; the client checks the returned identity/room.
+     */
+    fun validate(expectedRequestId: String, expectedUserId: String) {
+        require(expectedRequestId.isNotBlank()) {
+            "Consultation request ID is required."
+        }
+        require(expectedUserId.isNotBlank()) {
+            "Authenticated user ID is required."
+        }
+        require(requestId == expectedRequestId) {
+            "The server returned a different consultation."
+        }
+        require(userId == expectedUserId) {
+            "Stream identity does not match the signed-in account."
+        }
+        require(token.isNotBlank()) {
+            "Missing Stream token."
+        }
+        require(callType == "consultation") {
+            "Unexpected Stream call type."
+        }
+        require(callId == "consultation-$expectedRequestId") {
+            "Unexpected consultation call ID."
+        }
+    }
+}
 
 
 @Serializable
@@ -79,6 +108,17 @@ object ConsultationStreamRepository {
                     )
 
 
+            val expectedUserId =
+                SupabaseClientProvider
+                    .client
+                    .auth
+                    .currentUserOrNull()
+                    ?.id
+                    ?: throw IllegalStateException(
+                        "Authenticated user identity is missing. Please sign in again."
+                    )
+
+
             val response =
                 consultationStreamHttpClient
                     .post(
@@ -126,44 +166,10 @@ object ConsultationStreamRepository {
                             >()
 
 
-            require(
-                credentials.requestId ==
-                        requestId
-            ) {
-                "The server returned a different consultation."
-            }
-
-
-            require(
-                credentials.token
-                    .isNotBlank()
-            ) {
-                "Missing Stream token."
-            }
-
-
-            require(
-                credentials.userId
-                    .isNotBlank()
-            ) {
-                "Missing Stream user ID."
-            }
-
-
-            require(
-                credentials.callId
-                    .isNotBlank()
-            ) {
-                "Missing consultation call ID."
-            }
-
-
-            require(
-                credentials.callType ==
-                        "consultation"
-            ) {
-                "Unexpected Stream call type."
-            }
+            credentials.validate(
+                expectedRequestId = requestId,
+                expectedUserId = expectedUserId
+            )
 
 
             Result.success(

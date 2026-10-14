@@ -1,5 +1,11 @@
 package ehealthy.connect.consultation
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.getstream.video.android.compose.theme.VideoTheme
 import io.getstream.video.android.compose.ui.components.call.activecall.CallContent
+import io.getstream.video.android.compose.ui.components.call.controls.actions.DefaultOnCallActionHandler
 import io.getstream.video.android.core.Call
 import io.getstream.video.android.core.GEO
 import io.getstream.video.android.core.StreamVideo
@@ -114,6 +121,22 @@ fun ConsultationCallScreen(
 
     val coroutineScope = rememberCoroutineScope()
 
+    var microphoneAllowed by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val microphonePermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        microphoneAllowed = granted
+    }
+    LaunchedEffect(Unit) {
+        if (!microphoneAllowed) microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+    }
+
+
 
     var screenState by remember {
 
@@ -148,8 +171,17 @@ fun ConsultationCallScreen(
      */
     LaunchedEffect(
         requestId,
-        retryKey
+        retryKey,
+        microphoneAllowed
     ) {
+
+        if (!microphoneAllowed) {
+            screenState = ConsultationCallState.Error(
+                "Microphone access is required so the doctor and patient can hear each other. " +
+                    "Allow microphone access in Android Settings, then try again."
+            )
+            return@LaunchedEffect
+        }
 
         screenState =
             ConsultationCallState.Loading
@@ -382,6 +414,9 @@ fun ConsultationCallScreen(
             }
 
 
+            // Publish local audio before the other participant arrives.
+            streamCall.microphone.setEnabled(true)
+
             call =
                 streamCall
 
@@ -611,6 +646,9 @@ fun ConsultationCallScreen(
                                                     io.getstream.video.android.core.call.state.LeaveCall
                                         ) {
                                             finishConsultation(activeCall)
+                                        } else {
+                                            // Preserve Stream's mute/unmute, camera and speaker actions.
+                                            DefaultOnCallActionHandler.onCallAction(activeCall, action)
                                         }
                                     }
                                 )

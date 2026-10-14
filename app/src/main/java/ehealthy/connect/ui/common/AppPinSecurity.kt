@@ -215,6 +215,7 @@ fun AppPinSettingsScreen(
     var confirmPin by remember(accountId) { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
     var changing by remember { mutableStateOf(false) }
+    val activeAccountId = accountId.orEmpty()
 
     Scaffold(topBar = {
         TopAppBar(
@@ -263,9 +264,9 @@ fun AppPinSettingsScreen(
                             message = "PINs do not match."
                         } else {
                             runCatching {
-                                if (enabled) AppPinStore.change(context, accountId, oldPin, newPin)
+                                if (enabled) AppPinStore.change(context, activeAccountId, oldPin, newPin)
                                 else {
-                                    AppPinStore.enable(context, accountId, newPin)
+                                    AppPinStore.enable(context, activeAccountId, newPin)
                                     AppPinStore.Check(true)
                                 }
                             }.onSuccess { outcome ->
@@ -291,7 +292,7 @@ fun AppPinSettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     enabled = oldPin.length == 6,
                     onClick = {
-                        runCatching { AppPinStore.disable(context, accountId, oldPin) }
+                        runCatching { AppPinStore.disable(context, activeAccountId, oldPin) }
                             .onSuccess { result ->
                                 if (result.accepted) {
                                     enabled = false; oldPin = ""; newPin = ""; confirmPin = ""

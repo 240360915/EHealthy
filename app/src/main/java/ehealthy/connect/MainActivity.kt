@@ -2601,8 +2601,9 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 },
                 onBack = { navController.popBackStack() },
                 onReschedule = {
+                    // Preserve the originating page on the back stack.
                     navController.navigate("rescheduleAppointment/$appointmentId") {
-                        popUpTo("patientDashboard") { inclusive = false }
+                        launchSingleTop = true
                     }
                 }
             )
@@ -3461,9 +3462,9 @@ fun AppNavGraph(pendingRoute: String? = null) {
                             doctorIdForFetch?.let { BookingRepository.availableTimes(it, date) }
                                 ?: Result.failure(IllegalStateException("Doctor not found."))
                         },
-                        onConfirmReschedule = { _, _, _ ->
-                            errorMessage = "Rescheduling requires secure server support. Your existing appointment has not changed."
-                        }
+                        // RescheduleAppointmentScreen calls the existing
+                        // secure PatientRepository.rescheduleAppointment RPC.
+                        // It must not present a misleading backend placeholder.
                     )
                 }
             }

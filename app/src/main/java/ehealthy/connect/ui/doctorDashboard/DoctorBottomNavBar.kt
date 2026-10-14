@@ -26,6 +26,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
+import ehealthy.connect.ui.theme.AdaptiveColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -68,11 +69,11 @@ enum class DoctorTab(
 
 // Premium doctor navigation palette.
 // Kept local to this file so it cannot clash with the dashboard colors.
-private val DoctorNavBackground = Color(0xFFFFFFFF)
+private val DoctorNavBackground get() = AdaptiveColors.background
 private val DoctorNavTeal = Color(0xFF119E95)
-private val DoctorNavTealSoft = Color(0xFFE8F7F5)
-private val DoctorNavMuted = Color(0xFF818895)
-private val DoctorNavInk = Color(0xFF171B27)
+private val DoctorNavTealSoft get() = AdaptiveColors.tealSoft
+private val DoctorNavMuted get() = AdaptiveColors.muted
+private val DoctorNavInk get() = AdaptiveColors.ink
 
 /**
  * Premium doctor bottom navigation.

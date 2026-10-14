@@ -120,7 +120,7 @@ fun DoctorDemoEarningsScreen(onBack: () -> Unit) {
         ) {
             item {
                 Text("SCHOOL PROJECT • VIRTUAL MONEY ONLY", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                Text("Consultation revenue is split after a verified scheduled online consultation. No bank transfers occur.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                Text("Revenue is split only after a verified, paid scheduled or on-demand consultation. No bank transfers occur.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
             }
             if (busy) item { CircularProgressIndicator() }
             error?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.error) } }
@@ -134,7 +134,7 @@ fun DoctorDemoEarningsScreen(onBack: () -> Unit) {
                         MoneyRow("Your virtual earnings", money(doctorTotal), emphasized = true)
                         MoneyRow("EHealthy virtual commission", money(platformTotal))
                         HorizontalDivider()
-                        Text("${earnings.size} completed paid demo appointment(s). Commission is recorded per consultation.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${earnings.size} completed paid consultation(s). Commission is recorded per verified service.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -158,12 +158,12 @@ fun DoctorDemoEarningsScreen(onBack: () -> Unit) {
             }
             item { Text("Released virtual earnings", fontWeight = FontWeight.Bold, fontSize = 18.sp) }
             if (!busy && earnings.isEmpty()) item {
-                Text("No virtual earnings released yet. Complete a scheduled DemoPay consultation to create the first entry.", fontSize = 13.sp)
+                Text("No virtual earnings recorded yet. Only paid and verified completed consultations are counted.", fontSize = 13.sp)
             }
-            items(earnings, key = { it.appointment_id }) { earning ->
+            items(earnings, key = { it.source_id }) { earning ->
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                        Text(earning.appointment_date ?: "Consultation", fontWeight = FontWeight.SemiBold)
+                        Text((when (earning.source_type) { "scheduled_online" -> "Scheduled video"; "broadcast_consultation" -> "Broadcast consultation"; "private_consultation" -> "Private consultation"; else -> "Consultation" }) + " • " + (earning.appointment_date ?: "Date unavailable"), fontWeight = FontWeight.SemiBold)
                         Text("Payment: ${earning.payment_reference}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         MoneyRow("Total", money(earning.total_minor.toLong()))
                         MoneyRow("Doctor (${100 - earning.commission_bps / 100.0}% before rounding)", money(earning.doctor_minor.toLong()), emphasized = true)

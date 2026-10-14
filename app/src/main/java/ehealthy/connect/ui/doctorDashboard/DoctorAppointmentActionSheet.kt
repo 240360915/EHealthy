@@ -884,7 +884,7 @@ private fun DoctorSheetActionCard(
                         RoundedCornerShape(13.dp)
                     )
                     .background(
-                        Color.White.copy(
+                        AdaptiveColors.surface.copy(
                             alpha = 0.65f
                         )
                     ),

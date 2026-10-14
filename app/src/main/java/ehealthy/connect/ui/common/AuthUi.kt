@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import ehealthy.connect.ui.theme.AdaptiveColors
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -36,24 +37,24 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 object AuthColors {
-    val Background = Color(0xFFFAF9FF)
-    val Surface = Color(0xFFFFFFFF)
-    val SurfaceMuted = Color(0xFFF5F6FA)
-    val TextPrimary = Color(0xFF182033)
-    val TextSecondary = Color(0xFF5D6470)
-    val TextMuted = Color(0xFF8A919D)
+    val Background get() = AdaptiveColors.background
+    val Surface get() = AdaptiveColors.surface
+    val SurfaceMuted get() = AdaptiveColors.surface
+    val TextPrimary get() = AdaptiveColors.ink
+    val TextSecondary get() = AdaptiveColors.muted
+    val TextMuted get() = AdaptiveColors.muted
     val Button = Color(0xFF293147)
-    val Border = Color(0xFFE2E5EC)
+    val Border get() = AdaptiveColors.border
     val Error = Color(0xFFD64545)
-    val ErrorSoft = Color(0xFFFFEEEE)
+    val ErrorSoft get() = AdaptiveColors.redSoft
     val Success = Color(0xFF218B78)
-    val SuccessSoft = Color(0xFFDFF5F1)
+    val SuccessSoft get() = AdaptiveColors.greenSoft
     val Warning = Color(0xFF9A6500)
-    val WarningSoft = Color(0xFFFFF4D8)
+    val WarningSoft get() = AdaptiveColors.amberSoft
     val PatientAccent = Color(0xFF218B78)
-    val PatientSoft = Color(0xFFDFF5F1)
+    val PatientSoft get() = AdaptiveColors.tealSoft
     val DoctorAccent = Color(0xFF385A9E)
-    val DoctorSoft = Color(0xFFEFF1FF)
+    val DoctorSoft get() = AdaptiveColors.blueSoft
 }
 
 @Composable

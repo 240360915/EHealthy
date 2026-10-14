@@ -10,7 +10,8 @@ import kotlinx.serialization.json.put
 /** Demo-only ledger; amounts are in cents to avoid floating-point errors. */
 @Serializable
 data class DemoEarning(
-    val appointment_id: String,
+    val source_id: String,
+    val source_type: String,
     val appointment_date: String? = null,
     val payment_reference: String,
     val total_minor: Int,
@@ -43,7 +44,7 @@ object DemoEarningsRepository {
     private val db get() = SupabaseClientProvider.client.postgrest
 
     suspend fun getMyEarnings(): Result<List<DemoEarning>> = safeRequest {
-        db.rpc("doctor_get_my_demo_earnings")
+        db.rpc("doctor_get_my_demo_earnings_v2")
             .decodeList<DemoEarning>()
     }
 

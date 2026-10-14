@@ -349,10 +349,9 @@ suspend fun savePrescription(
 }
 
 
-/** Distinct patients this doctor has a CONFIRMED appointment with — same
- *  scoping your teammate's version used. Queries appointments directly
- *  rather than an embedded join, since our Appointment model doesn't
- *  expose patient_id and I haven't confirmed a FK relationship exists. */
+/** Eligible patients linked to this doctor's confirmed or completed appointments.
+ *  Distinct by the stable patient UUID, not a possibly duplicated name.
+ *  The issuing RPC independently verifies the clinical relationship. */
 suspend fun fetchConfirmedPrescriptionPatients(doctorId: String): Result<List<PrescriptionPatient>> {
     return try {
         @Serializable
@@ -363,7 +362,7 @@ suspend fun fetchConfirmedPrescriptionPatients(doctorId: String): Result<List<Pr
             .select {
                 filter {
                     eq("doctor_id", doctorId)
-                    eq("status", "confirmed")
+                    isIn("status", listOf("confirmed", "completed"))
                 }
             }
             .decodeList<Row>()

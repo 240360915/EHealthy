@@ -2537,7 +2537,7 @@ private fun PatientsTabContent(
             .filter {
                 !it.patient_id.isNullOrBlank() &&
                     !it.patient_name.isNullOrBlank() &&
-                    it.status?.lowercase() in setOf("confirmed", "completed")
+                    it.status?.lowercase().orEmpty() in setOf("confirmed", "completed")
             }
             .groupBy { it.patient_id!! }
             .map { (patientId, appts) ->

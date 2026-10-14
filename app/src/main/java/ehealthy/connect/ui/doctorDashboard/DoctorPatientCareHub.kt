@@ -4,17 +4,21 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -41,6 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
 import ehealthy.connect.ui.theme.AdaptiveColors
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -191,32 +196,6 @@ fun DoctorPatientCareHub(
         )
 
 
-        PatientCareHero(
-            patientName =
-                patientName,
-            profile =
-                healthProfile,
-            requestCount =
-                physicalRequests.count {
-                    it.status.equals(
-                        "pending",
-                        ignoreCase = true
-                    )
-                },
-            invoiceCount =
-                invoices.count {
-                    it.status.equals(
-                        "issued",
-                        ignoreCase = true
-                    ) ||
-                            it.status.equals(
-                                "pending",
-                                ignoreCase = true
-                            )
-                }
-        )
-
-
         PatientCareTabs(
             selectedTab =
                 selectedTab,
@@ -268,12 +247,10 @@ fun DoctorPatientCareHub(
                     PatientCareTab.OVERVIEW -> {
 
                         PatientOverviewContent(
-                            profile =
-                                healthProfile,
-                            physicalRequests =
-                                physicalRequests,
-                            invoices =
-                                invoices
+                            patientName = patientName,
+                            profile = healthProfile,
+                            physicalRequests = physicalRequests,
+                            invoices = invoices
                         )
                     }
 
@@ -676,6 +653,7 @@ private fun PatientCareTabs(
 
 @Composable
 private fun PatientOverviewContent(
+    patientName: String,
     profile: PatientHealthProfile?,
     physicalRequests: List<PhysicalVisitRequest>,
     invoices: List<PhysicalVisitInvoice>
@@ -693,6 +671,21 @@ private fun PatientOverviewContent(
                 14.dp
             )
     ) {
+        // The identity banner scrolls with the overview rather than
+        // permanently consuming vertical space above the clinical details.
+        item {
+            PatientCareHero(
+                patientName = patientName,
+                profile = profile,
+                requestCount = physicalRequests.count {
+                    it.status.equals("pending", ignoreCase = true)
+                },
+                invoiceCount = invoices.count {
+                    it.status.equals("issued", ignoreCase = true) ||
+                        it.status.equals("pending", ignoreCase = true)
+                }
+            )
+        }
 
         item {
 
@@ -706,42 +699,43 @@ private fun PatientOverviewContent(
 
 
         item {
-
-            Row(
-                modifier =
-                    Modifier.fillMaxWidth(),
-                horizontalArrangement =
-                    Arrangement.spacedBy(
-                        10.dp
-                    )
-            ) {
-
-                SnapshotCard(
-                    title =
-                        "Allergies",
-                    value =
-                        cleanValue(
-                            profile?.allergies
-                        ),
-                    background =
-                        DoctorColors.RedSoft,
-                    modifier =
-                        Modifier.weight(1f)
-                )
-
-
-                SnapshotCard(
-                    title =
-                        "Chronic",
-                    value =
-                        cleanValue(
-                            profile?.chronic
-                        ),
-                    background =
-                        DoctorColors.AmberSoft,
-                    modifier =
-                        Modifier.weight(1f)
-                )
+            // Use a single column on narrower phones so medical values do
+            // not get squeezed into two tiny cards.
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                if (maxWidth < 360.dp) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        SnapshotCard(
+                            title = "Allergies",
+                            value = cleanValue(profile?.allergies),
+                            background = DoctorColors.RedSoft,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        SnapshotCard(
+                            title = "Chronic conditions",
+                            value = cleanValue(profile?.chronic),
+                            background = DoctorColors.AmberSoft,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        SnapshotCard(
+                            title = "Allergies",
+                            value = cleanValue(profile?.allergies),
+                            background = DoctorColors.RedSoft,
+                            modifier = Modifier.weight(1f)
+                        )
+                        SnapshotCard(
+                            title = "Chronic conditions",
+                            value = cleanValue(profile?.chronic),
+                            background = DoctorColors.AmberSoft,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
             }
         }
 

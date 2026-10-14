@@ -74,6 +74,7 @@ import ehealthy.connect.data.ProfileRepository
 import ehealthy.connect.ui.common.AppPinStore
 import ehealthy.connect.ui.common.AppPinGate
 import ehealthy.connect.ui.theme.EHealthyTheme
+import ehealthy.connect.util.ThemeManager
 import ehealthy.connect.util.SupabaseClientProvider
 import io.github.jan.supabase.auth.auth
 import kotlinx.coroutines.CancellationException
@@ -174,10 +175,11 @@ class IncomingConsultationActivity : ComponentActivity() {
                 4101
             )
 
+        ThemeManager.init(this)
         setContent {
             var pinUnlocked by remember(owner) { mutableStateOf(false) }
 
-            EHealthyTheme {
+            EHealthyTheme(darkTheme = ThemeManager.isDarkMode) {
 
                 Surface(
                     modifier =

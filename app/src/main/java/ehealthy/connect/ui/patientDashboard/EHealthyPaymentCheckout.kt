@@ -62,7 +62,9 @@ fun EHealthyPaymentCheckout(
     var savedCard by remember(accountId) {
         mutableStateOf(DemoSavedCardStore.load(context, accountId))
     }
-    var useSaved by remember(accountId) { mutableStateOf(savedCard != null) }
+    // Start with empty fields so patients can always enter their own fictional card.
+    // An existing saved demo profile stays available as an explicit opt-in choice.
+    var useSaved by remember(accountId) { mutableStateOf(false) }
     var rememberTestCard by remember { mutableStateOf(false) }
     var localProcessing by remember { mutableStateOf(false) }
     val paymentScope = rememberCoroutineScope()

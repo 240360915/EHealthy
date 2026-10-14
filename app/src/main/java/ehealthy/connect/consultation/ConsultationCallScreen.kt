@@ -424,6 +424,8 @@ fun ConsultationCallScreen(
             // A disabled camera produces a black/empty tile on the other side.
             streamCall.microphone.setEnabled(true)
             streamCall.camera.setEnabled(true)
+            // Default to loudspeaker for clear two-way audio; user can change routing in-call.
+            streamCall.speaker.setSpeakerPhone(true)
 
             call =
                 streamCall

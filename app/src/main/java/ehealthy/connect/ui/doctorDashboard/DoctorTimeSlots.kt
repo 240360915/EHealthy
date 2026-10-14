@@ -51,6 +51,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import ehealthy.connect.ui.theme.AdaptiveColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -88,19 +89,19 @@ private data class Slot(
 private val intervalOptions = listOf(15, 30, 45, 60)
 
 // Patient-side matching visual language.
-private val TimeSlotsBackground = Color(0xFFF7F9FC)
-private val TimeSlotsInk = Color(0xFF171B27)
-private val TimeSlotsMuted = Color(0xFF6C7280)
+private val TimeSlotsBackground get() = AdaptiveColors.background
+private val TimeSlotsInk get() = AdaptiveColors.ink
+private val TimeSlotsMuted get() = AdaptiveColors.muted
 private val TimeSlotsTeal = Color(0xFF119E95)
-private val TimeSlotsTealSoft = Color(0xFFE8F7F5)
+private val TimeSlotsTealSoft get() = AdaptiveColors.tealSoft
 private val TimeSlotsBlue = Color(0xFF2F6FED)
-private val TimeSlotsBlueSoft = Color(0xFFEAF2FF)
+private val TimeSlotsBlueSoft get() = AdaptiveColors.blueSoft
 private val TimeSlotsAmber = Color(0xFFF59E0B)
-private val TimeSlotsAmberSoft = Color(0xFFFFF4DD)
+private val TimeSlotsAmberSoft get() = AdaptiveColors.amberSoft
 private val TimeSlotsGreen = Color(0xFF18A572)
-private val TimeSlotsGreenSoft = Color(0xFFE9FAF2)
-private val TimeSlotsGreySoft = Color(0xFFF0F2F5)
-private val TimeSlotsBorder = Color(0xFFE3E8EF)
+private val TimeSlotsGreenSoft get() = AdaptiveColors.greenSoft
+private val TimeSlotsGreySoft get() = AdaptiveColors.surface
+private val TimeSlotsBorder get() = AdaptiveColors.border
 
 @OptIn(
     ExperimentalLayoutApi::class,
@@ -357,7 +358,7 @@ fun DoctorTimeSlots(
                 colors =
                     TopAppBarDefaults
                         .topAppBarColors(
-                            containerColor = Color.White
+                            containerColor = AdaptiveColors.surface
                         )
             )
         }
@@ -402,7 +403,7 @@ fun DoctorTimeSlots(
                 shape = RoundedCornerShape(22.dp),
                 colors =
                     CardDefaults.cardColors(
-                        containerColor = Color.White
+                        containerColor = AdaptiveColors.surface
                     ),
                 elevation =
                     CardDefaults.cardElevation(
@@ -1237,7 +1238,7 @@ private fun EmptySlotsCard() {
         shape = RoundedCornerShape(22.dp),
         colors =
             CardDefaults.cardColors(
-                containerColor = Color.White
+                containerColor = AdaptiveColors.surface
             ),
         elevation =
             CardDefaults.cardElevation(

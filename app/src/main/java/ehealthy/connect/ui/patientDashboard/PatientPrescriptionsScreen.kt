@@ -828,7 +828,7 @@ private fun PrescriptionCard(
                         .fillMaxWidth()
                         .height(4.dp)
                         .background(
-                            PatientColors.Purple
+                            PatientColors.PurpleFill
                         )
             )
 

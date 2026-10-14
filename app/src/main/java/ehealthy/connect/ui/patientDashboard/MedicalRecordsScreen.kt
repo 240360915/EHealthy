@@ -1151,7 +1151,7 @@ private fun RecordCard(
                                             39.dp
                                         )
                                         .background(
-                                            PatientColors.DoctorAccent,
+                                            PatientColors.DoctorAccentFill,
                                             CircleShape
                                         ),
                                 contentAlignment =

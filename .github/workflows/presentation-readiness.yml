@@ -24,8 +24,10 @@ jobs:
         uses: android-actions/setup-android@v4
         with:
           packages: 'platform-tools'
-      - name: Install target Android SDK
-        run: sdkmanager --install "platforms;android-37" "build-tools;37.0.0"
+      - name: Install Android 17 preview platform and build tools
+        run: |
+          sdkmanager --list --channel=3 | grep -E 'platforms;android-37' || true
+          sdkmanager --channel=3 --install "platforms;android-37.0" "build-tools;37.0.0"
       - name: Configure Gradle
         uses: gradle/actions/setup-gradle@v4
       - name: Compile, unit test, and assemble presentation APK

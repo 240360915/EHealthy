@@ -149,6 +149,18 @@ private object BookingConfirmationHolder {
     var confirmation: BookingConfirmation? = null
 }
 
+// Patient-owned completed on-demand consultations appear in medical history.
+@Serializable
+private data class PatientConsultationHistoryRow(
+    val id: String,
+    val mode: String,
+    val status: String,
+    val service: String? = null,
+    val claimed_doctor_id: String? = null,
+    val created_at: String,
+    val symptom_notes: String? = null
+)
+
 @Serializable
 private data class PatientLookup(
     val id: String? = null,
@@ -2934,8 +2946,25 @@ fun AppNavGraph(pendingRoute: String? = null) {
                                 .getMyAppointments().getOrThrow()
                             val careNotes = ehealthy.connect.data.CareFileRepository
                                 .getMyCareNotes().getOrDefault(emptyList())
+                            val completedOnDemand = SupabaseClientProvider.client.postgrest
+                                .from("consultation_requests")
+                                .select(
+                                    columns = Columns.list(
+                                        "id", "mode", "status", "service",
+                                        "claimed_doctor_id", "created_at", "symptom_notes"
+                                    )
+                                ) {
+                                    filter {
+                                        eq("patient_id", patientId)
+                                        eq("status", "completed")
+                                    }
+                                }
+                                .decodeList<PatientConsultationHistoryRow>()
 
-                            val doctorIds = (records.mapNotNull { it.doctor_id } + prescriptions.mapNotNull { it.doctor_id } + appointments.mapNotNull { it.doctor_id }).distinct()
+                            val doctorIds = (records.mapNotNull { it.doctor_id } +
+                                prescriptions.mapNotNull { it.doctor_id } +
+                                appointments.mapNotNull { it.doctor_id } +
+                                completedOnDemand.mapNotNull { it.claimed_doctor_id }).distinct()
                             val doctorNames: Map<String, String>
                             val doctorPhotos: Map<String, String>
                             if (doctorIds.isEmpty()) {
@@ -3011,7 +3040,34 @@ fun AppNavGraph(pendingRoute: String? = null) {
                                 )
                             }
 
-                            val display = (recordDisplays + prescriptionDisplays + appointmentDisplays + careNoteDisplays)
+                            val onDemandDisplays = completedOnDemand.map { consultation ->
+                                val type = if (consultation.mode == "broadcast") {
+                                    "Broadcast consultation"
+                                } else {
+                                    "Private consultation"
+                                }
+                                MedicalRecordDisplay(
+                                    record = MedicalRecord(
+                                        id = "consultation-" + consultation.id,
+                                        record_type = "consultation",
+                                        notes = listOfNotNull(
+                                            type,
+                                            "Status: " + consultation.status,
+                                            consultation.service?.takeIf { it.isNotBlank() }
+                                                ?.let { "Service: " + it },
+                                            consultation.symptom_notes?.takeIf { it.isNotBlank() }
+                                                ?.let { "Symptoms reported: " + it }
+                                        ).joinToString("\n"),
+                                        created_at = consultation.created_at,
+                                        doctor_id = consultation.claimed_doctor_id
+                                    ),
+                                    doctorName = doctorNames[consultation.claimed_doctor_id] ?: "Doctor",
+                                    doctorPhoto = consultation.claimed_doctor_id?.let { doctorPhotos[it] }
+                                )
+                            }
+
+                            val display = (recordDisplays + prescriptionDisplays + appointmentDisplays +
+                                careNoteDisplays + onDemandDisplays)
                                 .sortedByDescending { it.record.created_at }
 
                             Result.success(display)

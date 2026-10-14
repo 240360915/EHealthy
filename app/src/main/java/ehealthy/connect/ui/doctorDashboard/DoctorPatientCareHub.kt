@@ -1,7 +1,6 @@
 package ehealthy.connect.ui.doctorDashboard
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,7 +11,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -538,8 +536,9 @@ private fun HeroMetric(
                 Color.White,
             fontWeight =
                 FontWeight.ExtraBold,
-            fontSize =
-                16.sp
+            fontSize = 16.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
 
         Text(
@@ -549,8 +548,9 @@ private fun HeroMetric(
                 Color.White.copy(
                     alpha = 0.78f
                 ),
-            fontSize =
-                9.sp
+            fontSize = 9.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -2642,46 +2642,51 @@ private fun CareInfoRow(
     label: String,
     value: String
 ) {
-
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(
-                    vertical = 7.dp
-                ),
-        verticalAlignment =
-            Alignment.Top
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
     ) {
-
-        Text(
-            text =
-                label,
-            modifier =
-                Modifier.weight(
-                    0.42f
-                ),
-            color =
-                DoctorColors.Muted,
-            fontSize =
-                11.sp
-        )
-
-
-        Text(
-            text =
-                value,
-            modifier =
-                Modifier.weight(
-                    0.58f
-                ),
-            color =
-                DoctorColors.Ink,
-            fontSize =
-                11.sp,
-            fontWeight =
-                FontWeight.SemiBold
-        )
+        if (maxWidth < 330.dp) {
+            // Narrow phone / large text: let long clinical values use the
+            // full width instead of forcing them into half a line.
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = label,
+                    color = DoctorColors.Muted,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = value,
+                    color = DoctorColors.Ink,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = 17.sp
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = label,
+                    modifier = Modifier.weight(0.35f),
+                    color = DoctorColors.Muted,
+                    fontSize = 11.sp
+                )
+                Text(
+                    text = value,
+                    modifier = Modifier.weight(0.65f),
+                    color = DoctorColors.Ink,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = 17.sp
+                )
+            }
+        }
     }
 }
 

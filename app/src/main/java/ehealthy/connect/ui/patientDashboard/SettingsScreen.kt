@@ -85,7 +85,7 @@ fun SettingsScreen(
     onNavigateInvoices: () -> Unit,
     onViewPrivacyPolicy: () -> Unit,
     onNavigateContactUs: () -> Unit,
-    onNavigateAppPin: () -> Unit,
+    onNavigateAppPin: () -> Unit = {},
     onLogout: () -> Unit,
     onBack: () -> Unit
 ) {

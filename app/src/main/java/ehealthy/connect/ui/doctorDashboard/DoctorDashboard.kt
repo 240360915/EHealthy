@@ -69,6 +69,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import ehealthy.connect.ui.theme.AdaptiveColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -121,22 +122,22 @@ import androidx.compose.material3.ButtonDefaults
 import kotlinx.coroutines.launch
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
-private val DoctorScreenBackground = Color(0xFFF7F9FC)
-private val DoctorInk = Color(0xFF171B27)
-private val DoctorMuted = Color(0xFF6C7280)
+private val DoctorScreenBackground get() = AdaptiveColors.background
+private val DoctorInk get() = AdaptiveColors.ink
+private val DoctorMuted get() = AdaptiveColors.muted
 private val DoctorTeal = Color(0xFF119E95)
-private val DoctorTealSoft = Color(0xFFE8F7F5)
+private val DoctorTealSoft get() = AdaptiveColors.tealSoft
 private val DoctorBlue = Color(0xFF2F6FED)
-private val DoctorBlueSoft = Color(0xFFEAF2FF)
+private val DoctorBlueSoft get() = AdaptiveColors.blueSoft
 private val DoctorPurple = Color(0xFF8B5CF6)
-private val DoctorPurpleSoft = Color(0xFFF4EEFF)
+private val DoctorPurpleSoft get() = AdaptiveColors.purpleSoft
 private val DoctorAmber = Color(0xFFF59E0B)
-private val DoctorAmberSoft = Color(0xFFFFF4DD)
+private val DoctorAmberSoft get() = AdaptiveColors.amberSoft
 private val DoctorGreen = Color(0xFF18A572)
-private val DoctorGreenSoft = Color(0xFFE9FAF2)
+private val DoctorGreenSoft get() = AdaptiveColors.greenSoft
 private val DoctorRed = Color(0xFFE53935)
-private val DoctorRedSoft = Color(0xFFFFEEEE)
-private val DoctorOutline = Color(0xFFE3E8EF)
+private val DoctorRedSoft get() = AdaptiveColors.redSoft
+private val DoctorOutline get() = AdaptiveColors.border
 
 /** What the UI actually uses — built from [DoctorProfileRow] via [toDoctorProfile]. */
 data class DoctorProfile(
@@ -2145,7 +2146,7 @@ private fun PremiumQuickActionCard(
                 modifier = Modifier
                     .size(82.dp)
                     .clip(RoundedCornerShape(18.dp))
-                    .background(Color.White.copy(alpha = 0.42f)),
+                    .background(AdaptiveColors.surface.copy(alpha = 0.42f)),
                 contentAlignment = Alignment.Center
             ) {
                 Image(
@@ -2296,7 +2297,7 @@ private fun FeaturedAppointmentCard(
                         modifier = Modifier
                             .size(47.dp)
                             .clip(RoundedCornerShape(15.dp))
-                            .background(Color.White.copy(alpha = 0.70f)),
+                            .background(AdaptiveColors.surface.copy(alpha = 0.70f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -2351,7 +2352,7 @@ private fun FeaturedAppointmentCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(Color.White.copy(alpha = 0.48f))
+                        .background(AdaptiveColors.surface.copy(alpha = 0.48f))
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -2411,7 +2412,7 @@ private fun CompactUpcomingAppointmentCard(
                 modifier = Modifier
                     .size(42.dp)
                     .clip(RoundedCornerShape(14.dp))
-                    .background(Color.White.copy(alpha = 0.78f)),
+                    .background(AdaptiveColors.surface.copy(alpha = 0.78f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -2726,7 +2727,7 @@ private fun PatientsTabContent(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(24.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = Color.White
+                                containerColor = AdaptiveColors.surface
                             ),
                             elevation = CardDefaults.cardElevation(
                                 defaultElevation = 0.dp
@@ -2808,7 +2809,7 @@ private fun PatientsTabContent(
                                 },
                             shape = RoundedCornerShape(22.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = Color.White
+                                containerColor = AdaptiveColors.surface
                             ),
                             elevation = CardDefaults.cardElevation(
                                 defaultElevation = 0.dp
@@ -3147,7 +3148,7 @@ private fun ProfileTabContent(
                                 .align(Alignment.BottomEnd)
                                 .size(31.dp)
                                 .clip(CircleShape)
-                                .background(Color.White)
+                                .background(AdaptiveColors.surface)
                                 .clickable(
                                     enabled = !isUploadingPhoto,
                                     onClick = onUploadPhoto
@@ -3286,7 +3287,7 @@ private fun ProfileTabContent(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(22.dp),
             colors = CardDefaults.cardColors(
-                containerColor = Color.White
+                containerColor = AdaptiveColors.surface
             ),
             elevation = CardDefaults.cardElevation(
                 defaultElevation = 0.dp
@@ -3511,7 +3512,7 @@ private fun ProfessionalInfoRow(
             modifier = Modifier
                 .size(39.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(Color.White.copy(alpha = 0.72f)),
+                .background(AdaptiveColors.surface.copy(alpha = 0.72f)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -3563,7 +3564,7 @@ private fun DoctorProfileMenuItem(
             ),
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color.White
+            containerColor = AdaptiveColors.surface
         ),
         elevation = CardDefaults.cardElevation(
             defaultElevation = 0.dp

@@ -60,6 +60,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import ehealthy.connect.ui.theme.AdaptiveColors
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -189,16 +190,16 @@ fun DoctorPrescriptions(
     onApproveRefill: (RefillRequest) -> Unit = {},
     onDeclineRefill: (RefillRequest) -> Unit = {}
 ) {
-    val background = Color(0xFFF7F9FC)
-    val navy = Color(0xFF171B27)
+    val background = AdaptiveColors.background
+    val navy = AdaptiveColors.ink
     val accent = Color(0xFF2F6FED)
-    val muted = Color(0xFF6C7280)
+    val muted = AdaptiveColors.muted
     val success = Color(0xFF18A572)
-    val successSoft = Color(0xFFE9FAF2)
+    val successSoft = AdaptiveColors.greenSoft
     val warning = Color(0xFFD97706)
-    val warningSoft = Color(0xFFFFF4DD)
+    val warningSoft = AdaptiveColors.amberSoft
     val danger = Color(0xFFDC2626)
-    val dangerSoft = Color(0xFFFFEEEE)
+    val dangerSoft = AdaptiveColors.redSoft
 
     var selectedPatientId by remember { mutableStateOf<String?>(null) }
     var patientDropdownExpanded by remember { mutableStateOf(false) }
@@ -246,7 +247,7 @@ fun DoctorPrescriptions(
                             modifier = Modifier
                                 .size(38.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFFE8F7F5)),
+                                .background(AdaptiveColors.tealSoft),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
@@ -258,7 +259,7 @@ fun DoctorPrescriptions(
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AdaptiveColors.surface)
             )
         },
         containerColor = background
@@ -303,7 +304,7 @@ fun DoctorPrescriptions(
                 item {
                     Card(
                         Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        colors = CardDefaults.cardColors(containerColor = AdaptiveColors.surface),
                         shape = RoundedCornerShape(18.dp)
                     ) {
                         Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -317,7 +318,7 @@ fun DoctorPrescriptions(
                 item {
                     Card(
                         Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        colors = CardDefaults.cardColors(containerColor = AdaptiveColors.surface),
                         shape = RoundedCornerShape(18.dp)
                     ) {
                         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -339,7 +340,7 @@ fun DoctorPrescriptions(
                 items(refillRequests, key = { it.id }) { request ->
                     Card(
                         Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        colors = CardDefaults.cardColors(containerColor = AdaptiveColors.surface),
                         shape = RoundedCornerShape(20.dp),
                         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                     ) {
@@ -420,10 +421,10 @@ fun DoctorPrescriptions(
                         trailingIcon = { Icon(Icons.Filled.ArrowDropDown, "Select patient", tint = muted) },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = accent,
-                            focusedContainerColor = Color.White,
-                            unfocusedContainerColor = Color.White,
-                            disabledContainerColor = Color.White,
-                            disabledBorderColor = Color(0xFFE2E5EC),
+                            focusedContainerColor = AdaptiveColors.surface,
+                            unfocusedContainerColor = AdaptiveColors.surface,
+                            disabledContainerColor = AdaptiveColors.surface,
+                            disabledBorderColor = AdaptiveColors.border,
                             disabledTextColor = muted
                         ),
                         modifier = Modifier.fillMaxWidth()
@@ -471,7 +472,7 @@ fun DoctorPrescriptions(
             // One details card per selected medicine
             items(selectedMedications, key = { it.medicine }) { med ->
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    colors = CardDefaults.cardColors(containerColor = AdaptiveColors.surface),
                     shape = RoundedCornerShape(18.dp),
                     elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -495,8 +496,8 @@ fun DoctorPrescriptions(
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = accent,
-                                focusedContainerColor = Color.White,
-                                unfocusedContainerColor = Color.White
+                                focusedContainerColor = AdaptiveColors.surface,
+                                unfocusedContainerColor = AdaptiveColors.surface
                             ),
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -543,8 +544,8 @@ fun DoctorPrescriptions(
                             label = { Text("Extra notes (optional, e.g. after meals)") },
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = accent,
-                                focusedContainerColor = Color.White,
-                                unfocusedContainerColor = Color.White
+                                focusedContainerColor = AdaptiveColors.surface,
+                                unfocusedContainerColor = AdaptiveColors.surface
                             ),
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -604,8 +605,8 @@ fun DoctorPrescriptions(
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = accent,
-                        focusedContainerColor = Color.White,
-                        unfocusedContainerColor = Color.White
+                        focusedContainerColor = AdaptiveColors.surface,
+                        unfocusedContainerColor = AdaptiveColors.surface
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -623,7 +624,7 @@ fun DoctorPrescriptions(
                 items(category.items) { med ->
                     val checked = selectedMedications.any { it.medicine == med }
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        colors = CardDefaults.cardColors(containerColor = AdaptiveColors.surface),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
                     ) {
@@ -673,8 +674,8 @@ private fun PickerField(
             trailingIcon = { Icon(Icons.Filled.ArrowDropDown, "Select $label", tint = muted) },
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = accent,
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White
+                focusedContainerColor = AdaptiveColors.surface,
+                unfocusedContainerColor = AdaptiveColors.surface
             ),
             modifier = Modifier.fillMaxWidth()
         )

@@ -18,6 +18,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -27,12 +28,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import ehealthy.connect.ui.common.PrivacyPolicyScreen
+import ehealthy.connect.ui.common.AppPinStore
+import ehealthy.connect.ui.common.AppPinGate
+import ehealthy.connect.ui.common.AppPinSettingsScreen
 import ehealthy.connect.ui.common.ContactUsScreen
 import ehealthy.connect.ui.common.IncompleteProfileScreen
 import ehealthy.connect.ui.common.TermsOfUseScreen
@@ -179,6 +187,29 @@ private data class DoctorLookup(
 fun AppNavGraph(pendingRoute: String? = null) {
     val navController = rememberNavController()
     val appContext = LocalContext.current.applicationContext
+    val currentBackStackEntry by navController.currentBackStackEntryAsState()
+    var unlockedPinAccount by remember { mutableStateOf<String?>(null) }
+    var foregroundEpoch by remember { mutableIntStateOf(0) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                // Do not leave sensitive information unlocked after backgrounding.
+                unlockedPinAccount = null
+            }
+            if (event == Lifecycle.Event.ON_START) {
+                foregroundEpoch++
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // Refresh identity when navigation changes after login or account switch.
+    val signedInAccount = remember(currentBackStackEntry?.destination?.route, foregroundEpoch) {
+        SupabaseClientProvider.client.auth.currentSessionOrNull()?.user?.id
+    }
 
     fun finishOnboarding() {
         OnboardingPreferences.markComplete(appContext)
@@ -199,7 +230,15 @@ fun AppNavGraph(pendingRoute: String? = null) {
         }
     }
 
+    Box(Modifier.fillMaxSize()) {
     NavHost(navController = navController, startDestination = "splash") {
+        composable("appPinSettings") {
+            AppPinSettingsScreen(
+                context = appContext,
+                accountId = SupabaseClientProvider.client.auth.currentSessionOrNull()?.user?.id,
+                onBack = { navController.popBackStack() }
+            )
+        }
         composable(
             route = "consultationCall/{requestId}/{role}",
             arguments = listOf(
@@ -474,6 +513,9 @@ fun AppNavGraph(pendingRoute: String? = null) {
 
                 onNavigateContactUs = {
                     navController.navigate("contactUs")
+                },
+                onNavigateAppPin = {
+                    navController.navigate("appPinSettings")
                 },
 
                 onBack = {
@@ -2166,6 +2208,7 @@ fun AppNavGraph(pendingRoute: String? = null) {
                     doctorBackToDashboard()
                 },
                 onViewPrivacyPolicy = { navController.navigate("privacyPolicy") },
+                onNavigateAppPin = { navController.navigate("appPinSettings") },
                 onLogout = {
                     scope.launch {
                         ehealthy.connect.consultation.ConsultationDevices.signOut()
@@ -3413,5 +3456,19 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 )
             }
         }
+    }
+    // A modal screen lock is shown only for accounts that opted in.
+    // It blocks navigation and the underlying medical content.
+    if (
+        signedInAccount != null &&
+        unlockedPinAccount != signedInAccount &&
+        currentBackStackEntry?.destination?.route != "appPinSettings" &&
+        AppPinStore.hasPin(appContext, signedInAccount)
+    ) {
+        AppPinGate(
+            context = appContext,
+            accountId = signedInAccount,
+            onUnlocked = { unlockedPinAccount = signedInAccount }
+        )
     }
 }

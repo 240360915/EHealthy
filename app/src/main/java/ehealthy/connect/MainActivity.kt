@@ -2929,7 +2929,7 @@ fun AppNavGraph(pendingRoute: String? = null) {
                             // The medical timeline includes existing appointments and
                             // the doctor's patient-visible care notes, without copying them
                             // into extra medical_records rows.
-                            val appointments = ehealthy.connect.data.PatientRepository
+                            val appointments = ehealthy.connect.data.patient.PatientRepository
                                 .getMyAppointments().getOrThrow()
                             val careNotes = ehealthy.connect.data.CareFileRepository
                                 .getMyCareNotes().getOrDefault(emptyList())

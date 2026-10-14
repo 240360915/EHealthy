@@ -41,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import ehealthy.connect.ui.theme.AdaptiveColors
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -59,20 +60,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 
-private val consultationBackground =
-    Color(0xFFF4F7FA)
+private val consultationBackground get() = AdaptiveColors.background
 
-private val consultationText =
-    Color(0xFF0F1F3D)
+private val consultationText get() = AdaptiveColors.ink
 
-private val consultationMuted =
-    Color(0xFF64748B)
+private val consultationMuted get() = AdaptiveColors.muted
 
-private val consultationTeal =
-    Color(0xFF0D9488)
+private val consultationTeal get() = AdaptiveColors.accentTeal
 
-private val consultationRed =
-    Color(0xFFDC2626)
+private val consultationRed get() = AdaptiveColors.accentRed
 
 
 /*

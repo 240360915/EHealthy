@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,6 +31,7 @@ import androidx.compose.material.icons.outlined.MedicalServices
 import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.Card
+import androidx.activity.compose.BackHandler
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -81,6 +85,9 @@ fun DoctorPatientCareHub(
     patientName: String,
     onBack: () -> Unit
 ) {
+    // Give both the visible back arrow and Android's system back gesture
+    // the same reliable return route to the doctor's Patients tab.
+    BackHandler(onBack = onBack)
 
     var selectedTab by remember {
         mutableStateOf(PatientCareTab.OVERVIEW)
@@ -178,12 +185,14 @@ fun DoctorPatientCareHub(
 
 
     Column(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .background(
-                    DoctorColors.Background
-                )
+        modifier = Modifier
+            .fillMaxSize()
+            .background(DoctorColors.Background)
+            // MainActivity enables edge-to-edge. Without safeDrawing insets
+            // this screen starts under the status bar, which blocks taps
+            // on the top-left back button on Huawei and other devices.
+            // This also keeps visit cards above the bottom gesture bar.
+            .windowInsetsPadding(WindowInsets.safeDrawing)
     ) {
 
         PatientCareTopBar(

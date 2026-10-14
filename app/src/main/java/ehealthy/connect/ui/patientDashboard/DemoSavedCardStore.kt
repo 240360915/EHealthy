@@ -15,8 +15,11 @@ internal data class DemoSavedCard(
 internal object DemoSavedCardStore {
     private const val PREFS = "ehealthy_demo_test_cards_v1"
 
-    // These are synthetic sandbox card numbers, not customer bank cards.
-    val supportedTestNumbers = setOf("4242424242424242", "5555555555554444")
+    // DemoPay is a local simulation and never sends a number to a payment gateway.
+    // Accept any invented 16-digit number, not only a hard-coded test number.
+    // This function does NOT validate or authorize a real bank card.
+    fun isValidDemoNumber(number: String): Boolean =
+        number.length == 16 && number.all { it in '0'..'9' }
 
     private fun baseKey(accountId: String) = "card_" + accountId
 
@@ -35,7 +38,7 @@ internal object DemoSavedCardStore {
 
     fun save(context: Context, accountId: String, label: String, number: String, expiry: String) {
         require(accountId.isNotBlank()) { "Sign in to save a demo card." }
-        require(number in supportedTestNumbers) { "Only sandbox test cards can be saved." }
+        require(isValidDemoNumber(number)) { "Enter exactly 16 digits for a fictional demo card." }
         require(expiry.length == 4) { "Invalid sandbox expiry." }
         val base = baseKey(accountId)
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()

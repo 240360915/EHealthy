@@ -49,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import ehealthy.connect.ui.theme.AdaptiveColors
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -66,19 +67,19 @@ private enum class DoctorCallWindowState {
     CLOSED
 }
 
-private val ActionInk = Color(0xFF171B27)
-private val ActionMuted = Color(0xFF6C7280)
+private val ActionInk get() = AdaptiveColors.ink
+private val ActionMuted get() = AdaptiveColors.muted
 private val ActionTeal = Color(0xFF119E95)
-private val ActionTealSoft = Color(0xFFE8F7F5)
+private val ActionTealSoft get() = AdaptiveColors.tealSoft
 private val ActionBlue = Color(0xFF2F6FED)
-private val ActionBlueSoft = Color(0xFFEAF2FF)
+private val ActionBlueSoft get() = AdaptiveColors.blueSoft
 private val ActionGreen = Color(0xFF18A572)
-private val ActionGreenSoft = Color(0xFFE9FAF2)
+private val ActionGreenSoft get() = AdaptiveColors.greenSoft
 private val ActionAmber = Color(0xFFF59E0B)
-private val ActionAmberSoft = Color(0xFFFFF4DD)
+private val ActionAmberSoft get() = AdaptiveColors.amberSoft
 private val ActionRed = Color(0xFFE53935)
-private val ActionRedSoft = Color(0xFFFFEEEE)
-private val ActionBorder = Color(0xFFE3E8EF)
+private val ActionRedSoft get() = AdaptiveColors.redSoft
+private val ActionBorder get() = AdaptiveColors.border
 
 @RequiresApi(Build.VERSION_CODES.O)
 private fun doctorCallWindowState(
@@ -216,7 +217,7 @@ fun DoctorAppointmentActionSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color.White,
+        containerColor = AdaptiveColors.surface,
         shape = RoundedCornerShape(
             topStart = 30.dp,
             topEnd = 30.dp
@@ -255,7 +256,7 @@ fun DoctorAppointmentActionSheet(
                             modifier = Modifier
                                 .size(48.dp)
                                 .clip(CircleShape)
-                                .background(Color.White),
+                                .background(AdaptiveColors.surface),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
@@ -538,7 +539,7 @@ fun DoctorAppointmentActionSheet(
                 }
             },
             shape = RoundedCornerShape(26.dp),
-            containerColor = Color.White,
+            containerColor = AdaptiveColors.surface,
             title = {
                 Column {
                     Box(
@@ -700,7 +701,7 @@ fun DoctorAppointmentActionSheet(
                 cancelReasonError = null
             },
             shape = RoundedCornerShape(26.dp),
-            containerColor = Color.White,
+            containerColor = AdaptiveColors.surface,
             title = {
                 Column {
                     Box(
@@ -953,7 +954,7 @@ private fun DoctorActionInfoChip(
             .clip(
                 RoundedCornerShape(14.dp)
             )
-            .background(Color.White)
+            .background(AdaptiveColors.surface)
             .padding(
                 horizontal = 10.dp,
                 vertical = 9.dp
@@ -1043,7 +1044,7 @@ fun DoctorAppointmentDetailsDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(28.dp),
-        containerColor = Color.White,
+        containerColor = AdaptiveColors.surface,
         title = {
             Column {
                 Row(
@@ -1258,7 +1259,7 @@ private fun AppointmentDetailsRow(
                     .clip(
                         RoundedCornerShape(11.dp)
                     )
-                    .background(Color.White),
+                    .background(AdaptiveColors.surface),
                 contentAlignment =
                     Alignment.Center
             ) {

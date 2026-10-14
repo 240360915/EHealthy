@@ -3113,7 +3113,7 @@ private fun ErrorDoctors(
                     colors =
                         ButtonDefaults.buttonColors(
                             containerColor =
-                                PatientColors.Red
+                                PatientColors.RedFill
                         )
                 ) {
 

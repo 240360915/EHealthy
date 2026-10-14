@@ -69,7 +69,7 @@ enum class DoctorTab(
 
 // Premium doctor navigation palette.
 // Kept local to this file so it cannot clash with the dashboard colors.
-private val DoctorNavBackground get() = AdaptiveColors.background
+private val DoctorNavBackground get() = AdaptiveColors.surface
 private val DoctorNavTeal = Color(0xFF119E95)
 private val DoctorNavTealSoft get() = AdaptiveColors.tealSoft
 private val DoctorNavMuted get() = AdaptiveColors.muted

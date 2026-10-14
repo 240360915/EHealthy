@@ -1,6 +1,7 @@
 package ehealthy.connect.ui.doctorDashboard
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -42,6 +43,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -292,13 +294,8 @@ private fun PatientCareTopBar(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .background(
-                    Color.White
-                )
-                .padding(
-                    horizontal = 10.dp,
-                    vertical = 8.dp
-                ),
+                .background(DoctorColors.Surface)
+                .padding(horizontal = 10.dp, vertical = 7.dp),
         verticalAlignment =
             Alignment.CenterVertically
     ) {
@@ -336,14 +333,11 @@ private fun PatientCareTopBar(
             )
 
             Text(
-                text =
-                    patientName.ifBlank {
-                        "Patient"
-                    },
-                color =
-                    DoctorColors.Muted,
-                fontSize =
-                    11.sp
+                text = patientName.ifBlank { "Patient" },
+                color = DoctorColors.Muted,
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
 
@@ -378,13 +372,9 @@ private fun PatientCareHero(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .background(
-                    DoctorColors.PatientCareGradient
-                )
-                .padding(
-                    horizontal = 18.dp,
-                    vertical = 22.dp
-                )
+                .clip(RoundedCornerShape(22.dp))
+                .background(DoctorColors.PatientCareGradient)
+                .padding(horizontal = 16.dp, vertical = 17.dp)
     ) {
 
         Column {
@@ -431,20 +421,17 @@ private fun PatientCareHero(
                 )
 
 
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
 
                     Text(
-                        text =
-                            patientName.ifBlank {
-                                profile?.patientName
-                                    ?: "Patient"
-                            },
-                        color =
-                            Color.White,
-                        fontWeight =
-                            FontWeight.ExtraBold,
-                        fontSize =
-                            21.sp
+                        text = patientName.ifBlank {
+                            profile?.patientName ?: "Patient"
+                        },
+                        color = Color.White,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 19.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
 
                     Spacer(
@@ -574,76 +561,36 @@ private fun PatientCareTabs(
     selectedTab: PatientCareTab,
     onSelected: (PatientCareTab) -> Unit
 ) {
-
+    // Tabs can scroll horizontally instead of squeezing long labels on
+    // narrow devices or at larger accessibility font scales.
     Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .background(
-                    Color.White
-                )
-                .padding(
-                    horizontal = 12.dp,
-                    vertical = 10.dp
-                ),
-        horizontalArrangement =
-            Arrangement.spacedBy(
-                6.dp
-            )
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(DoctorColors.Surface)
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-
-        PatientCareTab.entries.forEach {
-                tab ->
-
-            val selected =
-                tab == selectedTab
-
-
+        PatientCareTab.entries.forEach { tab ->
+            val selected = tab == selectedTab
             Box(
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .background(
-                            if (selected) {
-                                DoctorColors.TealSoft
-                            } else {
-                                Color.Transparent
-                            },
-                            RoundedCornerShape(
-                                14.dp
-                            )
-                        )
-                        .clickable {
-                            onSelected(
-                                tab
-                            )
-                        }
-                        .padding(
-                            vertical = 10.dp
-                        ),
-                contentAlignment =
-                    Alignment.Center
+                modifier = Modifier
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(
+                        if (selected) DoctorColors.TealSoft
+                        else DoctorColors.Background
+                    )
+                    .clickable { onSelected(tab) }
+                    .padding(horizontal = 16.dp, vertical = 11.dp),
+                contentAlignment = Alignment.Center
             ) {
-
                 Text(
-                    text =
-                        tab.title,
-                    color =
-                        if (selected) {
-                            DoctorColors.Teal
-                        } else {
-                            DoctorColors.Muted
-                        },
-                    fontWeight =
-                        if (selected) {
-                            FontWeight.Bold
-                        } else {
-                            FontWeight.Medium
-                        },
-                    fontSize =
-                        11.sp,
-                    textAlign =
-                        TextAlign.Center
+                    text = tab.title,
+                    color = if (selected) DoctorColors.Teal else DoctorColors.Ink,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                    fontSize = 12.sp,
+                    maxLines = 1
                 )
             }
         }
@@ -773,8 +720,7 @@ private fun PatientOverviewContent(
             Card(
                 colors =
                     CardDefaults.cardColors(
-                        containerColor =
-                            Color.White
+                        containerColor = DoctorColors.Surface
                     ),
                 shape =
                     RoundedCornerShape(
@@ -1207,8 +1153,7 @@ private fun PhysicalRequestCard(
             Modifier.fillMaxWidth(),
         colors =
             CardDefaults.cardColors(
-                containerColor =
-                    Color.White
+                containerColor = DoctorColors.Surface
             ),
         shape =
             RoundedCornerShape(
@@ -2330,8 +2275,7 @@ private fun PhysicalVisitInvoiceDialog(
             }
         },
 
-        containerColor =
-            Color.White,
+        containerColor = DoctorColors.Surface,
 
         shape =
             RoundedCornerShape(
@@ -2491,8 +2435,7 @@ private fun HealthSectionCard(
             Modifier.fillMaxWidth(),
         colors =
             CardDefaults.cardColors(
-                containerColor =
-                    Color.White
+                containerColor = DoctorColors.Surface
             ),
         shape =
             RoundedCornerShape(

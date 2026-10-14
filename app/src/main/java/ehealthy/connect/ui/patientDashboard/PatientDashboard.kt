@@ -773,7 +773,7 @@ private fun PatientTopBar(
                                     CircleShape
                                 )
                                 .background(
-                                    PatientColors.Red
+                                    PatientColors.RedFill
                                 )
                     )
                 }
@@ -1350,7 +1350,7 @@ private fun SmartCareRecommendationCard(
                 modifier = Modifier.fillMaxWidth().height(46.dp),
                 shape = RoundedCornerShape(14.dp),
                 onClick = if (action == "Update health profile") onHealthProfile else onFindDoctors,
-                colors = ButtonDefaults.buttonColors(containerColor = PatientColors.Primary)
+                colors = ButtonDefaults.buttonColors(containerColor = PatientColors.PrimaryFill)
             ) {
                 Text(action, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.width(6.dp))
@@ -3805,7 +3805,7 @@ private fun DashboardErrorCard(
                 colors =
                     ButtonDefaults.buttonColors(
                         containerColor =
-                            PatientColors.Red,
+                            PatientColors.RedFill,
                         contentColor =
                             Color.White
                     )
@@ -4060,7 +4060,7 @@ private fun EmptyNextAppointmentCard(
                 colors =
                     ButtonDefaults.buttonColors(
                         containerColor =
-                            PatientColors.DoctorAccent,
+                            PatientColors.DoctorAccentFill,
                         contentColor =
                             Color.White
                     )

@@ -2472,7 +2472,7 @@ private fun EmergencyBanner() {
         colors =
             CardDefaults.cardColors(
                 containerColor =
-                    PatientColors.Red
+                    PatientColors.RedFill
             ),
 
         elevation =
@@ -2879,7 +2879,7 @@ private fun NoteBox(
                 colors =
                     ButtonDefaults.buttonColors(
                         containerColor =
-                            PatientColors.DoctorAccent,
+                            PatientColors.DoctorAccentFill,
                         contentColor =
                             Color.White
                     )

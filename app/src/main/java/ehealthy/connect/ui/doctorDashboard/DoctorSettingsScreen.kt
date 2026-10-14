@@ -41,6 +41,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import ehealthy.connect.ui.theme.AdaptiveColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -65,22 +66,22 @@ data class DoctorAccountSettings(
 )
 
 // Doctor settings palette - intentionally aligned with the patient Settings screen.
-private val SettingsBackground = Color(0xFFF7F9FC)
-private val SettingsInk = Color(0xFF171B27)
-private val SettingsMuted = Color(0xFF6C7280)
+private val SettingsBackground get() = AdaptiveColors.background
+private val SettingsInk get() = AdaptiveColors.ink
+private val SettingsMuted get() = AdaptiveColors.muted
 private val SettingsTeal = Color(0xFF119E95)
-private val SettingsTealSoft = Color(0xFFE8F7F5)
+private val SettingsTealSoft get() = AdaptiveColors.tealSoft
 private val SettingsBlue = Color(0xFF2F6FED)
-private val SettingsBlueSoft = Color(0xFFEAF2FF)
+private val SettingsBlueSoft get() = AdaptiveColors.blueSoft
 private val SettingsPurple = Color(0xFF8B5CF6)
-private val SettingsPurpleSoft = Color(0xFFF4EEFF)
+private val SettingsPurpleSoft get() = AdaptiveColors.purpleSoft
 private val SettingsGreen = Color(0xFF18A572)
-private val SettingsGreenSoft = Color(0xFFE9FAF2)
+private val SettingsGreenSoft get() = AdaptiveColors.greenSoft
 private val SettingsAmber = Color(0xFFF59E0B)
-private val SettingsAmberSoft = Color(0xFFFFF4DD)
+private val SettingsAmberSoft get() = AdaptiveColors.amberSoft
 private val SettingsRed = Color(0xFFE53935)
-private val SettingsRedSoft = Color(0xFFFFEEEE)
-private val SettingsBorder = Color(0xFFE3E8EF)
+private val SettingsRedSoft get() = AdaptiveColors.redSoft
+private val SettingsBorder get() = AdaptiveColors.border
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -155,7 +156,7 @@ fun DoctorSettingsScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.White
+                    containerColor = AdaptiveColors.surface
                 )
             )
         }
@@ -562,7 +563,7 @@ private fun SettingsGroupCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color.White
+            containerColor = AdaptiveColors.surface
         ),
         elevation = CardDefaults.cardElevation(
             defaultElevation = 0.dp

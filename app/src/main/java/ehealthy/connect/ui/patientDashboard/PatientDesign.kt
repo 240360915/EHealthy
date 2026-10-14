@@ -58,6 +58,16 @@ object PatientColors {
     val Purple get() = adaptiveColor(Color(0xFF7C3AED), Color(0xFFC4B5FD))
     val PurpleSoft get() = adaptiveColor(Color(0xFFF5F3FF), Color(0xFF332747))
 
+    // Button fills stay dark enough for white labels in BOTH modes.
+    // Icon/text accents above may be brighter on dark cards.
+    val PrimaryFill = Color(0xFF087F8C)
+    val DoctorAccentFill = Color(0xFF0F766E)
+    val AppointmentAccentFill = Color(0xFF2563EB)
+    val PurpleFill = Color(0xFF7C3AED)
+    val RedFill = Color(0xFFDC2626)
+    val TealFill = Color(0xFF0F766E)
+    val BlueFill = Color(0xFF2563EB)
+
     val TextPrimary get() = adaptiveColor(Color(0xFF0F172A), Color(0xFFF1F5F9))
     val TextSecondary get() = adaptiveColor(Color(0xFF64748B), Color(0xFFB8C6D8))
 

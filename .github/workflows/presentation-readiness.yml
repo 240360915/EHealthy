@@ -1,0 +1,37 @@
+name: EHealthy presentation readiness
+on:
+  push:
+    branches:
+      - feature/patient-id-search-and-tips-20261014
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-compile-and-unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out review branch
+        uses: actions/checkout@v4
+      - name: Install Java 25 (Gradle daemon JVM criteria)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Prepare Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install target SDK
+        run: sdkmanager "platforms;android-37" "build-tools;37.0.0"
+      - name: Configure Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: Compile, unit test, and assemble presentation APK
+        run: ./gradlew :app:testDebugUnitTest :app:assembleDebug --stacktrace
+      - name: Preserve test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-test-reports
+          path: app/build/reports/tests/
+          if-no-files-found: ignore

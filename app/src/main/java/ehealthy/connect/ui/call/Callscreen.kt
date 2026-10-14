@@ -1,5 +1,11 @@
 package ehealthy.connect.ui.call
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -107,8 +113,34 @@ fun CallScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    // Scheduled calls must request the SAME camera/microphone permissions as
+    // broadcast calls. Otherwise Stream can join while the other phone sees
+    // an empty camera tile because the local video track was never published.
+    val mediaPermissions = arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
+    var mediaPermissionsGranted by remember {
+        mutableStateOf(mediaPermissions.all {
+            ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+        })
+    }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        mediaPermissionsGranted = mediaPermissions.all { permission ->
+            ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+    LaunchedEffect(Unit) {
+        if (!mediaPermissionsGranted) permissionLauncher.launch(mediaPermissions)
+    }
+
     // ---- Set up Stream client + join the call ----
-    LaunchedEffect(retryKey) {
+    LaunchedEffect(appointmentId, retryKey, mediaPermissionsGranted) {
+        if (!mediaPermissionsGranted) {
+            screenState = CallScreenState.Error(
+                "Allow both Camera and Microphone permissions for EHealthy in Android Settings, then reopen this consultation."
+            )
+            return@LaunchedEffect
+        }
         screenState = CallScreenState.Loading
 
         try {
@@ -180,11 +212,18 @@ fun CallScreen(
             val joinedResult = onJoined()
             if (joinedResult.isFailure) {
                 streamCall.leave()
+                call = null
                 screenState = CallScreenState.Error(
                     "This consultation is no longer available. If it has ended, please book a new appointment."
                 )
                 return@LaunchedEffect
             }
+
+            // Join alone does not guarantee either track is publishing.
+            // Explicitly turn on both, just like ConsultationCallScreen does.
+            streamCall.microphone.setEnabled(true)
+            streamCall.camera.setEnabled(true)
+            streamCall.speaker.setSpeakerPhone(true)
 
             waitingSince = System.currentTimeMillis()
             screenState = CallScreenState.Waiting

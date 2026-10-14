@@ -15,9 +15,15 @@ class ConsultationContractTest {
     @Test fun creationDecodesServerPriceAndNoDoctorsState() {
         val row = json.decodeFromString<CreateResult>("""{"request_id":"request","request_status":"no_doctors","request_mode":"private","recipient_count":0,"amount_minor":23750,"payment_currency":"ZAR","expires_at":"2026-09-30T12:00:00+00:00","request_version":2}""")
         assertEquals("no_doctors", row.request_status)
-        assertEquals("ZAR 237.50", consultationPrice(row.amount_minor, row.payment_currency))
+        // The UI uses the rand symbol for ZAR, while keeping two decimal places.
+        assertEquals("R 237.50", consultationPrice(row.amount_minor, row.payment_currency))
     }
-    @Test fun heartbeatDoesNotRequireScopeAbsentFromRpcResponse() {
+    @Test fun usesCurrencyCodeForNonZarAmounts() {
+        assertEquals("USD 237.50", consultationPrice(23750, "USD"))
+        assertEquals("R 0.05", consultationPrice(5, "ZAR"))
+        assertEquals("R 100.00", consultationPrice(10000, "zar"))
+    }
+        @Test fun heartbeatDoesNotRequireScopeAbsentFromRpcResponse() {
         val row = json.decodeFromString<DoctorPresence>("""{"doctor_id":"doctor","is_available":false,"last_heartbeat":"2026-09-30T12:00:00+00:00"}""")
         assertFalse(row.is_available)
     }

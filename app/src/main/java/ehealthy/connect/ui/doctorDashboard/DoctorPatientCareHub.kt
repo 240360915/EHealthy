@@ -1,5 +1,6 @@
 package ehealthy.connect.ui.doctorDashboard
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -69,8 +70,8 @@ private enum class PatientCareTab(
     val title: String
 ) {
     OVERVIEW("Overview"),
-    HEALTH("Health"),
-    PHYSICAL_VISITS("Physical visits")
+    HEALTH("Medical history"),
+    PHYSICAL_VISITS("Visits & billing")
 }
 
 
@@ -287,76 +288,57 @@ private fun PatientCareTopBar(
     onBack: () -> Unit,
     onRefresh: () -> Unit
 ) {
-
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .background(DoctorColors.Surface)
-                .padding(horizontal = 10.dp, vertical = 7.dp),
-        verticalAlignment =
-            Alignment.CenterVertically
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(DoctorColors.Surface)
     ) {
-
-        IconButton(
-            onClick =
-                onBack
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-
-            Icon(
-                imageVector =
-                    Icons.Outlined.ArrowBack,
-                contentDescription =
-                    "Back",
-                tint =
-                    DoctorColors.Ink
-            )
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.Outlined.ArrowBack,
+                    contentDescription = "Return to patient search",
+                    tint = DoctorColors.Ink
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Patient clinical record",
+                    color = DoctorColors.Ink,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 17.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "Back to Patients · " + patientName.ifBlank { "Patient" },
+                    color = DoctorColors.Muted,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            IconButton(onClick = onRefresh) {
+                Icon(
+                    imageVector = Icons.Outlined.Refresh,
+                    contentDescription = "Refresh patient record",
+                    tint = DoctorColors.Teal
+                )
+            }
         }
-
-
-        Column(
-            modifier =
-                Modifier.weight(1f)
-        ) {
-
-            Text(
-                text =
-                    "Patient Care Hub",
-                color =
-                    DoctorColors.Ink,
-                fontWeight =
-                    FontWeight.ExtraBold,
-                fontSize =
-                    17.sp
-            )
-
-            Text(
-                text = patientName.ifBlank { "Patient" },
-                color = DoctorColors.Muted,
-                fontSize = 11.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-
-
-        IconButton(
-            onClick =
-                onRefresh
-        ) {
-
-            Icon(
-                imageVector =
-                    Icons.Outlined.Refresh,
-                contentDescription =
-                    "Refresh",
-                tint =
-                    DoctorColors.Teal
-            )
-        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(DoctorColors.Border)
+        )
     }
 }
-
 
 @Composable
 private fun PatientCareHero(
@@ -365,146 +347,111 @@ private fun PatientCareHero(
     requestCount: Int,
     invoiceCount: Int
 ) {
-
-    Box(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(22.dp))
-                .background(DoctorColors.PatientCareGradient)
-                .padding(horizontal = 16.dp, vertical = 17.dp)
+    // This is a patient record, not another dashboard. Display the identity
+    // first, followed by concise and readable status indicators.
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = DoctorColors.Surface
+        ),
+        border = BorderStroke(1.dp, DoctorColors.Border),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-
-        Column {
-
-            Row(
-                verticalAlignment =
-                    Alignment.CenterVertically
-            ) {
-
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
-                    modifier =
-                        Modifier
-                            .size(58.dp)
-                            .background(
-                                Color.White.copy(
-                                    alpha = 0.18f
-                                ),
-                                CircleShape
-                            ),
-                    contentAlignment =
-                        Alignment.Center
+                    modifier = Modifier
+                        .size(58.dp)
+                        .background(DoctorColors.TealSoft, RoundedCornerShape(17.dp)),
+                    contentAlignment = Alignment.Center
                 ) {
-
                     Text(
-                        text =
-                            initials(
-                                patientName
-                            ),
-                        color =
-                            Color.White,
-                        fontWeight =
-                            FontWeight.ExtraBold,
-                        fontSize =
-                            20.sp
+                        text = initials(patientName.ifBlank {
+                            profile?.patientName ?: "Patient"
+                        }),
+                        color = DoctorColors.Teal,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.ExtraBold
                     )
                 }
-
-
-                Spacer(
-                    modifier =
-                        Modifier.width(
-                            14.dp
-                        )
-                )
-
-
+                Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
-
                     Text(
-                        text = patientName.ifBlank {
-                            profile?.patientName ?: "Patient"
-                        },
-                        color = Color.White,
+                        text = "PATIENT PROFILE",
+                        color = DoctorColors.Teal,
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 19.sp,
-                        maxLines = 2,
+                        fontSize = 10.sp,
+                        letterSpacing = 1.sp
+                    )
+                    Text(
+                        text = patientName.ifBlank { profile?.patientName ?: "Patient" },
+                        color = DoctorColors.Ink,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 20.sp,
+                        lineHeight = 25.sp,
+                        maxLines = 3,
                         overflow = TextOverflow.Ellipsis
                     )
-
-                    Spacer(
-                        modifier =
-                            Modifier.height(
-                                3.dp
-                            )
-                    )
-
                     Text(
-                        text =
-                            "Clinical patient workspace",
-                        color =
-                            Color.White.copy(
-                                alpha = 0.82f
-                            ),
-                        fontSize =
-                            11.sp
+                        text = "File ID: " + (profile?.id?.takeIf { it.isNotBlank() }
+                            ?.take(8)?.uppercase() ?: "Unavailable"),
+                        color = DoctorColors.Muted,
+                        fontSize = 11.sp
                     )
                 }
             }
 
-
-            Spacer(
-                modifier =
-                    Modifier.height(
-                        18.dp
-                    )
-            )
-
-
-            Row(
-                modifier =
-                    Modifier.fillMaxWidth(),
-                horizontalArrangement =
-                    Arrangement.spacedBy(
-                        9.dp
-                    )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(DoctorColors.TealSoft, RoundedCornerShape(13.dp))
+                    .padding(horizontal = 14.dp, vertical = 12.dp)
             ) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Personal details",
+                        color = DoctorColors.Teal,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Gender: " + cleanValue(profile?.gender) +
+                            "    ·    Birth date: " + cleanValue(profile?.date_of_birth),
+                        color = DoctorColors.Ink,
+                        fontSize = 12.sp,
+                        lineHeight = 19.sp
+                    )
+                }
+            }
 
-                HeroMetric(
-                    title =
-                        "Blood group",
-                    value =
-                        cleanValue(
-                            profile?.blood_group
-                        ),
-                    modifier =
-                        Modifier.weight(1f)
-                )
-
-
-                HeroMetric(
-                    title =
-                        "Requests",
-                    value =
-                        requestCount.toString(),
-                    modifier =
-                        Modifier.weight(1f)
-                )
-
-
-                HeroMetric(
-                    title =
-                        "Invoices",
-                    value =
-                        invoiceCount.toString(),
-                    modifier =
-                        Modifier.weight(1f)
-                )
+            // Stack metrics on very narrow devices to prevent small,
+            // unreadable data fields.
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                if (maxWidth < 355.dp) {
+                    Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                        HeroMetric("Blood group", cleanValue(profile?.blood_group), Modifier.fillMaxWidth())
+                        Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                            HeroMetric("Follow-ups", requestCount.toString(), Modifier.weight(1f))
+                            HeroMetric("Invoices", invoiceCount.toString(), Modifier.weight(1f))
+                        }
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                        HeroMetric("Blood group", cleanValue(profile?.blood_group), Modifier.weight(1f))
+                        HeroMetric("Follow-ups", requestCount.toString(), Modifier.weight(1f))
+                        HeroMetric("Invoices", invoiceCount.toString(), Modifier.weight(1f))
+                    }
+                }
             }
         }
     }
 }
-
 
 @Composable
 private fun HeroMetric(
@@ -512,83 +459,61 @@ private fun HeroMetric(
     value: String,
     modifier: Modifier = Modifier
 ) {
-
     Column(
-        modifier =
-            modifier
-                .background(
-                    Color.White.copy(
-                        alpha = 0.14f
-                    ),
-                    RoundedCornerShape(
-                        16.dp
-                    )
-                )
-                .padding(
-                    12.dp
-                )
+        modifier = modifier
+            .background(DoctorColors.Background, RoundedCornerShape(14.dp))
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
-
         Text(
-            text =
-                value,
-            color =
-                Color.White,
-            fontWeight =
-                FontWeight.ExtraBold,
-            fontSize = 16.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            text = title,
+            color = DoctorColors.Muted,
+            fontSize = 11.sp,
+            maxLines = 2,
+            lineHeight = 15.sp
         )
-
         Text(
-            text =
-                title,
-            color =
-                Color.White.copy(
-                    alpha = 0.78f
-                ),
-            fontSize = 9.sp,
-            maxLines = 1,
+            text = value,
+            color = DoctorColors.Ink,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.ExtraBold,
+            maxLines = 2,
+            lineHeight = 19.sp,
             overflow = TextOverflow.Ellipsis
         )
     }
 }
-
 
 @Composable
 private fun PatientCareTabs(
     selectedTab: PatientCareTab,
     onSelected: (PatientCareTab) -> Unit
 ) {
-    // Tabs can scroll horizontally instead of squeezing long labels on
-    // narrow devices or at larger accessibility font scales.
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(DoctorColors.Surface)
             .horizontalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         PatientCareTab.entries.forEach { tab ->
             val selected = tab == selectedTab
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(14.dp))
+                    .clip(RoundedCornerShape(13.dp))
                     .background(
-                        if (selected) DoctorColors.TealSoft
-                        else DoctorColors.Background
+                        if (selected) DoctorColors.Teal else DoctorColors.Background
                     )
                     .clickable { onSelected(tab) }
-                    .padding(horizontal = 16.dp, vertical = 11.dp),
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = tab.title,
-                    color = if (selected) DoctorColors.Teal else DoctorColors.Ink,
-                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                    color = if (selected) Color.White else DoctorColors.Ink,
+                    fontWeight = FontWeight.Bold,
                     fontSize = 12.sp,
                     maxLines = 1
                 )
@@ -638,9 +563,9 @@ private fun PatientOverviewContent(
 
             SectionTitle(
                 title =
-                    "Clinical snapshot",
+                    "Clinical summary",
                 subtitle =
-                    "Important information before consultation"
+                    "Allergies, ongoing conditions and prescribed medications"
             )
         }
 
@@ -708,9 +633,9 @@ private fun PatientOverviewContent(
 
             SectionTitle(
                 title =
-                    "Current concern",
+                    "Symptoms and concerns",
                 subtitle =
-                    "Patient-reported symptoms"
+                    "Patient-reported symptoms to review during consultation"
             )
         }
 
@@ -780,9 +705,9 @@ private fun PatientOverviewContent(
 
             SectionTitle(
                 title =
-                    "Care workflow",
+                    "Follow-ups and billing",
                 subtitle =
-                    "Physical follow-up and billing activity"
+                    "Physical visit requests and invoicing activity"
             )
         }
 

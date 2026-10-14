@@ -90,7 +90,7 @@ fun DoctorSettingsScreen(
     isDarkMode: Boolean,
     onToggleDarkMode: (Boolean) -> Unit,
     onViewPrivacyPolicy: () -> Unit,
-    onNavigateAppPin: () -> Unit,
+    onNavigateAppPin: () -> Unit = {},
     onLogout: () -> Unit,
     onBack: () -> Unit
 ) {

@@ -42,6 +42,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
+import ehealthy.connect.ui.theme.AdaptiveColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -61,21 +62,21 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 // Same visual language as the patient dashboard.
-private val AppointmentsBackground = Color(0xFFF7F9FC)
-private val AppointmentInk = Color(0xFF171B27)
-private val AppointmentMuted = Color(0xFF6C7280)
+private val AppointmentsBackground get() = AdaptiveColors.background
+private val AppointmentInk get() = AdaptiveColors.ink
+private val AppointmentMuted get() = AdaptiveColors.muted
 private val AppointmentTeal = Color(0xFF119E95)
-private val AppointmentTealSoft = Color(0xFFE8F7F5)
+private val AppointmentTealSoft get() = AdaptiveColors.tealSoft
 private val AppointmentBlue = Color(0xFF2F6FED)
-private val AppointmentBlueSoft = Color(0xFFEAF2FF)
+private val AppointmentBlueSoft get() = AdaptiveColors.blueSoft
 private val AppointmentAmber = Color(0xFFF59E0B)
-private val AppointmentAmberSoft = Color(0xFFFFF4DD)
+private val AppointmentAmberSoft get() = AdaptiveColors.amberSoft
 private val AppointmentGreen = Color(0xFF18A572)
-private val AppointmentGreenSoft = Color(0xFFE9FAF2)
+private val AppointmentGreenSoft get() = AdaptiveColors.greenSoft
 private val AppointmentRed = Color(0xFFE53935)
-private val AppointmentRedSoft = Color(0xFFFFEEEE)
-private val AppointmentPurpleSoft = Color(0xFFF7F0FA)
-private val AppointmentBorder = Color(0xFFE2E7ED)
+private val AppointmentRedSoft get() = AdaptiveColors.redSoft
+private val AppointmentPurpleSoft get() = AdaptiveColors.purpleSoft
+private val AppointmentBorder get() = AdaptiveColors.border
 
 enum class DoctorAppointmentFilter(val label: String) {
     UPCOMING("Upcoming"),
@@ -556,7 +557,7 @@ private fun EmptyAppointmentsState(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color.White
+            containerColor = AdaptiveColors.surface
         ),
         elevation = CardDefaults.cardElevation(
             defaultElevation = 0.dp

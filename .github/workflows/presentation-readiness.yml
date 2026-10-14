@@ -20,13 +20,12 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
-      - name: Install target Android SDK using runner command-line tools
-        env:
-          ANDROID_HOME: /usr/local/lib/android/sdk
-          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-        run: |
-          /usr/local/lib/android/sdk/cmdline-tools/16.0/bin/sdkmanager \
-            --sdk_root="$ANDROID_HOME" --install "platforms;android-37" "build-tools;37.0.0"
+      - name: Prepare Android SDK without deprecated tools package
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+      - name: Install target Android SDK
+        run: sdkmanager --install "platforms;android-37" "build-tools;37.0.0"
       - name: Configure Gradle
         uses: gradle/actions/setup-gradle@v4
       - name: Compile, unit test, and assemble presentation APK

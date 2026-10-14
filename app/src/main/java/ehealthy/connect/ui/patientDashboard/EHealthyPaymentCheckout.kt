@@ -14,6 +14,11 @@ import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
+import ehealthy.connect.util.SupabaseClientProvider
+import io.github.jan.supabase.auth.auth
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -51,58 +56,66 @@ fun EHealthyPaymentCheckout(
     var expiry by remember { mutableStateOf("") }
     var cvv by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    val accountId = SupabaseClientProvider.client.auth.currentSessionOrNull()?.user?.id.orEmpty()
+    var savedCard by remember(accountId) {
+        mutableStateOf(DemoSavedCardStore.load(context, accountId))
+    }
+    var useSaved by remember(accountId) { mutableStateOf(savedCard != null) }
+    var rememberTestCard by remember { mutableStateOf(false) }
+    var localProcessing by remember { mutableStateOf(false) }
+    val paymentScope = rememberCoroutineScope()
+    val busy = isProcessing || localProcessing
 
     val digits = cardNumber.filter(Char::isDigit)
+    val savedSelection = if (useSaved) savedCard else null
+    val previewFour = savedSelection?.lastFour ?: digits.takeLast(4)
+    val previewHolder = savedSelection?.label ?: holder
+    val previewExpiry = savedSelection?.expiry ?: expiry
 
     fun validateAndPay() {
-        val exp = expiry.filter(Char::isDigit)
+        if (busy) return
+        val selected = savedSelection
+        val exp = selected?.expiry ?: expiry.filter(Char::isDigit)
         val month = exp.take(2).toIntOrNull()
         val year = exp.drop(2).toIntOrNull()
-
         val today = Calendar.getInstance()
         val currentYear = today.get(Calendar.YEAR) % 100
         val currentMonth = today.get(Calendar.MONTH) + 1
-
-        val validExpiry =
-            exp.length == 4 &&
-                    month != null &&
-                    year != null &&
-                    month in 1..12 &&
-                    (
-                            year > currentYear ||
-                                    (year == currentYear && month >= currentMonth)
-                            )
-
+        val validExpiry = exp.length == 4 && month != null && year != null &&
+            month in 1..12 && (year > currentYear || (year == currentYear && month >= currentMonth))
 
         error = when {
-
-            holder.trim().length < 2 ->
-                "Please enter the cardholder name."
-
-            digits.length != 16 ->
-                "Card number must contain 16 digits."
-
-            !validExpiry ->
-                "Please enter a valid expiry date."
-
-            cvv.length != 3 ->
-                "Security code must contain 3 digits."
-
+            selected == null && holder.trim().length < 2 -> "Enter the demo cardholder name."
+            selected == null && digits !in DemoSavedCardStore.supportedTestNumbers ->
+                "Only synthetic DemoPay test cards are accepted (e.g. 4242 4242 4242 4242). Never enter a real card."
+            !validExpiry -> "Enter a valid test card expiry date."
+            selected == null && cvv.length != 3 -> "Enter a 3-digit demo security code."
             else -> null
         }
 
-
         if (error == null) {
-
-            // Demo only: simulate a successful payment.
-            // No card details are transmitted or saved.
-            onResult("success")
+            if (selected == null && rememberTestCard && accountId.isNotBlank()) {
+                // Store only a card label, expiry and last four. Never PAN or CVV.
+                DemoSavedCardStore.save(context, accountId, holder.trim(), digits, exp)
+                savedCard = DemoSavedCardStore.load(context, accountId)
+            }
+            localProcessing = true
+            paymentScope.launch {
+                try {
+                    // Visible sandbox authorization animation; no bank is contacted.
+                    delay(1300L)
+                    onResult("success")
+                } finally {
+                    localProcessing = false
+                }
+            }
         }
     }
 
     Dialog(
         onDismissRequest = {
-            if (!isProcessing) onCancel()
+            if (!busy) onCancel()
         },
         properties = DialogProperties(
             usePlatformDefaultWidth = false
@@ -153,7 +166,7 @@ fun EHealthyPaymentCheckout(
                     }
 
                     IconButton(
-                        enabled = !isProcessing,
+                        enabled = !busy,
                         onClick = onCancel
                     ) {
                         Icon(
@@ -188,7 +201,7 @@ fun EHealthyPaymentCheckout(
                 )
 
                 Text(
-                    "Review your consultation and enter your test card details.",
+                    "Review your consultation and choose a saved test card or enter a synthetic demo card. Real bank cards must not be used.",
                     color = PayMuted,
                     fontSize = 12.sp
                 )
@@ -296,9 +309,9 @@ fun EHealthyPaymentCheckout(
                         }
 
                         Text(
-                            if (digits.length >= 4) {
+                            if (previewFour.length == 4) {
                                 "••••  ••••  ••••  ${
-                                    digits.takeLast(4)
+                                    previewFour
                                 }"
                             } else {
                                 "••••  ••••  ••••  ••••"
@@ -315,7 +328,7 @@ fun EHealthyPaymentCheckout(
                                 Arrangement.SpaceBetween
                         ) {
                             Text(
-                                holder.ifBlank { "CARDHOLDER" }
+                                previewHolder.ifBlank { "CARDHOLDER" }
                                     .uppercase()
                                     .take(23),
                                 fontSize = 11.sp,
@@ -323,12 +336,12 @@ fun EHealthyPaymentCheckout(
                             )
 
                             Text(
-                                text = if (expiry.isBlank()) {
+                                text = if (previewExpiry.isBlank()) {
                                     "MM/YY"
-                                } else if (expiry.length > 2) {
-                                    "${expiry.take(2)}/${expiry.drop(2)}"
+                                } else if (previewExpiry.length > 2) {
+                                    "${previewExpiry.take(2)}/${previewExpiry.drop(2)}"
                                 } else {
-                                    expiry
+                                    previewExpiry
                                 },
                                 fontSize = 11.sp,
                                 color = Color.White
@@ -337,6 +350,38 @@ fun EHealthyPaymentCheckout(
                     }
                 }
 
+                if (savedCard != null) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color(0xFFEFF6FF),
+                        shape = RoundedCornerShape(13.dp)
+                    ) {
+                        Column(Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(
+                                    selected = useSaved,
+                                    onClick = { useSaved = true; error = null },
+                                    enabled = !busy
+                                )
+                                Column(Modifier.weight(1f)) {
+                                    Text("Saved demo card", fontWeight = FontWeight.Bold, color = PayNavy)
+                                    Text("•••• ${savedCard!!.lastFour}  •  ${savedCard!!.label}", color = PayMuted)
+                                }
+                                TextButton(onClick = {
+                                    DemoSavedCardStore.remove(context, accountId)
+                                    savedCard = null
+                                    useSaved = false
+                                }, enabled = !busy) { Text("Remove") }
+                            }
+                            TextButton(
+                                onClick = { useSaved = false; error = null },
+                                enabled = !busy
+                            ) { Text("Use a different demo card") }
+                        }
+                    }
+                }
+
+                if (!useSaved || savedCard == null) {
                 Text(
                     "Card details",
                     color = PayNavy,
@@ -353,7 +398,7 @@ fun EHealthyPaymentCheckout(
                     label = { Text("Name on card") },
                     placeholder = { Text("TEST PATIENT") },
                     singleLine = true,
-                    enabled = !isProcessing,
+                    enabled = !busy,
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -385,7 +430,7 @@ fun EHealthyPaymentCheckout(
                     ),
 
                     singleLine = true,
-                    enabled = !isProcessing,
+                    enabled = !busy,
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -422,7 +467,7 @@ fun EHealthyPaymentCheckout(
                         ),
 
                         singleLine = true,
-                        enabled = !isProcessing,
+                        enabled = !busy,
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.weight(1f)
                     )
@@ -444,9 +489,30 @@ fun EHealthyPaymentCheckout(
                                 KeyboardType.NumberPassword
                         ),
                         singleLine = true,
-                        enabled = !isProcessing,
+                        enabled = !busy,
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = rememberTestCard,
+                        onCheckedChange = { rememberTestCard = it },
+                        enabled = !busy && accountId.isNotBlank()
+                    )
+                    Text(
+                        "Remember this DEMO card on this device (only label, expiry and last four)",
+                        fontSize = 11.sp,
+                        color = PayMuted,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                } else {
+                    Text(
+                        "Your saved demo card is ready. Full card numbers and security codes are never stored.",
+                        color = PayMuted,
+                        fontSize = 12.sp
                     )
                 }
 
@@ -461,7 +527,7 @@ fun EHealthyPaymentCheckout(
 
                 Button(
                     onClick = ::validateAndPay,
-                    enabled = !isProcessing,
+                    enabled = !busy,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(55.dp),
@@ -470,7 +536,7 @@ fun EHealthyPaymentCheckout(
                         containerColor = PayBlue
                     )
                 ) {
-                    if (isProcessing) {
+                    if (busy) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(20.dp),
                             color = Color.White,

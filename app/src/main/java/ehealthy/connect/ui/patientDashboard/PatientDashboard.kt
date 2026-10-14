@@ -121,6 +121,7 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 data class Appointment(
     val id: String,
     val patient_name: String? = null,
+    val patient_id: String? = null,
     val reason: String? = null,
     val date: String? = null,
     val time: String? = null,

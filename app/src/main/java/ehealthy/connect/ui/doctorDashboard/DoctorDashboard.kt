@@ -66,6 +66,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -2509,9 +2510,7 @@ private fun appointmentStatusColor(status: String?): Color =
         else -> Color(0xFF64748B)
     }
 
-/** Built from the same appointments already fetched — grouped by patient
- *  name, since appointments carry patient_name but the Appointment model
- *  doesn't expose a queryable patient_id yet. */
+/** Group linked patients by stable UUID, never by non-unique names. */
 @Composable
 private fun PatientsTabContent(
     modifier: Modifier,
@@ -2523,6 +2522,7 @@ private fun PatientsTabContent(
     onOpenPatientCareHub: (appointmentId: String, patientName: String) -> Unit
 ) {
     data class PatientSummary(
+        val patientId: String,
         val name: String,
         val visitCount: Int,
         val completedCount: Int,
@@ -2534,9 +2534,14 @@ private fun PatientsTabContent(
 
     val patients = remember(appointments) {
         appointments
-            .filter { !it.patient_name.isNullOrBlank() }
-            .groupBy { it.patient_name!! }
-            .map { (name, appts) ->
+            .filter {
+                !it.patient_id.isNullOrBlank() &&
+                    !it.patient_name.isNullOrBlank() &&
+                    it.status?.lowercase() in setOf("confirmed", "completed")
+            }
+            .groupBy { it.patient_id!! }
+            .map { (patientId, appts) ->
+                val name = appts.last().patient_name.orEmpty()
                 val completed = appts.count {
                     it.status.equals("completed", ignoreCase = true)
                 }
@@ -2553,6 +2558,7 @@ private fun PatientsTabContent(
                     .maxByOrNull { it.date ?: "" }
 
                 PatientSummary(
+                    patientId = patientId,
                     name = name,
                     visitCount = appts.size,
                     completedCount = completed,
@@ -2571,6 +2577,17 @@ private fun PatientsTabContent(
                 compareByDescending<PatientSummary> { it.upcomingCount }
                     .thenBy { it.name }
             )
+    }
+
+    // Client-side filter over this doctor's authorised appointments only.
+    var patientSearch by remember { mutableStateOf("") }
+    val filteredPatients = remember(patients, patientSearch) {
+        val q = patientSearch.trim()
+        if (q.isBlank()) patients
+        else patients.filter {
+            it.name.contains(q, ignoreCase = true) ||
+                it.patientId.contains(q, ignoreCase = true)
+        }
     }
 
     val totalVisits = remember(appointments) {
@@ -2616,6 +2633,23 @@ private fun PatientsTabContent(
                         fontSize = 10.5.sp
                     )
                 }
+            }
+
+            item {
+                OutlinedTextField(
+                    value = patientSearch,
+                    onValueChange = { patientSearch = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("Find a patient") },
+                    placeholder = { Text("Name or unique patient file ID") }
+                )
+                Text(
+                    "Search is limited to patients linked through confirmed or completed appointments.",
+                    fontSize = 10.sp,
+                    color = DoctorMuted,
+                    modifier = Modifier.padding(top = 5.dp)
+                )
             }
 
             item {
@@ -2794,9 +2828,12 @@ private fun PatientsTabContent(
                         }
                     }
 
+                    if (filteredPatients.isEmpty()) {
+                        item { Text("No matching patients.", color = DoctorMuted) }
+                    }
                     items(
-                        items = patients,
-                        key = { it.name }
+                        items = filteredPatients,
+                        key = { it.patientId }
                     ) { patient ->
                         Card(
                             modifier = Modifier
@@ -2856,6 +2893,11 @@ private fun PatientsTabContent(
                                             "${patient.visitCount} appointment${if (patient.visitCount == 1) "" else "s"}",
                                             color = DoctorMuted,
                                             fontSize = 9.5.sp
+                                        )
+                                        Text(
+                                            "File ID: ${patient.patientId.take(8).uppercase()}",
+                                            color = DoctorMuted,
+                                            fontSize = 9.sp
                                         )
                                     }
 

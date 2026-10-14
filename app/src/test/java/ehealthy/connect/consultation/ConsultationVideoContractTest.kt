@@ -1,6 +1,7 @@
 package ehealthy.connect.consultation
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.decodeFromString
 import org.junit.Assert.*
 import org.junit.Test
 

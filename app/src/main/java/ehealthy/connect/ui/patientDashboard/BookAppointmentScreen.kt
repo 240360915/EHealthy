@@ -3945,7 +3945,7 @@ private fun BookingBottomBar(
                 colors =
                     ButtonDefaults.buttonColors(
                         containerColor =
-                            PatientColors.AppointmentAccent,
+                            PatientColors.AppointmentAccentFill,
 
                         contentColor =
                             Color.White,
@@ -4259,7 +4259,7 @@ private fun BookingSuccessScreen(
                                         CircleShape
                                     )
                                     .background(
-                                        PatientColors.DoctorAccent
+                                        PatientColors.DoctorAccentFill
                                     ),
                             contentAlignment =
                                 Alignment.Center
@@ -5318,7 +5318,7 @@ private fun BookingErrorScreen(
                     colors =
                         ButtonDefaults.buttonColors(
                             containerColor =
-                                PatientColors.AppointmentAccent,
+                                PatientColors.AppointmentAccentFill,
                             contentColor =
                                 Color.White
                         )

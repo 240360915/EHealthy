@@ -13,44 +13,45 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import ehealthy.connect.ui.theme.AdaptiveColors
 
 object DoctorColors {
 
     // Main screen colours
-    val Background = Color(0xFFF6F8FB)
-    val Surface = Color.White
+    val Background get() = AdaptiveColors.background
+    val Surface get() = AdaptiveColors.surface
 
     // Text
-    val Ink = Color(0xFF111827)
-    val Muted = Color(0xFF667085)
+    val Ink get() = AdaptiveColors.ink
+    val Muted get() = AdaptiveColors.muted
 
     // Borders
-    val Border = Color(0xFFE4E9F0)
+    val Border get() = AdaptiveColors.border
 
     // Teal - primary doctor colour
     val Teal = Color(0xFF0F8F86)
     val TealDark = Color(0xFF08766F)
-    val TealSoft = Color(0xFFE7F7F4)
+    val TealSoft get() = AdaptiveColors.tealSoft
 
     // Blue
     val Blue = Color(0xFF2F6FED)
-    val BlueSoft = Color(0xFFEAF2FF)
+    val BlueSoft get() = AdaptiveColors.blueSoft
 
     // Purple
     val Purple = Color(0xFF7C5CE0)
-    val PurpleSoft = Color(0xFFF1EDFF)
+    val PurpleSoft get() = AdaptiveColors.purpleSoft
 
     // Green
     val Green = Color(0xFF14966B)
-    val GreenSoft = Color(0xFFE8F8F1)
+    val GreenSoft get() = AdaptiveColors.greenSoft
 
     // Amber
     val Amber = Color(0xFFE99A0C)
-    val AmberSoft = Color(0xFFFFF4DD)
+    val AmberSoft get() = AdaptiveColors.amberSoft
 
     // Red
     val Red = Color(0xFFD84646)
-    val RedSoft = Color(0xFFFFEEEE)
+    val RedSoft get() = AdaptiveColors.redSoft
 
     // Main Patient Care Hub gradient
     val PatientCareGradient = Brush.linearGradient(

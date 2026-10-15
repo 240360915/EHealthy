@@ -105,6 +105,18 @@ object DoctorPatientCareRepository {
         }
 
 
+    /** Pending physical follow-up requests for the logged-in doctor across all patients.
+     * The RPC verifies auth.uid() against doctors.user_id on the server.
+     */
+    suspend fun getPendingPhysicalVisitRequests(): Result<List<PhysicalVisitRequest>> =
+        runCatching {
+            supabase.auth.awaitInitialization()
+            supabase.postgrest
+                .rpc(function = "doctor_get_my_physical_visit_requests")
+                .decodeList<PhysicalVisitRequest>()
+        }
+
+
     /*
      * ---------------------------------------------------------
      * PHYSICAL VISIT INVOICES
@@ -164,7 +176,7 @@ object DoctorPatientCareRepository {
                     )
 
                     put(
-                        "p_doctor_note",
+                        "p_note",
                         doctorNote
                     )
                 }
@@ -173,7 +185,7 @@ object DoctorPatientCareRepository {
                 .postgrest
                 .rpc(
                     function =
-                        "doctor_decide_physical_visit_request",
+                        "doctor_update_physical_visit_request",
                     parameters =
                         parameters
                 )
@@ -203,7 +215,7 @@ object DoctorPatientCareRepository {
                     )
 
                     put(
-                        "p_doctor_note",
+                        "p_note",
                         doctorNote
                     )
                 }
@@ -212,7 +224,7 @@ object DoctorPatientCareRepository {
                 .postgrest
                 .rpc(
                     function =
-                        "doctor_decide_physical_visit_request",
+                        "doctor_update_physical_visit_request",
                     parameters =
                         parameters
                 )

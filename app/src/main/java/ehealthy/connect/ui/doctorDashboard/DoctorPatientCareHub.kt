@@ -1159,7 +1159,7 @@ private fun PhysicalRequestCard(
 
                     Text(
                         text =
-                            "Physical visit request",
+                            "Physical follow-up • ${request.patient_name}",
                         color =
                             DoctorColors.Ink,
                         fontWeight =
@@ -1170,10 +1170,15 @@ private fun PhysicalRequestCard(
 
                     Text(
                         text =
-                            request.status
-                                .replaceFirstChar {
-                                    it.uppercase()
-                                },
+                            when (request.status.lowercase()) {
+                                "pending" -> "Awaiting doctor decision"
+                                "accepted" -> "Accepted · Invoice needed"
+                                "declined" -> "Follow-up declined"
+                                "invoiced" -> "Invoice sent · Awaiting patient"
+                                "patient_accepted" -> "Patient accepted proposed visit"
+                                "patient_declined" -> "Patient declined invoice"
+                                else -> request.status.replace('_', ' ')
+                            },
                         color =
                             when {
                                 request.status.equals(
@@ -1184,7 +1189,11 @@ private fun PhysicalRequestCard(
                                 request.status.equals(
                                     "declined",
                                     ignoreCase = true
-                                ) -> DoctorColors.Red
+                                ) || request.status.equals("patient_declined", ignoreCase = true)
+                                    -> DoctorColors.Red
+
+                                request.status.equals("patient_accepted", ignoreCase = true)
+                                    -> DoctorColors.Green
 
                                 else ->
                                     DoctorColors.Amber
@@ -1463,10 +1472,7 @@ private fun PhysicalRequestCard(
                     )
                 }
             }
-            if (
-                isAccepted &&
-                hasInvoice
-            ) {
+            if (hasInvoice && request.status.equals("invoiced", ignoreCase = true)) {
 
                 Spacer(
                     modifier =
@@ -2224,7 +2230,11 @@ private fun PhysicalInvoiceCard(
         colors =
             CardDefaults.cardColors(
                 containerColor =
-                    DoctorColors.GreenSoft
+                    when (invoice.status.lowercase()) {
+                        "declined" -> DoctorColors.RedSoft
+                        "accepted" -> DoctorColors.GreenSoft
+                        else -> DoctorColors.Surface
+                    }
             ),
         shape =
             RoundedCornerShape(
@@ -2285,12 +2295,18 @@ private fun PhysicalInvoiceCard(
 
                     Text(
                         text =
-                            invoice.status
-                                .replaceFirstChar {
-                                    it.uppercase()
+                            when (invoice.status.lowercase()) {
+                                    "sent" -> "Waiting for patient decision"
+                                    "accepted" -> "Patient accepted arrangement"
+                                    "declined" -> "Patient declined arrangement"
+                                    else -> invoice.status.replace('_', ' ')
                                 },
                         color =
-                            DoctorColors.Green,
+                            when (invoice.status.lowercase()) {
+                                "declined" -> DoctorColors.Red
+                                "accepted" -> DoctorColors.Green
+                                else -> DoctorColors.Amber
+                            },
                         fontSize =
                             10.sp,
                         fontWeight =
@@ -2313,6 +2329,9 @@ private fun PhysicalInvoiceCard(
                 )
             }
 
+
+            Spacer(modifier = Modifier.height(10.dp))
+            CareInfoRow(label = "Patient", value = invoice.patient_name)
 
             Spacer(
                 modifier =

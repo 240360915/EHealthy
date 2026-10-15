@@ -114,6 +114,8 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.material.icons.outlined.Info
 import ehealthy.connect.data.DoctorLiveConsultationRequest
 import ehealthy.connect.data.DoctorLiveConsultationRepository
+import ehealthy.connect.data.patient.PhysicalVisitRequest
+import ehealthy.connect.data.doctor.DoctorPatientCareRepository
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.outlined.VideoCall
@@ -241,6 +243,11 @@ fun DoctorDashboard(
     var selectedTab by remember { mutableStateOf(DoctorTab.HOME) }
 
     var appointments by remember { mutableStateOf<List<Appointment>>(emptyList()) }
+    var pendingPhysicalRequests by remember {
+        mutableStateOf<List<PhysicalVisitRequest>>(emptyList())
+    }
+    var physicalRequestError by remember { mutableStateOf<String?>(null) }
+    var acceptingPhysicalRequestId by remember { mutableStateOf<String?>(null) }
     var isLoadingAppointments by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf<String?>(null) }
     var refreshTrigger by remember { mutableStateOf(0) }
@@ -312,6 +319,18 @@ fun DoctorDashboard(
                 .getUnreadCount()
                 .onSuccess {
                     unreadDoctorNotifications = it
+                }
+
+            // Physical follow-ups are separate from appointments; load the
+            // authenticated doctor's request inbox on every dashboard refresh.
+            DoctorPatientCareRepository.getPendingPhysicalVisitRequests()
+                .onSuccess { requests ->
+                    pendingPhysicalRequests = requests
+                    physicalRequestError = null
+                }
+                .onFailure { error ->
+                    physicalRequestError = error.message
+                        ?: "Could not refresh physical follow-up requests."
                 }
 
             fetchAppointments(doctorId)
@@ -734,6 +753,29 @@ fun DoctorDashboard(
                     liveRequests = liveRequests,
                     isLoadingLiveRequests = isLoadingLiveRequests,
                     liveRequestMessage = liveRequestMessage,
+                    physicalRequests = pendingPhysicalRequests,
+                    physicalRequestError = physicalRequestError,
+                    acceptingPhysicalRequestId = acceptingPhysicalRequestId,
+                    onAcceptPhysicalRequest = { request ->
+                        if (acceptingPhysicalRequestId == null) {
+                            acceptingPhysicalRequestId = request.id
+                            DoctorPatientCareRepository.acceptPhysicalVisitRequest(request.id)
+                                .onSuccess {
+                                    pendingPhysicalRequests =
+                                        pendingPhysicalRequests.filterNot { it.id == request.id }
+                                    physicalRequestError = null
+                                    refreshTrigger++
+                                }
+                                .onFailure { error ->
+                                    physicalRequestError = error.message
+                                        ?: "Could not accept the physical follow-up."
+                                }
+                            acceptingPhysicalRequestId = null
+                        }
+                    },
+                    onReviewPhysicalRequest = { request ->
+                        onOpenPatientCareHub(request.appointment_id, request.patient_name)
+                    },
 
                     onNavigateAppointments = {
                         selectedTab = DoctorTab.APPOINTMENTS
@@ -976,6 +1018,11 @@ private fun HomeTabContent(
     liveRequests: List<DoctorLiveConsultationRequest>,
     isLoadingLiveRequests: Boolean,
     liveRequestMessage: String?,
+    physicalRequests: List<PhysicalVisitRequest>,
+    physicalRequestError: String?,
+    acceptingPhysicalRequestId: String?,
+    onAcceptPhysicalRequest: suspend (PhysicalVisitRequest) -> Unit,
+    onReviewPhysicalRequest: (PhysicalVisitRequest) -> Unit,
 
     onNavigateAppointments: () -> Unit,
     onNavigatePrescriptions: () -> Unit,
@@ -1203,6 +1250,94 @@ private fun HomeTabContent(
                         }
                     }
                 )
+            }
+        }
+
+        // Patients' optional in-person follow-ups do NOT enter the
+        // appointments table, so they need a dedicated home-page inbox.
+        if (physicalRequests.isNotEmpty() || physicalRequestError != null) {
+            item {
+                Column(
+                    modifier = Modifier.fillMaxWidth()
+                        .padding(horizontal = 18.dp, vertical = 12.dp)
+                ) {
+                    Text(
+                        "Physical follow-up requests",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 19.sp,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text(
+                        "Review requests made after online consultations",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    physicalRequestError?.let {
+                        Text(
+                            it,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                }
+            }
+            items(items = physicalRequests, key = { "physical_" + it.id }) { request ->
+                Card(
+                    modifier = Modifier.fillMaxWidth()
+                        .padding(horizontal = 18.dp, vertical = 6.dp),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(9.dp)
+                    ) {
+                        Text(
+                            request.patient_name,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            request.reason,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            "Pending in-person follow-up",
+                            color = DoctorAmber,
+                            fontSize = 11.sp
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                            Button(
+                                modifier = Modifier.weight(1f),
+                                enabled = acceptingPhysicalRequestId == null,
+                                onClick = {
+                                    liveRequestScope.launch {
+                                        onAcceptPhysicalRequest(request)
+                                    }
+                                }
+                            ) {
+                                Text(
+                                    if (acceptingPhysicalRequestId == request.id)
+                                        "Accepting…" else "Accept"
+                                )
+                            }
+                            OutlinedButton(
+                                modifier = Modifier.weight(1f),
+                                onClick = { onReviewPhysicalRequest(request) }
+                            ) {
+                                Text("Review / Decline")
+                            }
+                        }
+                        Text(
+                            "Review / Decline opens the patient's care record. Choose Visits & billing for decisions and invoices.",
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
         }
 

@@ -143,6 +143,7 @@ import ehealthy.connect.ui.doctorDashboard.RefillRequest
 import ehealthy.connect.ui.patientDashboard.PatientNotificationsScreen
 import ehealthy.connect.ui.patientDashboard.PatientInvoicesScreen
 import ehealthy.connect.ui.patientDashboard.PatientAcceptedFollowUpsScreen
+import ehealthy.connect.ui.patientDashboard.PatientFollowUpsScreen
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import ehealthy.connect.ui.doctorDashboard.DoctorPatientCareHub
@@ -2329,6 +2330,13 @@ fun AppNavGraph(pendingRoute: String? = null) {
             )
         }
 
+        composable("patientFollowUps") {
+            PatientFollowUpsScreen(
+                onBack = { navController.popBackStack() },
+                onViewAccepted = { navController.navigate("patientAcceptedFollowUps") }
+            )
+        }
+
         composable("patientAcceptedFollowUps") {
             PatientAcceptedFollowUpsScreen(
                 onBack = { navController.popBackStack() },
@@ -2446,8 +2454,8 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 onNavigateInvoices = {
                     navController.navigate("patientInvoices")
                 },
-                onNavigateAcceptedFollowUps = {
-                    navController.navigate("patientAcceptedFollowUps")
+                onNavigateFollowUps = {
+                    navController.navigate("patientFollowUps")
                 },
 
                 onNavigateSettings = {

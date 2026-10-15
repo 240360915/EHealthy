@@ -49,6 +49,7 @@ import ehealthy.connect.ui.common.isValidEmail
 import ehealthy.connect.ui.common.normalizeEmail
 import ehealthy.connect.ui.doctorDashboard.DoctorAccountSettings
 import ehealthy.connect.ui.doctorDashboard.DoctorDashboard
+import ehealthy.connect.ui.doctorDashboard.DoctorPhysicalFollowUpsScreen
 import ehealthy.connect.ui.doctorDashboard.DoctorDemoEarningsScreen
 import ehealthy.connect.ui.doctorDashboard.DoctorPatientCareFileScreen
 import ehealthy.connect.ui.doctorDashboard.DoctorForgotPassword
@@ -1414,6 +1415,7 @@ fun AppNavGraph(pendingRoute: String? = null) {
             DoctorDashboard(
                 onNavigateAvailability = { navController.navigate("doctorAvailability") },
                 onNavigateNotifications = { navController.navigate("doctorNotifications") },
+                onOpenPhysicalFollowUps = { navController.navigate("doctorPhysicalFollowUps") },
                 doctorProfile = doctorProfile,
                 isLoadingProfile = isLoadingProfile,
                 isUploadingPhoto = isUploadingPhoto,
@@ -1629,6 +1631,12 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 onBack = {
                     doctorBackToDashboard()
                 }
+            )
+        }
+
+        composable("doctorPhysicalFollowUps") {
+            DoctorPhysicalFollowUpsScreen(
+                onBack = { navController.popBackStack() }
             )
         }
 

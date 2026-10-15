@@ -226,6 +226,7 @@ fun DoctorDashboard(
     onOpenPatientCareHub: (appointmentId: String, patientName: String) -> Unit,
     onNavigateAvailability: () -> Unit = {},
     onNavigateNotifications: () -> Unit = {},
+    onOpenPhysicalFollowUps: () -> Unit = {},
     onStartCall: (appointmentId: String) -> Unit = {},
     onVerifyCompletionCode: suspend (appointmentId: String, code: String) -> Result<Unit> = { _, _ -> Result.failure(Exception("Not available")) },
     onOpenPatientFile: (appointmentId: String) -> Unit = {}
@@ -756,6 +757,7 @@ fun DoctorDashboard(
                     physicalRequests = pendingPhysicalRequests,
                     physicalRequestError = physicalRequestError,
                     acceptingPhysicalRequestId = acceptingPhysicalRequestId,
+                    onNavigatePhysicalFollowUps = onOpenPhysicalFollowUps,
                     onAcceptPhysicalRequest = { request ->
                         if (acceptingPhysicalRequestId == null) {
                             acceptingPhysicalRequestId = request.id
@@ -1026,6 +1028,7 @@ private fun HomeTabContent(
     physicalRequests: List<PhysicalVisitRequest>,
     physicalRequestError: String?,
     acceptingPhysicalRequestId: String?,
+    onNavigatePhysicalFollowUps: () -> Unit,
     onAcceptPhysicalRequest: suspend (PhysicalVisitRequest) -> Unit,
     onReviewPhysicalRequest: (PhysicalVisitRequest) -> Unit,
 
@@ -1258,97 +1261,59 @@ private fun HomeTabContent(
             }
         }
 
-        // Patients' optional in-person follow-ups do NOT enter the
-        // appointments table, so they need a dedicated home-page inbox.
-        if (physicalRequests.isNotEmpty() || physicalRequestError != null) {
-            item {
+        // Independent dashboard card: physical follow-up requests are NOT
+        // appointments or invoices. Each request receives its own card in
+        // the dedicated Follow-ups screen, with a separate invoice history.
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth()
+                    .padding(horizontal = 18.dp, vertical = 10.dp),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
                 Column(
-                    modifier = Modifier.fillMaxWidth()
-                        .padding(horizontal = 18.dp, vertical = 12.dp)
+                    modifier = Modifier.padding(17.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        "Physical follow-up requests",
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 19.sp,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Text(
-                        "Review requests made after online consultations",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    physicalRequestError?.let {
-                        Text(
-                            it,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(top = 8.dp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Outlined.MedicalServices,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(27.dp)
                         )
-                    }
-                }
-            }
-            items(items = physicalRequests, key = { "physical_" + it.id }) { request ->
-                Card(
-                    modifier = Modifier.fillMaxWidth()
-                        .padding(horizontal = 18.dp, vertical = 6.dp),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(9.dp)
-                    ) {
-                        Text(
-                            request.patient_name,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            request.reason,
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            if (request.status == "pending")
-                                "Pending in-person follow-up"
-                            else "Accepted · Invoice needed",
-                            color = if (request.status == "pending") DoctorAmber else DoctorGreen,
-                            fontSize = 11.sp
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                            if (request.status == "pending") {
-                                Button(
-                                    modifier = Modifier.weight(1f),
-                                    enabled = acceptingPhysicalRequestId == null,
-                                    onClick = {
-                                        liveRequestScope.launch {
-                                            onAcceptPhysicalRequest(request)
-                                        }
-                                    }
-                                ) {
-                                    Text(
-                                        if (acceptingPhysicalRequestId == request.id)
-                                            "Accepting…" else "Accept"
-                                    )
-                                }
-                            }
-                            OutlinedButton(
-                                modifier = Modifier.weight(1f),
-                                onClick = { onReviewPhysicalRequest(request) }
-                            ) {
-                                Text(
-                                    if (request.status == "pending")
-                                        "Review / Decline"
-                                    else "Issue invoice"
-                                )
-                            }
+                        Spacer(Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Physical follow-up requests",
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp
+                            )
+                            Text(
+                                "${physicalRequests.count { it.status == "pending" }} pending · " +
+                                    "${physicalRequests.count { it.status == "accepted" }} awaiting invoice",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.sp
+                            )
                         }
-                        Text(
-                            "Open the patient care record and select Visits & billing to decline or issue an invoice.",
-                            fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    }
+                    physicalRequestError?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+                    }
+                    Text(
+                        "Review requests, accept or decline, then send a separate invoice with your saved practice location.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp
+                    )
+                    Button(
+                        onClick = onNavigatePhysicalFollowUps,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Open follow-up requests & invoices")
                     }
                 }
             }

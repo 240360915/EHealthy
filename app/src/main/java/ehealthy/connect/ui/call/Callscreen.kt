@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.sp
 import ehealthy.connect.util.fetchStreamToken
 import io.getstream.video.android.compose.theme.VideoTheme
 import io.getstream.video.android.compose.ui.components.call.activecall.CallContent
+import io.getstream.video.android.compose.ui.components.call.controls.actions.DefaultOnCallActionHandler
 import io.getstream.video.android.core.Call
 import io.getstream.video.android.core.GEO
 import io.getstream.video.android.core.StreamVideo
@@ -109,7 +110,6 @@ fun CallScreen(
     var screenState by remember { mutableStateOf<CallScreenState>(CallScreenState.Loading) }
     var call by remember { mutableStateOf<Call?>(null) }
     var retryKey by remember { mutableIntStateOf(0) }
-    var waitingSince by remember { mutableStateOf<Long?>(null) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -207,8 +207,6 @@ fun CallScreen(
                 return@LaunchedEffect
             }
 
-            call = streamCall
-
             val joinedResult = onJoined()
             if (joinedResult.isFailure) {
                 streamCall.leave()
@@ -224,14 +222,11 @@ fun CallScreen(
             streamCall.microphone.setEnabled(true)
             streamCall.camera.setEnabled(true)
             streamCall.speaker.setSpeakerPhone(true)
-            android.util.Log.d(
-                "ScheduledCall",
-                "Joined scheduled room, camera=${streamCall.camera.status.value}, " +
-                    "microphone=${streamCall.microphone.status.value}"
-            )
-
-            waitingSince = System.currentTimeMillis()
+            // Match the working broadcast flow: enable local media and only
+            // then show this Stream call in the UI.
+            call = streamCall
             screenState = CallScreenState.Waiting
+            android.util.Log.d("ScheduledCall", "Joined secure scheduled video room")
         } catch (e: Exception) {
             screenState = CallScreenState.Error(e.message ?: "Something went wrong starting the call.")
         }
@@ -248,17 +243,9 @@ fun CallScreen(
         }
     }
 
-    // ---- Doctor-only: if the patient doesn't answer within 30s, stop ringing ----
-    LaunchedEffect(waitingSince, retryKey) {
-        val since = waitingSince ?: return@LaunchedEffect
-        if (!isDoctorView) return@LaunchedEffect
-        val remaining = 30_000 - (System.currentTimeMillis() - since)
-        if (remaining > 0) delay(remaining.milliseconds)
-        if (screenState is CallScreenState.Waiting) {
-            call?.leave()
-            screenState = CallScreenState.NoAnswer
-        }
-    }
+    // Do not auto-disconnect the doctor after 30 seconds. The patient may
+    // still be opening the room; only an explicit hang-up or server-side
+    // appointment cancellation should terminate a scheduled consultation.
 
     // ---- Poll while waiting or in-call. This synchronizes hang-up across both phones. ----
     LaunchedEffect(screenState) {
@@ -315,31 +302,16 @@ fun CallScreen(
                     onRetry = { retryKey++ },
                     onBack = onBack
                 )
-                is CallScreenState.Waiting, is CallScreenState.InCall -> {
+                is CallScreenState.Waiting -> WaitingState(isDoctorView)
+                is CallScreenState.InCall -> {
                     currentCall?.let { activeCall ->
-                        // Stream's CallContent owns the local media renderers and
-                        // camera/microphone lifecycle. Mount it IMMEDIATELY after
-                        // joining; waiting until a remote participant arrives can
-                        // leave both devices showing blank video.
+                        // Follow the working broadcast video flow: render the
+                        // participant grid and default bottom control row in
+                        // Stream's CallContent when both parties are connected.
                         Column(modifier = Modifier.fillMaxSize()) {
                             RecordingDisclaimerBanner()
-                            if (state is CallScreenState.Waiting) {
-                                Text(
-                                    text = if (isDoctorView)
-                                        "Connecting video · Waiting for patient"
-                                    else
-                                        "Connecting video · Waiting for doctor",
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(navy)
-                                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                                    color = Color.White,
-                                    textAlign = TextAlign.Center,
-                                    fontSize = 12.sp
-                                )
-                            }
                             CallContent(
-                                modifier = Modifier.fillMaxWidth().weight(1f),
+                                modifier = Modifier.fillMaxSize(),
                                 call = activeCall,
                                 onBackPressed = {
                                     scope.launch {
@@ -369,6 +341,13 @@ fun CallScreen(
                                             activeCall.leave()
                                             onBack()
                                         }
+                                    } else {
+                                        // REQUIRED: without this delegation, the
+                                        // camera, microphone, flip-camera, speaker
+                                        // and other Stream buttons are inert.
+                                        // This is the exact handler used by the
+                                        // working broadcast consultation screen.
+                                        DefaultOnCallActionHandler.onCallAction(activeCall, action)
                                     }
                                 }
                             )

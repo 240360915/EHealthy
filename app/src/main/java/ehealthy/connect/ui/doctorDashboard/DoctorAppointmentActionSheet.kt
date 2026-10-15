@@ -496,7 +496,11 @@ fun DoctorAppointmentActionSheet(
             }
 
             if (
-                status == "confirmed"
+                status == "confirmed" ||
+                (status == "completed" &&
+                    appointment.appointment_type == "online" &&
+                    !appointment.call_ended_at.isNullOrBlank() &&
+                    appointment.completion_code_verified != true)
             ) {
                 Spacer(
                     modifier = Modifier.height(10.dp)
@@ -505,7 +509,9 @@ fun DoctorAppointmentActionSheet(
                 DoctorSheetActionCard(
                     icon = Icons.Outlined.CheckCircle,
                     label =
-                        if (appointment.appointment_type == "online") {
+                        if (status == "completed") {
+                            "Verify post-call completion code"
+                        } else if (appointment.appointment_type == "online") {
                             "Complete consultation"
                         } else {
                             "Complete in-person visit"

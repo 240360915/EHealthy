@@ -97,6 +97,7 @@ private val VisitCancelled = Color(0xFFB91C1C)
 fun PatientVisitsScreen(
     onBack: () -> Unit,
     onOpenInvoices: () -> Unit,
+    onOpenAcceptedFollowUps: () -> Unit,
     onOpenPrescriptions: () -> Unit,
     onReschedule: (appointmentId: String) -> Unit,
     onMessageDoctor: (doctorId: String) -> Unit,
@@ -1096,6 +1097,7 @@ fun PatientVisitsScreen(
                                     linkedPrescriptionAppointments?.contains(appointment.id),
 
                                 onOpenPrescriptions = onOpenPrescriptions,
+                                onOpenAcceptedFollowUps = onOpenAcceptedFollowUps,
 
                                 physicalRequest =
                                     physicalVisitRequests
@@ -1416,6 +1418,7 @@ private fun VisitCard(
     physicalInvoice: PhysicalVisitInvoice?,
     invoiceDecisionInProgress: Boolean,
     onRequestPhysicalVisit: () -> Unit,
+    onOpenAcceptedFollowUps: () -> Unit,
     onAcceptPhysicalInvoice: (PhysicalVisitInvoice) -> Unit,
     onDeclinePhysicalInvoice: (PhysicalVisitInvoice) -> Unit
 ) {
@@ -1770,6 +1773,7 @@ private fun VisitCard(
                         invoiceDecisionInProgress,
                     onRequestPhysicalVisit =
                         onRequestPhysicalVisit,
+                    onOpenAcceptedFollowUps = onOpenAcceptedFollowUps,
                     onAcceptInvoice =
                         onAcceptPhysicalInvoice,
                     onDeclineInvoice =
@@ -2085,6 +2089,7 @@ private fun PhysicalVisitWorkflowCard(
     invoice: PhysicalVisitInvoice?,
     invoiceDecisionInProgress: Boolean,
     onRequestPhysicalVisit: () -> Unit,
+    onOpenAcceptedFollowUps: () -> Unit,
     onAcceptInvoice: (PhysicalVisitInvoice) -> Unit,
     onDeclineInvoice: (PhysicalVisitInvoice) -> Unit
 ) {
@@ -2224,13 +2229,16 @@ private fun PhysicalVisitWorkflowCard(
                 ) -> {
 
                     PhysicalStatusText(
-                        title =
-                            "Doctor accepted your request",
-                        body =
-                            "The doctor is preparing the invoice and proposed physical visit arrangement.",
-                        color =
-                            VisitSuccess
+                        title = "Doctor accepted your request",
+                        body = "View the doctor's saved practice map. The visit date, time and fee are not final until you accept the invoice.",
+                        color = VisitSuccess
                     )
+                    OutlinedButton(
+                        onClick = onOpenAcceptedFollowUps,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("View practice location on map")
+                    }
                 }
 
 

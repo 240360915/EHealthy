@@ -305,7 +305,8 @@ fun PatientDashboard(
     // Existing MainActivity callers continue compiling; wire these to the
     // dedicated routes for direct dashboard shortcuts (see README).
     onNavigateHealthProfile: () -> Unit = onNavigateSettings,
-    onNavigateInvoices: () -> Unit = onNavigateSettings
+    onNavigateInvoices: () -> Unit = onNavigateSettings,
+    onNavigateAcceptedFollowUps: () -> Unit = onNavigateAppointments
 ) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -516,6 +517,7 @@ fun PatientDashboard(
                 onNavigateHealthTips = onNavigateHealthTips,
                 onNavigateHealthProfile = onNavigateHealthProfile,
                 onNavigateInvoices = onNavigateInvoices,
+                onNavigateAcceptedFollowUps = onNavigateAcceptedFollowUps,
                 onNavigateNotifications = onNavigateNotifications,
                 onAppointmentClick = { selectedAppointment = it },
                 onStartCall = onStartCall
@@ -1052,6 +1054,7 @@ private fun ModernHomeTab(
     onNavigateHealthTips: () -> Unit,
     onNavigateHealthProfile: () -> Unit,
     onNavigateInvoices: () -> Unit,
+    onNavigateAcceptedFollowUps: () -> Unit,
     onNavigateNotifications: () -> Unit,
     onAppointmentClick: (Appointment) -> Unit,
     onStartCall: (String) -> Unit
@@ -1158,10 +1161,25 @@ private fun ModernHomeTab(
             item {
                 SectionHeader(
                     title = "In-person follow-ups",
-                    subtitle = "Recent requests and doctor's decisions"
+                    subtitle = "Pending requests here; accepted visits and doctor maps on their own screen"
                 )
             }
-            items(physicalRequests.take(3), key = { "physical_home_" + it.id }) { request ->
+            if (physicalRequests.any {
+                    it.status.lowercase() in setOf("accepted","invoiced","patient_accepted")
+                }) {
+                item {
+                    Button(
+                        onClick = onNavigateAcceptedFollowUps,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp)
+                    ) {
+                        Text("View accepted follow-ups & practice maps")
+                    }
+                }
+            }
+            items(
+                physicalRequests.filter { it.status.equals("pending", true) }.take(3),
+                key = { "physical_home_" + it.id }
+            ) { request ->
                 val invoice = physicalInvoices.firstOrNull { it.request_id == request.id }
                 Card(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
@@ -1223,7 +1241,7 @@ private fun ModernHomeTab(
                     }
                 }
             }
-            if (physicalRequests.size > 3) {
+            if (physicalRequests.count { it.status.equals("pending", true) } > 3) {
                 item {
                     TextButton(
                         onClick = onNavigateAppointments,

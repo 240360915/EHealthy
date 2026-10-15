@@ -2228,6 +2228,7 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 },
                 onViewPrivacyPolicy = { navController.navigate("privacyPolicy") },
                 onNavigateAppPin = { navController.navigate("appPinSettings") },
+                onNavigatePracticeLocation = { navController.navigate("doctorPracticeLocation") },
                 onLogout = {
                     scope.launch {
                         ehealthy.connect.consultation.ConsultationDevices.signOut()

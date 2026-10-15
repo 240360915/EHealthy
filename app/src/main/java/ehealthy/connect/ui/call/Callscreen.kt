@@ -35,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -111,6 +112,8 @@ fun CallScreen(
     var retryKey by remember { mutableIntStateOf(0) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    // Keep the disposed handler pointed at the latest active Stream call.
+    val activeCallForCleanup by rememberUpdatedState(call)
 
     // Scheduled calls must request the SAME camera/microphone permissions as
     // broadcast calls. Otherwise Stream can join while the other phone sees
@@ -212,26 +215,42 @@ fun CallScreen(
                 return@LaunchedEffect
             }
 
-            val joinedResult = onJoined()
-            if (joinedResult.isFailure) {
+            // The working broadcast call publishes local tracks IMMEDIATELY
+            // after Stream join, without waiting for a second network request.
+            // Do the same on both phones before marking joined in Supabase.
+            try {
+                streamCall.microphone.setEnabled(true)
+                streamCall.camera.setEnabled(true)
+                streamCall.speaker.setSpeakerPhone(true)
+            } catch (error: Exception) {
+                android.util.Log.e("ScheduledCall", "Could not activate local camera/microphone", error)
                 streamCall.leave()
-                call = null
                 screenState = CallScreenState.Error(
-                    "This consultation is no longer available. If it has ended, please book a new appointment."
+                    "Camera or microphone could not start. Check EHealthy permissions " +
+                        "and that no other app is using the camera, then try a fresh call."
                 )
                 return@LaunchedEffect
             }
 
-            // Join alone does not guarantee either track is publishing.
-            // Explicitly turn on both, just like ConsultationCallScreen does.
-            streamCall.microphone.setEnabled(true)
-            streamCall.camera.setEnabled(true)
-            streamCall.speaker.setSpeakerPhone(true)
-            // Match the working broadcast flow: enable local media and only
-            // then show this Stream call in the UI.
+            val joinedResult = onJoined()
+            if (joinedResult.isFailure) {
+                android.util.Log.e(
+                    "ScheduledCall",
+                    "Could not acknowledge scheduled join",
+                    joinedResult.exceptionOrNull()
+                )
+                streamCall.leave()
+                call = null
+                screenState = CallScreenState.Error(
+                    "This consultation could not be confirmed. " +
+                        "It may have ended or been cancelled. Open a new appointment."
+                )
+                return@LaunchedEffect
+            }
+
             call = streamCall
             screenState = CallScreenState.Waiting
-            android.util.Log.d("ScheduledCall", "Joined secure scheduled video room")
+            android.util.Log.d("ScheduledCall", "Media enabled; joined secure scheduled room")
         } catch (e: Exception) {
             screenState = CallScreenState.Error(e.message ?: "Something went wrong starting the call.")
         }
@@ -239,12 +258,25 @@ fun CallScreen(
 
     // ---- Watch for the other party actually joining ----
     val currentCall = call
-    if (currentCall != null && screenState is CallScreenState.Waiting) {
-        val remoteParticipants by currentCall.state.remoteParticipants.collectAsState()
-        LaunchedEffect(remoteParticipants.size) {
-            if (remoteParticipants.isNotEmpty()) {
-                screenState = CallScreenState.InCall
-            }
+    // Observe remote state for a user-facing status, but do not gate
+    // CallContent rendering on the remote participant appearing. Stream's
+    // media renderer and controls must be mounted on BOTH phones immediately.
+    val remoteParticipantCount = if (currentCall != null) {
+        val participants by currentCall.state.remoteParticipants.collectAsState()
+        participants.size
+    } else 0
+    val localCameraEnabled = if (currentCall != null) {
+        val enabled by currentCall.camera.isEnabled.collectAsState()
+        enabled
+    } else false
+    val localMicrophoneEnabled = if (currentCall != null) {
+        val enabled by currentCall.microphone.isEnabled.collectAsState()
+        enabled
+    } else false
+    LaunchedEffect(currentCall, remoteParticipantCount) {
+        if (currentCall != null && remoteParticipantCount > 0 &&
+            screenState is CallScreenState.Waiting) {
+            screenState = CallScreenState.InCall
         }
     }
 
@@ -286,7 +318,7 @@ fun CallScreen(
 
     DisposableEffect(Unit) {
         onDispose {
-            call?.leave()
+            activeCallForCleanup?.leave()
             try {
                 StreamVideo.removeClient()
             } catch (e: Exception) {
@@ -307,25 +339,45 @@ fun CallScreen(
                     onRetry = { retryKey++ },
                     onBack = onBack
                 )
-                is CallScreenState.Waiting -> WaitingState(isDoctorView)
-                is CallScreenState.InCall -> {
+                is CallScreenState.Waiting, is CallScreenState.InCall -> {
                     currentCall?.let { activeCall ->
-                        // Follow the working broadcast video flow: render the
-                        // participant grid and default bottom control row in
-                        // Stream's CallContent when both parties are connected.
+                        // The same Stream CallContent used in broadcast must
+                        // stay mounted even before the remote user arrives:
+                        // this initializes the local preview and publishes the
+                        // camera/microphone without hiding the controls.
                         Column(modifier = Modifier.fillMaxSize()) {
                             RecordingDisclaimerBanner()
+                            Row(
+                                modifier = Modifier.fillMaxWidth()
+                                    .background(navy)
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = if (remoteParticipantCount > 0)
+                                        "Connected to ${if (isDoctorView) "patient" else "doctor"}"
+                                    else "Waiting for ${if (isDoctorView) "patient" else "doctor"}",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(
+                                    text = "Camera ${if (localCameraEnabled) "on" else "off"}  •  " +
+                                        "Mic ${if (localMicrophoneEnabled) "on" else "off"}",
+                                    color = Color.White,
+                                    fontSize = 10.sp
+                                )
+                            }
                             CallContent(
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier.fillMaxWidth().weight(1f),
                                 call = activeCall,
                                 onBackPressed = {
                                     scope.launch {
                                         onEndCall()
                                             .onFailure { error ->
                                                 android.util.Log.e(
-                                                    "ScheduledCall",
-                                                    "Could not mark scheduled consultation ended",
-                                                    error
+                                                    "ScheduledCall", "Could not record ended consultation", error
                                                 )
                                             }
                                         activeCall.leave()
@@ -339,7 +391,7 @@ fun CallScreen(
                                                 .onFailure { error ->
                                                     android.util.Log.e(
                                                         "ScheduledCall",
-                                                        "Could not mark scheduled consultation ended",
+                                                        "Could not record ended consultation",
                                                         error
                                                     )
                                                 }
@@ -347,11 +399,6 @@ fun CallScreen(
                                             onBack()
                                         }
                                     } else {
-                                        // REQUIRED: without this delegation, the
-                                        // camera, microphone, flip-camera, speaker
-                                        // and other Stream buttons are inert.
-                                        // This is the exact handler used by the
-                                        // working broadcast consultation screen.
                                         DefaultOnCallActionHandler.onCallAction(activeCall, action)
                                     }
                                 }

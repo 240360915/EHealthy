@@ -68,6 +68,11 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import kotlin.math.roundToInt
+import androidx.compose.ui.platform.LocalContext
+import java.util.Calendar
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 
 
 private enum class PatientCareTab(
@@ -1779,8 +1784,22 @@ private fun PhysicalVisitInvoiceDialog(
         mutableStateOf("")
     }
 
-    var location by remember {
-        mutableStateOf("")
+    var location by remember { mutableStateOf("") }
+    var locationReady by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    LaunchedEffect(requestId) {
+        DoctorPatientCareRepository.getMyInvoiceLocation()
+            .onSuccess {
+                location = it.displayAddress
+                locationReady = it.has_pin
+                if (!it.has_pin) {
+                    errorMessage = "Save your practice address and map pin in the Doctor Portal before issuing this invoice."
+                }
+            }
+            .onFailure {
+                locationReady = false
+                errorMessage = it.message ?: "Could not load your saved practice location."
+            }
     }
 
     var notes by remember {
@@ -1918,87 +1937,69 @@ private fun PhysicalVisitInvoiceDialog(
                         )
                 ) {
 
-                    OutlinedTextField(
-                        value =
-                            date,
-                        onValueChange = {
-                            date =
-                                it
-
-                            errorMessage =
-                                null
-                        },
-                        label = {
-                            Text(
-                                "Date"
-                            )
-                        },
-                        placeholder = {
-                            Text(
-                                "2026-10-15"
-                            )
-                        },
-                        modifier =
-                            Modifier.weight(
-                                1f
-                            ),
-                        singleLine =
-                            true
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        OutlinedTextField(
+                            value = date,
+                            onValueChange = {},
+                            label = { Text("Visit date") },
+                            placeholder = { Text("YYYY-MM-DD") },
+                            modifier = Modifier.fillMaxWidth(),
+                            readOnly = true,
+                            singleLine = true
+                        )
+                        TextButton(onClick = {
+                            val today = Calendar.getInstance()
+                            android.app.DatePickerDialog(
+                                context,
+                                { _, year, month, day ->
+                                    date = "%04d-%02d-%02d".format(year, month + 1, day)
+                                    errorMessage = null
+                                },
+                                today.get(Calendar.YEAR),
+                                today.get(Calendar.MONTH),
+                                today.get(Calendar.DAY_OF_MONTH)
+                            ).apply { datePicker.minDate = today.timeInMillis - 60_000L }.show()
+                        }) { Text("Choose date") }
+                    }
 
 
-                    OutlinedTextField(
-                        value =
-                            time,
-                        onValueChange = {
-                            time =
-                                it
-
-                            errorMessage =
-                                null
-                        },
-                        label = {
-                            Text(
-                                "Time"
-                            )
-                        },
-                        placeholder = {
-                            Text(
-                                "10:30"
-                            )
-                        },
-                        modifier =
-                            Modifier.weight(
-                                1f
-                            ),
-                        singleLine =
-                            true
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        OutlinedTextField(
+                            value = time,
+                            onValueChange = {},
+                            label = { Text("Visit time") },
+                            placeholder = { Text("HH:mm") },
+                            modifier = Modifier.fillMaxWidth(),
+                            readOnly = true,
+                            singleLine = true
+                        )
+                        TextButton(onClick = {
+                            val now = Calendar.getInstance()
+                            android.app.TimePickerDialog(
+                                context,
+                                { _, hour, minute ->
+                                    time = "%02d:%02d".format(hour, minute)
+                                    errorMessage = null
+                                },
+                                now.get(Calendar.HOUR_OF_DAY),
+                                now.get(Calendar.MINUTE), true
+                            ).show()
+                        }) { Text("Choose time") }
+                    }
                 }
 
 
                 OutlinedTextField(
-                    value =
-                        location,
-                    onValueChange = {
-                        location =
-                            it
-
-                        errorMessage =
-                            null
-                    },
-                    label = {
-                        Text(
-                            "Location"
-                        )
-                    },
-                    placeholder = {
-                        Text(
-                            "e.g. Riverside Medical Centre"
-                        )
-                    },
-                    modifier =
-                        Modifier.fillMaxWidth()
+                    value = location,
+                    onValueChange = {},
+                    label = { Text("Saved practice location") },
+                    placeholder = { Text("Save your address and map pin in the Doctor Portal") },
+                    readOnly = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    "This invoice will use your verified practice map pin so the patient can view directions.",
+                    color = DoctorColors.Muted, fontSize = 10.sp
                 )
 
 
@@ -2048,8 +2049,7 @@ private fun PhysicalVisitInvoiceDialog(
         confirmButton = {
 
             Button(
-                enabled =
-                    !isSaving,
+                enabled = !isSaving && locationReady,
 
                 onClick = {
 
@@ -2076,24 +2076,19 @@ private fun PhysicalVisitInvoiceDialog(
                         }
 
 
-                        date.isBlank() -> {
+                        runCatching {
+                            LocalDate.parse(date)
+                        }.getOrNull() == null || LocalDate.parse(date).isBefore(LocalDate.now()) -> {
+                            errorMessage = "Choose today or a future visit date."
+                        }
 
-                            errorMessage =
-                                "Enter the proposed visit date."
+                        runCatching { LocalTime.parse(time) }.getOrNull() == null -> {
+                            errorMessage = "Choose a valid visit time."
                         }
 
 
-                        time.isBlank() -> {
-
-                            errorMessage =
-                                "Enter the proposed visit time."
-                        }
-
-
-                        location.trim().length < 3 -> {
-
-                            errorMessage =
-                                "Enter the physical visit location."
+                        !locationReady || location.trim().length < 3 -> {
+                            errorMessage = "Save the practice location and map pin first."
                         }
 
 
@@ -2853,4 +2848,72 @@ private fun formatInvoiceAmount(
     return "${invoice.currency} %.2f".format(
         amount
     )
+}
+
+// Dedicated doctor follow-up inbox. A request has its own card and workflow;
+// invoices are shown in a SEPARATE section and are never ordinary appointments.
+@Composable
+fun DoctorPhysicalFollowUpsScreen(onBack: () -> Unit) {
+    BackHandler(onBack = onBack)
+    var requests by remember { mutableStateOf<List<PhysicalVisitRequest>>(emptyList()) }
+    var invoices by remember { mutableStateOf<List<PhysicalVisitInvoice>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var errors by remember { mutableStateOf<String?>(null) }
+    var revision by remember { mutableStateOf(0) }
+
+    LaunchedEffect(revision) {
+        loading = true
+        errors = null
+        DoctorPatientCareRepository.getMyPhysicalVisitHistory()
+            .onSuccess { requests = it }
+            .onFailure { errors = it.message ?: "Could not load physical follow-ups." }
+        DoctorPatientCareRepository.getMyPhysicalInvoiceHistory()
+            .onSuccess { invoices = it }
+            .onFailure { errors = listOfNotNull(errors, it.message).joinToString(". ")
+                .ifBlank { "Could not load physical invoices." } }
+        loading = false
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize()
+            .background(DoctorColors.Background)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth()
+                .background(DoctorColors.Surface).padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Outlined.ArrowBack, contentDescription = "Back", tint = DoctorColors.Ink)
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Physical follow-ups", color = DoctorColors.Ink,
+                    fontWeight = FontWeight.ExtraBold, fontSize = 19.sp)
+                Text("Requests, invoices and patient decisions", fontSize = 11.sp,
+                    color = DoctorColors.Muted)
+            }
+            IconButton(onClick = { revision++ }) {
+                Icon(Icons.Outlined.Refresh, contentDescription = "Refresh",
+                    tint = DoctorColors.Teal)
+            }
+        }
+        errors?.let {
+            Text(it, modifier = Modifier.padding(16.dp),
+                color = DoctorColors.Red, fontSize = 12.sp)
+        }
+        if (loading) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = DoctorColors.Teal)
+            }
+        } else {
+            // Individual cards include Accept/Decline, then Issue Invoice.
+            // Invoice cards below are separate and reflect patient decision.
+            PhysicalVisitContent(
+                requests = requests,
+                invoices = invoices,
+                onRequestUpdated = { revision++ }
+            )
+        }
+    }
 }

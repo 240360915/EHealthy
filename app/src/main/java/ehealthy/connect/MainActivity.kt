@@ -1641,12 +1641,14 @@ fun AppNavGraph(pendingRoute: String? = null) {
         composable("doctorPhysicalFollowUps") {
             DoctorPhysicalFollowUpsScreen(
                 initialFilter = "pending",
+                onOpenPracticeLocation = { navController.navigate("doctorPracticeLocation") },
                 onBack = { navController.popBackStack() }
             )
         }
         composable("doctorAcceptedFollowUps") {
             DoctorPhysicalFollowUpsScreen(
                 initialFilter = "accepted",
+                onOpenPracticeLocation = { navController.navigate("doctorPracticeLocation") },
                 onBack = { navController.popBackStack() }
             )
         }

@@ -235,6 +235,15 @@ fun AppNavGraph(pendingRoute: String? = null) {
         }
     }
 
+    // Call routes may be launched directly from notifications with no previous destination.
+    // Always replace an ended call with the signed-in role's home screen.
+    fun returnHomeAfterCall(isDoctor: Boolean) {
+        navController.navigate(if (isDoctor) "doctorDashboard" else "patientDashboard") {
+            popUpTo(navController.graph.id) { inclusive = false }
+            launchSingleTop = true
+        }
+    }
+
     fun doctorBackToDashboard() {
         val wentBack =
             navController.popBackStack()
@@ -289,9 +298,7 @@ fun AppNavGraph(pendingRoute: String? = null) {
                     "Patient"
                 },
                 isDoctorView = isDoctor,
-                onBack = {
-                    navController.popBackStack()
-                }
+                onBack = { returnHomeAfterCall(isDoctor) }
             )
         }
         composable("splash") {
@@ -1633,9 +1640,7 @@ fun AppNavGraph(pendingRoute: String? = null) {
                         Result.failure(e)
                     }
                 },
-                onBack = {
-                    doctorBackToDashboard()
-                }
+                onBack = { returnHomeAfterCall(true) }
             )
         }
 
@@ -2639,7 +2644,7 @@ fun AppNavGraph(pendingRoute: String? = null) {
                         Result.failure(e)
                     }
                 },
-                onBack = { navController.popBackStack() },
+                onBack = { returnHomeAfterCall(false) },
                 onReschedule = {
                     // Preserve the originating page on the back stack.
                     navController.navigate("rescheduleAppointment/$appointmentId") {

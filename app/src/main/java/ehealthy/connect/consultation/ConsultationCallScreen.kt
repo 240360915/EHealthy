@@ -60,6 +60,7 @@ import io.getstream.video.android.model.User
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 
 private val consultationBackground get() = AdaptiveColors.background
@@ -613,51 +614,49 @@ fun ConsultationCallScreen(
         }
     }
 
-    fun finishConsultation(
-        activeCall: Call
-    ) {
+    // CallContent may dispatch both back and LeaveCall for the same tap.
+    // End once, then leave even if a slow RPC fails or times out.
+    var endingCall by remember { mutableStateOf(false) }
+
+    fun finishConsultation(activeCall: Call) {
+        if (endingCall) return
+        endingCall = true
         coroutineScope.launch {
-
-            if (scheduledAppointmentId != null) {
-                (scheduledOnEnd?.invoke() ?: Result.failure(
-                    IllegalStateException("Missing scheduled end-call handler.")
-                )).onFailure { error ->
-                    android.util.Log.e(
-                        "ScheduledCall", "Could not mark appointment call ended", error
-                    )
-                }
-            } else {
-                DoctorLiveConsultationRepository
-                    .endConsultation(requestId)
-                    .onFailure { error ->
-                        android.util.Log.e(
-                            "ConsultationCall",
-                            "Could not mark consultation as completed",
-                            error
+            try {
+                val ended = withTimeoutOrNull(6_000L) {
+                    if (scheduledAppointmentId != null) {
+                        scheduledOnEnd?.invoke() ?: Result.failure(
+                            IllegalStateException("Missing scheduled end-call handler.")
                         )
+                    } else {
+                        DoctorLiveConsultationRepository.endConsultation(requestId)
                     }
-            }
-
-            try {
-                activeCall.leave()
+                }
+                if (ended == null) {
+                    android.util.Log.w("ConsultationCall", "End-call sync timed out; leaving locally")
+                } else {
+                    ended.onFailure { error ->
+                        android.util.Log.e("ConsultationCall", "Could not sync call completion", error)
+                    }
+                }
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: Exception) {
-
-                android.util.Log.e(
-                    "ConsultationCall",
-                    "Could not leave Stream call",
-                    error
-                )
+                android.util.Log.e("ConsultationCall", "End-call sync failed", error)
+            } finally {
+                try {
+                    activeCall.leave()
+                } catch (error: Exception) {
+                    android.util.Log.e("ConsultationCall", "Could not leave Stream call", error)
+                }
+                try {
+                    StreamVideo.removeClient()
+                } catch (_: Exception) {
+                }
+                onBack()
             }
-
-            try {
-                StreamVideo.removeClient()
-            } catch (_: Exception) {
-            }
-
-            onBack()
         }
     }
-
 
     VideoTheme {
 

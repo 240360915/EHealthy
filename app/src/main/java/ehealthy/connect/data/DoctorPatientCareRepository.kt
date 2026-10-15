@@ -284,11 +284,6 @@ object DoctorPatientCareRepository {
                     )
 
                     put(
-                        "p_currency",
-                        "ZAR"
-                    )
-
-                    put(
                         "p_proposed_date",
                         proposedDate.trim()
                     )
@@ -313,7 +308,7 @@ object DoctorPatientCareRepository {
                 .postgrest
                 .rpc(
                     function =
-                        "doctor_issue_physical_visit_invoice",
+                        "doctor_create_physical_visit_invoice",
                     parameters =
                         parameters
                 )

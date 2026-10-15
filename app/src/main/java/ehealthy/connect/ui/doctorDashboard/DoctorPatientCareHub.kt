@@ -1787,6 +1787,18 @@ private fun PhysicalVisitInvoiceDialog(
     var location by remember { mutableStateOf("") }
     var locationReady by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    var notes by remember {
+        mutableStateOf("")
+    }
+
+    var errorMessage by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    var isSaving by remember {
+        mutableStateOf(false)
+    }
+
     LaunchedEffect(requestId) {
         DoctorPatientCareRepository.getMyInvoiceLocation()
             .onSuccess {
@@ -1801,19 +1813,6 @@ private fun PhysicalVisitInvoiceDialog(
                 errorMessage = it.message ?: "Could not load your saved practice location."
             }
     }
-
-    var notes by remember {
-        mutableStateOf("")
-    }
-
-    var errorMessage by remember {
-        mutableStateOf<String?>(null)
-    }
-
-    var isSaving by remember {
-        mutableStateOf(false)
-    }
-
 
     AlertDialog(
         onDismissRequest = {

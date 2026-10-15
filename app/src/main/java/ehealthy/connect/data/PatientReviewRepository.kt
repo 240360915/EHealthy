@@ -1,27 +1,45 @@
 package ehealthy.connect.data
 
 import ehealthy.connect.data.patient.PatientAppointment
-import ehealthy.connect.data.patient.PatientRepository
 import ehealthy.connect.util.SupabaseClientProvider
 import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.query.Columns
+import kotlinx.serialization.Serializable
 
+/**
+ * Visit reviews use the appointment which My Visits already loaded for
+ * the signed-in patient. Never search a second, broader appointment list.
+ *
+ * The database enforces ownership, completed status and one review per visit.
+ */
 object PatientReviewRepository {
 
     private val supabase
         get() = SupabaseClientProvider.client
 
-    suspend fun hasReviewed(
-        appointmentId: String
-    ): Result<Boolean> = runCatching {
+    @Serializable
+    private data class ReviewId(val id: String)
 
-        PatientRepository
-            .getMyReviews()
-            .getOrThrow()
-            .any { item ->
+    suspend fun hasReviewed(appointment: PatientAppointment): Result<Boolean> = runCatching {
+        val patientId = appointment.patient_id
+            ?.takeIf { it.isNotBlank() }
+            ?: error("This visit does not have a patient record. Refresh My Visits.")
 
-                item.review.appointment_id ==
-                        appointmentId
+        require(appointment.id.isNotBlank()) {
+            "This visit does not have an appointment ID. Refresh My Visits."
+        }
+
+        // Query only this visit's reviews; do not reload the patient profile,
+        // all reviews, or unrelated doctor profiles just to check duplicates.
+        supabase.from("reviews")
+            .select(columns = Columns.list("id")) {
+                filter {
+                    eq("patient_id", patientId)
+                    eq("appointment_id", appointment.id)
+                }
             }
+            .decodeList<ReviewId>()
+            .isNotEmpty()
     }
 
     suspend fun submitReview(
@@ -29,62 +47,34 @@ object PatientReviewRepository {
         rating: Int,
         comment: String
     ): Result<Unit> = runCatching {
+        require(rating in 1..5) { "Please choose a rating between 1 and 5." }
 
-        require(rating in 1..5) {
-            "Rating must be between 1 and 5."
-        }
-
-        // My Visits has already loaded this exact patient-owned appointment.
-        // Re-fetching the entire appointment list on Submit could wrongly
-        // report it missing even though it is visible as completed.
-        val patientId = PatientRepository.getMyProfile().getOrThrow().id
-        require(appointment.id.isNotBlank() && appointment.patient_id == patientId) {
-            "This appointment is not linked to your patient account. Refresh My Visits."
-        }
+        val appointmentId = appointment.id.takeIf { it.isNotBlank() }
+            ?: error("This visit does not have an appointment ID. Refresh My Visits.")
+        val patientId = appointment.patient_id?.takeIf { it.isNotBlank() }
+            ?: error("This visit does not have a patient record. Refresh My Visits.")
+        val doctorId = appointment.doctor_id?.takeIf { it.isNotBlank() }
+            ?: error("This visit does not have a doctor record. Refresh My Visits.")
 
         check(appointment.status.equals("completed", ignoreCase = true)) {
             "Only completed appointments can be reviewed."
         }
 
-        val doctorId = appointment.doctor_id
-            ?.takeIf { it.isNotBlank() }
-            ?: error("The doctor for this appointment could not be found.")
-        val appointmentId = appointment.id
-
-        val alreadyReviewed =
-            hasReviewed(
-                appointmentId
-            )
-                .getOrThrow()
-
-        if (alreadyReviewed) {
-
-            error(
-                "You have already reviewed this appointment."
-            )
+        check(!hasReviewed(appointment).getOrThrow()) {
+            "You have already reviewed this appointment."
         }
 
-        // patientId above is patients.id (never auth.users.id).
-
-        val cleanedComment =
-            comment
-                .trim()
-                .takeIf {
-                    it.isNotBlank()
-                }
-
-        supabase
-            .from("reviews")
-            .insert(
-                mapOf(
-                    "patient_id" to patientId,
-                    "doctor_id" to doctorId,
-                    "appointment_id" to appointmentId,
-                    "rating" to rating,
-                    "comment" to cleanedComment
-                )
+        // Server-side RLS independently verifies the active user's patient
+        // profile, appointment ownership, the doctor and completed status.
+        supabase.from("reviews").insert(
+            mapOf(
+                "patient_id" to patientId,
+                "doctor_id" to doctorId,
+                "appointment_id" to appointmentId,
+                "rating" to rating,
+                "comment" to comment.trim().takeIf { it.isNotBlank() }
             )
-
+        )
         Unit
     }
 }

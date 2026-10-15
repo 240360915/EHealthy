@@ -1,6 +1,20 @@
 package ehealthy.connect.ui.doctorDashboard
 
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.Context
+import android.content.pm.PackageManager
+import android.location.Geocoder
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
+import android.os.Build
+import android.os.CancellationSignal
+import android.os.Looper
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -14,6 +28,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Map
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.MyLocation
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.runtime.*
@@ -23,6 +39,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 import ehealthy.connect.util.SupabaseClientProvider
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -49,6 +70,12 @@ fun DoctorPracticeLocationScreen(onBack: () -> Unit) {
     var loading by remember { mutableStateOf(true) }
     var saving by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    var searchText by remember { mutableStateOf("") }
+    var searching by remember { mutableStateOf(false) }
+    var locating by remember { mutableStateOf(false) }
+    var selectionHint by remember { mutableStateOf<String?>(null) }
+    // Increment only for GPS/search. Manual drags do not recenter the map.
+    var mapMoveRevision by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(Unit) {
         try {
@@ -67,6 +94,52 @@ fun DoctorPracticeLocationScreen(onBack: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val context = androidx.compose.ui.platform.LocalContext.current
     var saved by remember { mutableStateOf(false) }
+
+    suspend fun selectCurrentLocation() {
+        locating = true
+        message = null
+        try {
+            val point = getDoctorCurrentLocation(context)
+            if (point == null) {
+                message = "Unable to get a fresh device location. Enable Location services, " +
+                    "try again outdoors, or search for the clinic and set a pin manually."
+            } else {
+                latitude = point.latitude
+                longitude = point.longitude
+                // Reverse geocoding is optional: don't prevent pin placement if unavailable.
+                val nearbyAddress = withContext(Dispatchers.IO) {
+                    @Suppress("DEPRECATION")
+                    runCatching {
+                        Geocoder(context, Locale.getDefault())
+                            .getFromLocation(point.latitude, point.longitude, 1)
+                            ?.firstOrNull()?.getAddressLine(0)
+                    }.getOrNull()
+                }
+                if (address.isBlank() && !nearbyAddress.isNullOrBlank()) {
+                    address = nearbyAddress
+                }
+                mapMoveRevision++
+                saved = false
+                selectionHint = "Current position selected as a draft pin. " +
+                    "Move it to your actual practice entrance and tap Save practice location."
+            }
+        } catch (error: Exception) {
+            message = error.message ?: "Location is unavailable. Search or place the pin manually."
+        } finally {
+            locating = false
+        }
+    }
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        if (permissions.values.any { it }) {
+            scope.launch { selectCurrentLocation() }
+        } else {
+            message = "Location permission was declined. You can still search or tap the map."
+        }
+    }
+
     val ready = !loading && !saving && name.trim().length >= 2 &&
         address.trim().length >= 3 && latitude != null && longitude != null
 
@@ -168,10 +241,95 @@ fun DoctorPracticeLocationScreen(onBack: () -> Unit) {
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                     }
-                    Text("Pan and zoom, then tap or drag the marker to the right spot.",
+                    Text("Use GPS, search for a place, or tap and drag the pin. " +
+                        "Only the saved practice pin is shared with patients.",
                         modifier = Modifier.padding(horizontal = 16.dp),
                         color = colors.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(
+                        value = searchText,
+                        onValueChange = { searchText = it; message = null },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        label = { Text("Search clinic, street or suburb") },
+                        leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                        singleLine = true
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            enabled = !loading && !searching && searchText.trim().length >= 3,
+                            onClick = {
+                                val query = searchText.trim()
+                                scope.launch {
+                                    searching = true
+                                    message = null
+                                    try {
+                                        val place = withContext(Dispatchers.IO) {
+                                            @Suppress("DEPRECATION")
+                                            Geocoder(context, Locale.getDefault())
+                                                .getFromLocationName(query, 1)
+                                                ?.firstOrNull()
+                                        }
+                                        if (place == null) {
+                                            message = "Place not found. Try a street and city, or tap the map."
+                                        } else {
+                                            latitude = place.latitude
+                                            longitude = place.longitude
+                                            address = place.getAddressLine(0)
+                                                ?.takeIf { it.isNotBlank() } ?: query
+                                            mapMoveRevision++
+                                            saved = false
+                                            selectionHint = "Search result pinned. " +
+                                                "Confirm the entrance, enter a practice name, then save."
+                                        }
+                                    } catch (error: Exception) {
+                                        message = "Place search is unavailable on this device. " +
+                                            "Try again or select the pin manually."
+                                    } finally {
+                                        searching = false
+                                    }
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            if (searching) {
+                                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                            } else Icon(Icons.Outlined.Search, contentDescription = null)
+                            Spacer(Modifier.width(5.dp))
+                            Text("Search")
+                        }
+                        OutlinedButton(
+                            enabled = !loading && !locating,
+                            onClick = {
+                                val granted = listOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                ).any { permission ->
+                                    ContextCompat.checkSelfPermission(context, permission) ==
+                                        PackageManager.PERMISSION_GRANTED
+                                }
+                                if (granted) {
+                                    scope.launch { selectCurrentLocation() }
+                                } else {
+                                    locationPermissionLauncher.launch(
+                                        arrayOf(
+                                            Manifest.permission.ACCESS_FINE_LOCATION,
+                                            Manifest.permission.ACCESS_COARSE_LOCATION
+                                        )
+                                    )
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            if (locating) {
+                                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                            } else Icon(Icons.Outlined.MyLocation, contentDescription = null)
+                            Spacer(Modifier.width(5.dp))
+                            Text("Use GPS")
+                        }
+                    }
                     if (loading) {
                         Box(Modifier.fillMaxWidth().height(300.dp),
                             contentAlignment = androidx.compose.ui.Alignment.Center) {
@@ -180,11 +338,16 @@ fun DoctorPracticeLocationScreen(onBack: () -> Unit) {
                     } else {
                         Box(Modifier.fillMaxWidth().padding(horizontal = 10.dp)
                             .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))) {
-                            PracticePinPicker(latitude, longitude) { lat, lng ->
+                            PracticePinPicker(
+                                latitude = latitude,
+                                longitude = longitude,
+                                moveRevision = mapMoveRevision
+                            ) { lat, lng ->
                                 latitude = lat
                                 longitude = lng
                                 saved = false
                                 message = null
+                                selectionHint = "Draft pin selected. Check the address and save to share it."
                             }
                         }
                     }
@@ -238,6 +401,10 @@ fun DoctorPracticeLocationScreen(onBack: () -> Unit) {
                         style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                 }
             }
+            selectionHint?.let {
+                Text(it, color = colors.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall)
+            }
             message?.let {
                 Text(it, color = if (saved) colors.primary else colors.error,
                     style = MaterialTheme.typography.bodySmall)
@@ -284,8 +451,13 @@ fun DoctorPracticeLocationScreen(onBack: () -> Unit) {
 private fun PracticePinPicker(
     latitude: Double?,
     longitude: Double?,
+    moveRevision: Int,
     onPick: (Double, Double) -> Unit
 ) {
+    val externalSelection = rememberUpdatedState(
+        if (moveRevision > 0 && latitude != null && longitude != null)
+            Pair(latitude, longitude) else null
+    )
     // Default map center is NOT a stored doctor pin.
     val startLat = latitude ?: -25.47
     val startLng = longitude ?: 30.98
@@ -323,6 +495,11 @@ private fun PracticePinPicker(
             });
           }
           $initialMarker
+          window.focusPracticePin=function(lat,lng) {
+            if(!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+            placePin(lat,lng,false);
+            map.setView([lat,lng], Math.max(map.getZoom(),16));
+          };
           map.on('click',function(e){placePin(e.latlng.lat,e.latlng.lng,true)});
           setTimeout(function(){map.invalidateSize()},350);
         </script></body></html>
@@ -333,6 +510,15 @@ private fun PracticePinPicker(
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    externalSelection.value?.let { (lat, lng) ->
+                        view?.evaluateJavascript(
+                            "window.focusPracticePin && window.focusPracticePin($lat,$lng);",
+                            null
+                        )
+                    }
+                }
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                     val uri: Uri = request?.url ?: return false
                     if (uri.scheme != "ehealthy-pin") return false
@@ -346,5 +532,66 @@ private fun PracticePinPicker(
             }
             loadDataWithBaseURL("https://appassets.androidplatform.net/",html,"text/html","UTF-8",null)
         }
+    }, update = { webView ->
+        val point = externalSelection.value
+        if (point != null && webView.tag != moveRevision) {
+            webView.tag = moveRevision
+            webView.evaluateJavascript(
+                "window.focusPracticePin && window.focusPracticePin(${point.first},${point.second});",
+                null
+            )
+        }
     }, modifier = Modifier.fillMaxWidth().height(310.dp))
 }
+
+/** GPS is opt-in. No background tracking, and no position is saved until Save is tapped. */
+@SuppressLint("MissingPermission")
+private suspend fun getDoctorCurrentLocation(context: Context): Location? =
+    withTimeoutOrNull(12_000L) {
+        suspendCancellableCoroutine { continuation ->
+            val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+            val hasFine = ContextCompat.checkSelfPermission(
+                context, Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+            val provider = (if (hasFine)
+                listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+            else
+                listOf(LocationManager.NETWORK_PROVIDER))
+                .firstOrNull { manager.isProviderEnabled(it) }
+
+            if (provider == null) {
+                continuation.resume(null)
+                return@suspendCancellableCoroutine
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val signal = CancellationSignal()
+                continuation.invokeOnCancellation { signal.cancel() }
+                try {
+                    manager.getCurrentLocation(
+                        provider, signal, context.mainExecutor
+                    ) { position ->
+                        if (continuation.isActive) continuation.resume(position)
+                    }
+                } catch (_: Exception) {
+                    if (continuation.isActive) continuation.resume(null)
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                val listener = object : LocationListener {
+                    override fun onLocationChanged(location: Location) {
+                        manager.removeUpdates(this)
+                        if (continuation.isActive) continuation.resume(location)
+                    }
+                }
+                continuation.invokeOnCancellation { manager.removeUpdates(listener) }
+                try {
+                    @Suppress("DEPRECATION")
+                    manager.requestSingleUpdate(provider, listener, Looper.getMainLooper())
+                } catch (_: Exception) {
+                    if (continuation.isActive) continuation.resume(null)
+                }
+            }
+        }
+    }
+

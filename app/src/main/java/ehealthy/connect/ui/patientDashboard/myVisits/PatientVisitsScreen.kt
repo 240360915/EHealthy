@@ -528,6 +528,15 @@ fun PatientVisitsScreen(
                         .isCancelledStatus()
             }
         }
+        // Newest visit date/time first, including completed appointments
+        // that are eligible for reviews.
+        .sortedWith(
+            compareByDescending<PatientAppointment> {
+                it.date ?: it.created_at?.take(10).orEmpty()
+            }.thenByDescending {
+                it.time ?: it.created_at?.substringAfter('T')?.take(8).orEmpty()
+            }
+        )
 
     cancellingAppointment
         ?.let { appointment ->

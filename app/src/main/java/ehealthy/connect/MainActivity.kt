@@ -1505,31 +1505,16 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 },
                 onVerifyCompletionCode = { appointmentId, enteredCode ->
                     try {
-                        val row = SupabaseClientProvider.client.postgrest
-                            .from("appointments")
-                            .select(columns = Columns.list("completion_code")) {
-                                filter { eq("id", appointmentId) }
+                        SupabaseClientProvider.client.postgrest.rpc(
+                            function = "doctor_verify_appointment_completion_code",
+                            parameters = buildJsonObject {
+                                put("p_appointment_id", appointmentId)
+                                put("p_code", enteredCode)
                             }
-                            .decodeSingleOrNull<Map<String, String?>>()
-                        val realCode = row?.get("completion_code")
-
-                        if (realCode.isNullOrBlank()) {
-                            Result.failure(Exception("The patient hasn't requested a completion code yet."))
-                        } else if (realCode != enteredCode) {
-                            Result.failure(Exception("Incorrect code — please try again."))
-                        } else {
-                            SupabaseClientProvider.client.postgrest.from("appointments")
-                                .update({
-                                    set("status", "completed")
-                                    set("funds_released", true)
-                                    set("completion_code_verified", true)
-                                }) {
-                                    filter { eq("id", appointmentId) }
-                                }
-                            Result.success(Unit)
-                        }
+                        )
+                        Result.success(Unit)
                     } catch (e: Exception) {
-                        Result.failure(e)
+                        Result.failure(Exception(friendlyAuthError(e)))
                     }
                 }
             )

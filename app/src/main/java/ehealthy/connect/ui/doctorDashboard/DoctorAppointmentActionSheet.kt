@@ -496,7 +496,9 @@ fun DoctorAppointmentActionSheet(
             }
 
             if (
-                status == "confirmed" ||
+                (status == "confirmed" &&
+                    (appointment.appointment_type != "online" ||
+                        !appointment.call_ended_at.isNullOrBlank())) ||
                 (status == "completed" &&
                     appointment.appointment_type == "online" &&
                     !appointment.call_ended_at.isNullOrBlank() &&

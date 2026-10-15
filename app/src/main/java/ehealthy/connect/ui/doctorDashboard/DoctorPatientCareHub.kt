@@ -1242,14 +1242,21 @@ private fun PhysicalRequestCard(
             )
 
 
-            Text(
-                text =
-                    request.reason,
-                color =
-                    DoctorColors.Ink,
-                fontSize =
-                    13.sp
-            )
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(13.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Text(
+                    text = request.reason,
+                    modifier = Modifier.fillMaxWidth().padding(13.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
 
 
             request
@@ -2880,7 +2887,8 @@ private fun formatInvoiceAmount(
 @Composable
 fun DoctorPhysicalFollowUpsScreen(
     onBack: () -> Unit,
-    initialFilter: String = "pending"
+    initialFilter: String = "pending",
+    onOpenPracticeLocation: () -> Unit = {}
 ) {
     BackHandler(onBack = onBack)
     var requests by remember { mutableStateOf<List<PhysicalVisitRequest>>(emptyList()) }
@@ -2939,6 +2947,59 @@ fun DoctorPhysicalFollowUpsScreen(
                     onClick = { selectedFilter = value },
                     label = { Text(label) }
                 )
+            }
+        }
+        if (selectedFilter == "accepted") {
+            Card(
+                modifier = Modifier.fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(9.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Outlined.MedicalServices,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(26.dp)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "Accepted follow-up requests",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                "Requests awaiting a proposed visit invoice",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                        Text(
+                            requests.count { it.status.equals("accepted", true) }.toString(),
+                            fontWeight = FontWeight.ExtraBold, fontSize = 23.sp,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                    Text(
+                        "Each accepted request has its own card. Choose Create invoice to propose a date, time and fee, using your saved practice map pin.",
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Button(
+                        onClick = onOpenPracticeLocation,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("View or update practice map pin") }
+                }
             }
         }
         errors?.let {

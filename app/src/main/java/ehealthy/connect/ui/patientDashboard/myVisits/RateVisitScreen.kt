@@ -1180,6 +1180,10 @@ private fun ratingDescription(
 private fun friendlyReviewError(message: String?): String {
     val value = message.orEmpty()
     return when {
+        value.contains("Serializer for class", ignoreCase = true) ||
+            value.contains("SerializationException", ignoreCase = true) ->
+            "The app could not format this review. Please update to the latest build and try again."
+
         value.contains("already reviewed", ignoreCase = true) ||
             value.contains("duplicate key", ignoreCase = true) ||
             value.contains("23505") ->

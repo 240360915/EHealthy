@@ -50,6 +50,7 @@ import ehealthy.connect.ui.common.normalizeEmail
 import ehealthy.connect.ui.doctorDashboard.DoctorAccountSettings
 import ehealthy.connect.ui.doctorDashboard.DoctorDashboard
 import ehealthy.connect.ui.doctorDashboard.DoctorPhysicalFollowUpsScreen
+import ehealthy.connect.ui.doctorDashboard.DoctorPracticeLocationScreen
 import ehealthy.connect.ui.doctorDashboard.DoctorDemoEarningsScreen
 import ehealthy.connect.ui.doctorDashboard.DoctorPatientCareFileScreen
 import ehealthy.connect.ui.doctorDashboard.DoctorForgotPassword
@@ -141,6 +142,7 @@ import ehealthy.connect.ui.patientDashboard.myVisits.RescheduleAppointmentScreen
 import ehealthy.connect.ui.doctorDashboard.RefillRequest
 import ehealthy.connect.ui.patientDashboard.PatientNotificationsScreen
 import ehealthy.connect.ui.patientDashboard.PatientInvoicesScreen
+import ehealthy.connect.ui.patientDashboard.PatientAcceptedFollowUpsScreen
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import ehealthy.connect.ui.doctorDashboard.DoctorPatientCareHub
@@ -1416,6 +1418,8 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 onNavigateAvailability = { navController.navigate("doctorAvailability") },
                 onNavigateNotifications = { navController.navigate("doctorNotifications") },
                 onOpenPhysicalFollowUps = { navController.navigate("doctorPhysicalFollowUps") },
+                onOpenAcceptedFollowUps = { navController.navigate("doctorAcceptedFollowUps") },
+                onOpenPracticeLocation = { navController.navigate("doctorPracticeLocation") },
                 doctorProfile = doctorProfile,
                 isLoadingProfile = isLoadingProfile,
                 isUploadingPhoto = isUploadingPhoto,
@@ -1636,8 +1640,18 @@ fun AppNavGraph(pendingRoute: String? = null) {
 
         composable("doctorPhysicalFollowUps") {
             DoctorPhysicalFollowUpsScreen(
+                initialFilter = "pending",
                 onBack = { navController.popBackStack() }
             )
+        }
+        composable("doctorAcceptedFollowUps") {
+            DoctorPhysicalFollowUpsScreen(
+                initialFilter = "accepted",
+                onBack = { navController.popBackStack() }
+            )
+        }
+        composable("doctorPracticeLocation") {
+            DoctorPracticeLocationScreen(onBack = { navController.popBackStack() })
         }
 
         composable(
@@ -2312,6 +2326,13 @@ fun AppNavGraph(pendingRoute: String? = null) {
             )
         }
 
+        composable("patientAcceptedFollowUps") {
+            PatientAcceptedFollowUpsScreen(
+                onBack = { navController.popBackStack() },
+                onOpenInvoices = { navController.navigate("patientInvoices") }
+            )
+        }
+
         composable("patientDashboard") {
             val scope = rememberCoroutineScope()
             val appContext = LocalContext.current
@@ -2421,6 +2442,9 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 },
                 onNavigateInvoices = {
                     navController.navigate("patientInvoices")
+                },
+                onNavigateAcceptedFollowUps = {
+                    navController.navigate("patientAcceptedFollowUps")
                 },
 
                 onNavigateSettings = {

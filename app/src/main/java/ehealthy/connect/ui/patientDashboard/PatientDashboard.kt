@@ -93,7 +93,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import ehealthy.connect.data.patient.PatientAppointment
 import ehealthy.connect.data.patient.PhysicalVisitRequest
-import ehealthy.connect.data.patient.PhysicalVisitInvoice
 import ehealthy.connect.data.patient.PatientRepository
 import ehealthy.connect.data.patient.PatientReviewDisplay
 import ehealthy.connect.ml.DoctorRecommendation
@@ -306,7 +305,7 @@ fun PatientDashboard(
     // dedicated routes for direct dashboard shortcuts (see README).
     onNavigateHealthProfile: () -> Unit = onNavigateSettings,
     onNavigateInvoices: () -> Unit = onNavigateSettings,
-    onNavigateAcceptedFollowUps: () -> Unit = onNavigateAppointments
+    onNavigateFollowUps: () -> Unit = onNavigateAppointments
 ) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -314,7 +313,6 @@ fun PatientDashboard(
     var selectedTab by remember { mutableStateOf(PatientTab.HOME) }
     var appointments by remember { mutableStateOf<List<Appointment>>(emptyList()) }
     var homePhysicalRequests by remember { mutableStateOf<List<PhysicalVisitRequest>>(emptyList()) }
-    var homePhysicalInvoices by remember { mutableStateOf<List<PhysicalVisitInvoice>>(emptyList()) }
     var reviews by remember { mutableStateOf<List<ReviewDisplay>>(emptyList()) }
     var unreadNotificationCount by remember {
         mutableStateOf(0)
@@ -418,8 +416,6 @@ fun PatientDashboard(
             // The same patient-owned request and invoice sources as My Visits.
             PatientRepository.getMyPhysicalVisitRequests()
                 .onSuccess { homePhysicalRequests = it }
-            PatientRepository.getMyPhysicalVisitInvoices()
-                .onSuccess { homePhysicalInvoices = it }
         }
     }
 
@@ -498,7 +494,6 @@ fun PatientDashboard(
                 patientName = patientName,
                 appointments = appointments,
                 physicalRequests = homePhysicalRequests,
-                physicalInvoices = homePhysicalInvoices,
                 upcomingAppointments = upcomingAppointments,
                 nextAppointment = nextAppointment,
                 reviews = reviews,
@@ -517,7 +512,7 @@ fun PatientDashboard(
                 onNavigateHealthTips = onNavigateHealthTips,
                 onNavigateHealthProfile = onNavigateHealthProfile,
                 onNavigateInvoices = onNavigateInvoices,
-                onNavigateAcceptedFollowUps = onNavigateAcceptedFollowUps,
+                onNavigateFollowUps = onNavigateFollowUps,
                 onNavigateNotifications = onNavigateNotifications,
                 onAppointmentClick = { selectedAppointment = it },
                 onStartCall = onStartCall
@@ -1035,7 +1030,6 @@ private fun ModernHomeTab(
     patientName: String,
     appointments: List<Appointment>,
     physicalRequests: List<PhysicalVisitRequest>,
-    physicalInvoices: List<PhysicalVisitInvoice>,
     upcomingAppointments: List<Appointment>,
     nextAppointment: Appointment?,
     reviews: List<ReviewDisplay>,
@@ -1054,7 +1048,7 @@ private fun ModernHomeTab(
     onNavigateHealthTips: () -> Unit,
     onNavigateHealthProfile: () -> Unit,
     onNavigateInvoices: () -> Unit,
-    onNavigateAcceptedFollowUps: () -> Unit,
+    onNavigateFollowUps: () -> Unit,
     onNavigateNotifications: () -> Unit,
     onAppointmentClick: (Appointment) -> Unit,
     onStartCall: (String) -> Unit
@@ -1154,100 +1148,25 @@ private fun ModernHomeTab(
 
         item { OnDemandCareHero(onClick = onNavigateConsultations) }
 
-        // These are existing in-person follow-up requests, NOT appointments.
-        // The full request and invoicing workflow remains in My Visits /
-        // My Invoices; this is only a quick-access status card per request.
-        if (physicalRequests.isNotEmpty()) {
-            item {
-                SectionHeader(
-                    title = "In-person follow-ups",
-                    subtitle = "Pending requests here; accepted visits and doctor maps on their own screen"
-                )
-            }
-            if (physicalRequests.any {
-                    it.status.lowercase() in setOf("accepted","invoiced","patient_accepted")
-                }) {
-                item {
-                    Button(
-                        onClick = onNavigateAcceptedFollowUps,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp)
-                    ) {
-                        Text("View accepted follow-ups & practice maps")
-                    }
-                }
-            }
-            items(
-                physicalRequests.filter { it.status.equals("pending", true) }.take(3),
-                key = { "physical_home_" + it.id }
-            ) { request ->
-                val invoice = physicalInvoices.firstOrNull { it.request_id == request.id }
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(15.dp),
-                        verticalArrangement = Arrangement.spacedBy(7.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Outlined.CalendarMonth,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(Modifier.width(9.dp))
-                            Text(
-                                "In-person follow-up",
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                when (request.status.lowercase()) {
-                                    "pending" -> "Awaiting doctor"
-                                    "accepted" -> "Doctor accepted"
-                                    "invoiced" -> "Invoice sent"
-                                    "patient_accepted" -> "Visit accepted"
-                                    "patient_declined" -> "Invoice declined"
-                                    "declined" -> "Request declined"
-                                    else -> request.status.replace('_',' ')
-                                },
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        Text(
-                            request.reason,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 12.sp
-                        )
-                        if (invoice != null) {
-                            Text(
-                                "Invoice: ${invoice.status.replace('_',' ')} · R${"%.2f".format(invoice.amount_minor / 100.0)}",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Button(
-                            onClick = if (invoice != null) onNavigateInvoices else onNavigateAppointments,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(if (invoice != null) "Review invoice" else "View follow-up in My Visits")
-                        }
-                    }
-                }
-            }
-            if (physicalRequests.count { it.status.equals("pending", true) } > 3) {
-                item {
-                    TextButton(
-                        onClick = onNavigateAppointments,
-                        modifier = Modifier.padding(horizontal = 18.dp)
-                    ) { Text("See all follow-up requests") }
-                }
+        // One entry point for every request; details and maps live on their own screens.
+        item {
+            SectionHeader(
+                title = "In-person follow-ups",
+                subtitle = if (physicalRequests.isEmpty())
+                    "Review your requests, accepted visits and practice maps"
+                else
+                    physicalRequests.size.toString() + " requests · see statuses and accepted visits"
+            )
+        }
+        item {
+            Button(
+                onClick = onNavigateFollowUps,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Icon(Icons.Outlined.CalendarMonth, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("View Follow Ups")
             }
         }
 

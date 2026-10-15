@@ -1,5 +1,6 @@
 package ehealthy.connect.data
 
+import ehealthy.connect.data.patient.PatientAppointment
 import ehealthy.connect.data.patient.PatientRepository
 import ehealthy.connect.util.SupabaseClientProvider
 import io.github.jan.supabase.postgrest.from
@@ -24,45 +25,31 @@ object PatientReviewRepository {
     }
 
     suspend fun submitReview(
-        appointmentId: String,
+        appointment: PatientAppointment,
         rating: Int,
         comment: String
     ): Result<Unit> = runCatching {
 
-        require(
-            rating in 1..5
-        ) {
+        require(rating in 1..5) {
             "Rating must be between 1 and 5."
         }
 
-        val appointment =
-            PatientRepository
-                .getMyAppointments()
-                .getOrThrow()
-                .firstOrNull {
-                    it.id == appointmentId
-                }
-                ?: error(
-                    "Appointment not found."
-                )
-
-        if (
-            !appointment.status.equals(
-                "completed",
-                ignoreCase = true
-            )
-        ) {
-
-            error(
-                "Only completed appointments can be reviewed."
-            )
+        // My Visits has already loaded this exact patient-owned appointment.
+        // Re-fetching the entire appointment list on Submit could wrongly
+        // report it missing even though it is visible as completed.
+        val patientId = PatientRepository.getMyProfile().getOrThrow().id
+        require(appointment.id.isNotBlank() && appointment.patient_id == patientId) {
+            "This appointment is not linked to your patient account. Refresh My Visits."
         }
 
-        val doctorId =
-            appointment.doctor_id
-                ?: error(
-                    "The doctor for this appointment could not be found."
-                )
+        check(appointment.status.equals("completed", ignoreCase = true)) {
+            "Only completed appointments can be reviewed."
+        }
+
+        val doctorId = appointment.doctor_id
+            ?.takeIf { it.isNotBlank() }
+            ?: error("The doctor for this appointment could not be found.")
+        val appointmentId = appointment.id
 
         val alreadyReviewed =
             hasReviewed(
@@ -77,17 +64,7 @@ object PatientReviewRepository {
             )
         }
 
-        /*
-         * IMPORTANT:
-         *
-         * reviews.patient_id uses patients.id,
-         * NOT auth.users.id.
-         */
-        val patientId =
-            PatientRepository
-                .getMyProfile()
-                .getOrThrow()
-                .id
+        // patientId above is patients.id (never auth.users.id).
 
         val cleanedComment =
             comment

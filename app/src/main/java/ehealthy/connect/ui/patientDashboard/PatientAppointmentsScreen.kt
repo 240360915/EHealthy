@@ -1007,19 +1007,20 @@ private fun AppointmentListDetailsDialog(
 
 
     val statusLabel =
-        when (appt.status) {
+        when {
+            appt.status.equals("confirmed", ignoreCase = true) &&
+                !appt.call_ended_at.isNullOrBlank() ->
+                "Call ended · Review pending"
 
-            "confirmed" ->
+            appt.status.equals("confirmed", ignoreCase = true) ->
                 "Accepted & Paid"
 
-            "cancelled" ->
-                "Rejected & Refunded"
+            appt.status.equals("cancelled", ignoreCase = true) ->
+                "Cancelled"
 
             else ->
                 appt.status
-                    ?.replaceFirstChar {
-                        it.uppercase()
-                    }
+                    ?.replaceFirstChar { it.uppercase() }
                     ?: "Unknown"
         }
 
@@ -2167,19 +2168,20 @@ private fun AppointmentDetailCard(
 
 
     val statusLabel =
-        when (appt.status) {
+        when {
+            appt.status.equals("confirmed", ignoreCase = true) &&
+                !appt.call_ended_at.isNullOrBlank() ->
+                "Call ended · Review pending"
 
-            "confirmed" ->
+            appt.status.equals("confirmed", ignoreCase = true) ->
                 "Accepted & Paid"
 
-            "cancelled" ->
-                "Rejected & Refunded"
+            appt.status.equals("cancelled", ignoreCase = true) ->
+                "Cancelled"
 
             else ->
                 appt.status
-                    ?.replaceFirstChar {
-                        it.uppercase()
-                    }
+                    ?.replaceFirstChar { it.uppercase() }
                     ?: "Unknown"
         }
 

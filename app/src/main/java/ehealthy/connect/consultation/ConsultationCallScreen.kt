@@ -23,6 +23,8 @@ import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.VideoCall
 import ehealthy.connect.data.ProfileRepository
 import ehealthy.connect.data.DoctorLiveConsultationRepository
+import ehealthy.connect.ui.call.ScheduledStreamRepository
+import ehealthy.connect.ui.call.CallAppointmentStatus
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -109,7 +111,12 @@ fun ConsultationCallScreen(
     requestId: String,
     displayName: String,
     isDoctorView: Boolean,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    // Optional appointment mode keeps the broadcast's proven Stream UI and controls.
+    scheduledAppointmentId: String? = null,
+    scheduledFetchStatus: (suspend () -> Result<CallAppointmentStatus>)? = null,
+    scheduledOnJoined: (suspend () -> Result<Unit>)? = null,
+    scheduledOnEnd: (suspend () -> Result<Unit>)? = null
 ) {
 
     val context =
@@ -178,7 +185,8 @@ fun ConsultationCallScreen(
     LaunchedEffect(
         requestId,
         retryKey,
-        mediaPermissionsGranted
+        mediaPermissionsGranted,
+        scheduledAppointmentId
     ) {
 
         if (!mediaPermissionsGranted) {
@@ -194,6 +202,41 @@ fun ConsultationCallScreen(
 
 
         try {
+            val credentials: ConsultationStreamCredentials =
+                if (scheduledAppointmentId != null) {
+                    val statusResult = scheduledFetchStatus?.invoke()
+                        ?: Result.failure(IllegalStateException("Missing appointment verification."))
+                    val appointment = statusResult.getOrElse { error ->
+                        screenState = ConsultationCallState.Error(
+                            error.message ?: "Could not verify this appointment."
+                        )
+                        return@LaunchedEffect
+                    }
+                    if (!appointment.callEndedAt.isNullOrBlank() ||
+                        !appointment.status.equals("confirmed", ignoreCase = true)) {
+                        screenState = ConsultationCallState.Error(
+                            "This scheduled appointment has ended or is no longer confirmed."
+                        )
+                        return@LaunchedEffect
+                    }
+                    // Secure scheduled server verifies matched paid DemoPay,
+                    // active appointment, and each patient/doctor identity.
+                    val c = ScheduledStreamRepository
+                        .getCredentials(scheduledAppointmentId)
+                        .getOrElse { error ->
+                            screenState = ConsultationCallState.Error(
+                                consultationCallMessage(error)
+                            )
+                            return@LaunchedEffect
+                        }
+                    ConsultationStreamCredentials(
+                        token = c.token,
+                        userId = c.userId,
+                        callId = c.callId,
+                        callType = c.callType,
+                        requestId = requestId
+                    )
+                } else {
             // A claimed consultation is still awaiting payment until
             // Supabase creates its paid consultation_sessions row.
             // Never treat a missing room (HTTP 409) as a failed call.
@@ -292,8 +335,10 @@ fun ConsultationCallScreen(
                 pendingCredentials = tokenResult.getOrThrow()
             }
 
-            val credentials = pendingCredentials
-                ?: return@LaunchedEffect
+                pendingCredentials
+                    ?: return@LaunchedEffect
+
+                }
 
             /*
              * Remove any old Stream client.
@@ -427,11 +472,29 @@ fun ConsultationCallScreen(
             // Default to loudspeaker for clear two-way audio; user can change routing in-call.
             streamCall.speaker.setSpeakerPhone(true)
 
-            call =
-                streamCall
+            if (scheduledAppointmentId != null) {
+                val acknowledgement = scheduledOnJoined?.invoke()
+                    ?: Result.failure(IllegalStateException("Missing appointment join confirmation."))
+                if (acknowledgement.isFailure) {
+                    android.util.Log.e(
+                        "ScheduledCall", "Could not acknowledge appointment join",
+                        acknowledgement.exceptionOrNull()
+                    )
+                    streamCall.leave()
+                    screenState = ConsultationCallState.Error(
+                        "The appointment could not be marked joined. " +
+                            "Check that it is confirmed and has not already ended."
+                    )
+                    return@LaunchedEffect
+                }
+            }
 
-
-            screenState =
+            call = streamCall
+            // Broadcast still uses Waiting. A scheduled appointment needs
+            // its local camera preview even before the other device arrives.
+            screenState = if (scheduledAppointmentId != null)
+                ConsultationCallState.InCall
+            else
                 ConsultationCallState.Waiting
 
 
@@ -493,6 +556,29 @@ fun ConsultationCallScreen(
     }
 
 
+    // Close this appointment on the other phone when either participant
+    // hangs up. Broadcast's consultation session flow is untouched.
+    LaunchedEffect(scheduledAppointmentId, currentCall) {
+        if (scheduledAppointmentId == null || currentCall == null) return@LaunchedEffect
+        while (true) {
+            delay(2_000L)
+            val latest = scheduledFetchStatus?.invoke()?.getOrNull() ?: continue
+            if (!latest.callEndedAt.isNullOrBlank()) {
+                currentCall.leave()
+                onBack()
+                break
+            }
+            if (latest.status.equals("cancelled", ignoreCase = true) ||
+                latest.status.equals("expired", ignoreCase = true)) {
+                currentCall.leave()
+                screenState = ConsultationCallState.Error(
+                    "This scheduled appointment was cancelled or expired."
+                )
+                break
+            }
+        }
+    }
+
     /*
      * ---------------------------------------------
      * CLEANUP
@@ -532,16 +618,25 @@ fun ConsultationCallScreen(
     ) {
         coroutineScope.launch {
 
-            DoctorLiveConsultationRepository
-                .endConsultation(requestId)
-                .onFailure { error ->
-
+            if (scheduledAppointmentId != null) {
+                (scheduledOnEnd?.invoke() ?: Result.failure(
+                    IllegalStateException("Missing scheduled end-call handler.")
+                )).onFailure { error ->
                     android.util.Log.e(
-                        "ConsultationCall",
-                        "Could not mark consultation as completed",
-                        error
+                        "ScheduledCall", "Could not mark appointment call ended", error
                     )
                 }
+            } else {
+                DoctorLiveConsultationRepository
+                    .endConsultation(requestId)
+                    .onFailure { error ->
+                        android.util.Log.e(
+                            "ConsultationCall",
+                            "Could not mark consultation as completed",
+                            error
+                        )
+                    }
+            }
 
             try {
                 activeCall.leave()

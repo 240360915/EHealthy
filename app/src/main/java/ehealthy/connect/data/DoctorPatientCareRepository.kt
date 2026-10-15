@@ -8,7 +8,19 @@ import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.serialization.Serializable
 
+
+@Serializable
+data class DoctorInvoicePracticeLocation(
+    val location_name: String? = null,
+    val location_address: String? = null,
+    val has_pin: Boolean = false
+) {
+    val displayAddress: String
+        get() = listOfNotNull(location_name?.takeIf(String::isNotBlank),
+            location_address?.takeIf(String::isNotBlank)).joinToString(" — ")
+}
 
 object DoctorPatientCareRepository {
 
@@ -116,6 +128,34 @@ object DoctorPatientCareRepository {
                 .decodeList<PhysicalVisitRequest>()
         }
 
+
+    /** Doctor's standalone follow-up inbox (all request statuses).
+     * Both this and invoice history are scoped to auth.uid() in Supabase.
+     */
+    suspend fun getMyPhysicalVisitHistory(): Result<List<PhysicalVisitRequest>> =
+        runCatching {
+            supabase.auth.awaitInitialization()
+            supabase.postgrest
+                .rpc(function = "doctor_get_my_physical_visit_history")
+                .decodeList<PhysicalVisitRequest>()
+        }
+
+    suspend fun getMyPhysicalInvoiceHistory(): Result<List<PhysicalVisitInvoice>> =
+        runCatching {
+            supabase.auth.awaitInitialization()
+            supabase.postgrest
+                .rpc(function = "doctor_get_my_physical_invoice_history")
+                .decodeList<PhysicalVisitInvoice>()
+        }
+
+    suspend fun getMyInvoiceLocation(): Result<DoctorInvoicePracticeLocation> =
+        runCatching {
+            supabase.auth.awaitInitialization()
+            supabase.postgrest
+                .rpc(function = "doctor_get_my_invoice_location")
+                .decodeList<DoctorInvoicePracticeLocation>()
+                .firstOrNull() ?: error("Doctor practice location not configured.")
+        }
 
     /*
      * ---------------------------------------------------------

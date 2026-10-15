@@ -261,10 +261,23 @@ fun CallScreen(
     // Observe remote state for a user-facing status, but do not gate
     // CallContent rendering on the remote participant appearing. Stream's
     // media renderer and controls must be mounted on BOTH phones immediately.
-    val remoteParticipantCount = if (currentCall != null) {
+    val remoteParticipant = if (currentCall != null) {
         val participants by currentCall.state.remoteParticipants.collectAsState()
-        participants.size
-    } else 0
+        participants.firstOrNull()
+    } else null
+    val remoteParticipantCount = if (remoteParticipant != null) 1 else 0
+    val remoteVideoPublished = if (remoteParticipant != null) {
+        val remoteVideo by remoteParticipant.video.collectAsState()
+        remoteVideo != null
+    } else false
+    val localParticipant = if (currentCall != null) {
+        val participant by currentCall.state.me.collectAsState()
+        participant
+    } else null
+    val localVideoPublished = if (localParticipant != null) {
+        val myVideo by localParticipant.video.collectAsState()
+        myVideo != null
+    } else false
     val localCameraEnabled = if (currentCall != null) {
         val enabled by currentCall.camera.isEnabled.collectAsState()
         enabled
@@ -363,8 +376,10 @@ fun CallScreen(
                                     modifier = Modifier.weight(1f)
                                 )
                                 Text(
-                                    text = "Camera ${if (localCameraEnabled) "on" else "off"}  •  " +
-                                        "Mic ${if (localMicrophoneEnabled) "on" else "off"}",
+                                    text = "Cam ${if (localCameraEnabled) "on" else "off"} / " +
+                                        "${if (localVideoPublished) "sending" else "not sending"} • " +
+                                        "Mic ${if (localMicrophoneEnabled) "on" else "off"} • " +
+                                        "Other video ${if (remoteVideoPublished) "received" else "missing"}",
                                     color = Color.White,
                                     fontSize = 10.sp
                                 )

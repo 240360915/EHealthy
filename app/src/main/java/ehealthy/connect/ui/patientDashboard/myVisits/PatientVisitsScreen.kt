@@ -1426,8 +1426,8 @@ private fun VisitCard(
             .lowercase()
 
     val isActive =
-        appointment.status
-            .isUpcomingStatus()
+        appointment.status.isUpcomingStatus() &&
+            appointment.call_ended_at.isNullOrBlank()
 
     val isCompleted =
         status == "completed"
@@ -1733,6 +1733,28 @@ private fun VisitCard(
             )
 
             Spacer(Modifier.height(12.dp))
+
+            // Generate an optional clinical handoff code after the call,
+            // even when automated DemoPay completion already ran.
+            if (isOnline &&
+                !appointment.call_ended_at.isNullOrBlank() &&
+                (isCompleted || status == "confirmed")
+            ) {
+                OutlinedButton(
+                    onClick = onCompleteConsultation,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(13.dp)
+                ) {
+                    Icon(Icons.Filled.CheckCircle, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        if (appointment.completion_code.isNullOrBlank())
+                            "Generate 6-digit completion code"
+                        else "Show completion code to doctor"
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+            }
 
             if (
                 isCompleted &&
@@ -2755,38 +2777,6 @@ private fun ActiveVisitActions(
                 Text(
                     "Open scheduled call"
                 )
-            }
-            if (online) {
-
-                OutlinedButton(
-                    onClick =
-                        onCompleteConsultation,
-                    modifier =
-                        Modifier.fillMaxWidth(),
-                    shape =
-                        RoundedCornerShape(
-                            13.dp
-                        )
-                ) {
-
-                    Icon(
-                        imageVector =
-                            Icons.Filled.CheckCircle,
-                        contentDescription =
-                            null
-                    )
-
-                    Spacer(
-                        modifier =
-                            Modifier.width(
-                                7.dp
-                            )
-                    )
-
-                    Text(
-                        "Finish consultation"
-                    )
-                }
             }
         }
 

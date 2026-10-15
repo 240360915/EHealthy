@@ -69,6 +69,8 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -134,7 +136,8 @@ data class Appointment(
     val price_minor: Int? = null,
     val currency: String? = null,
     val completion_code: String? = null,
-    val cancelled_reason: String? = null
+    val cancelled_reason: String? = null,
+    val call_ended_at: String? = null
 )
 
 @Serializable
@@ -186,6 +189,10 @@ private fun Appointment.isUpcoming(
         status
             ?.lowercase()
             .orEmpty()
+
+    // A finished call is not an upcoming appointment even if an older
+    // backend record has not been marked completed yet.
+    if (!call_ended_at.isNullOrBlank()) return false
 
     if (
         currentStatus !in setOf(
@@ -245,7 +252,8 @@ private fun PatientAppointment.toUiAppointment() =
         price_minor = price_minor,
         currency = currency,
         completion_code = completion_code,
-        cancelled_reason = cancelled_reason
+        cancelled_reason = cancelled_reason,
+        call_ended_at = call_ended_at
     )
 
 private fun PatientReviewDisplay.toUiReview() = ReviewDisplay(
@@ -400,6 +408,12 @@ fun PatientDashboard(
         // Load profile and appointments concurrently for a responsive home screen.
         launch { refreshDashboard() }
         launch { refreshSmartRecommendation() }
+    }
+
+    // Navigating back from the call resumes this destination; refresh immediately
+    // so the previous Join Consultation card cannot remain with stale data.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        refreshKey++
     }
 
     LaunchedEffect(Unit) {

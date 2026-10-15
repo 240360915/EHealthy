@@ -140,7 +140,7 @@ fun RateVisitScreen(
 
         PatientReviewRepository
             .hasReviewed(
-                appointment.id
+                appointment
             )
             .onSuccess {
                 alreadyReviewed = it
@@ -564,161 +564,89 @@ private fun VisitReviewCard(
     appointment: PatientAppointment,
     doctor: PatientDoctorSummary?
 ) {
+    val colors = MaterialTheme.colorScheme
 
     ElevatedCard(
-        modifier =
-            Modifier.fillMaxWidth(),
-        shape =
-            RoundedCornerShape(
-                20.dp
-            ),
-        colors =
-            CardDefaults
-                .elevatedCardColors(
-                    containerColor =
-                        MaterialTheme
-                            .colorScheme
-                            .primaryContainer
-                            .copy(
-                                alpha =
-                                    0.45f
-                            )
-                )
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = colors.primaryContainer.copy(alpha = 0.45f)
+        ),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp)
     ) {
-
         Column(
-            modifier =
-                Modifier.padding(
-                    18.dp
-                )
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
         ) {
-
-            Row(
-                verticalAlignment =
-                    Alignment.CenterVertically
+            // The doctor summary is its own inset card with visible margins,
+            // padding and corners; text wraps instead of touching the edges.
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(15.dp),
+                color = colors.surface,
+                tonalElevation = 1.dp
             ) {
-
-                Surface(
-                    shape =
-                        CircleShape,
-                    color =
-                        MaterialTheme
-                            .colorScheme
-                            .primary
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 15.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-
-                    Icon(
-                        imageVector =
-                            Icons.Outlined.Person,
-                        contentDescription =
-                            null,
-                        tint =
-                            MaterialTheme
-                                .colorScheme
-                                .onPrimary,
-                        modifier =
-                            Modifier.padding(
-                                10.dp
-                            )
-                    )
-                }
-
-                Spacer(
-                    modifier =
-                        Modifier.width(
-                            11.dp
+                    Surface(
+                        shape = CircleShape,
+                        color = colors.primary
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Person,
+                            contentDescription = null,
+                            tint = colors.onPrimary,
+                            modifier = Modifier.padding(11.dp)
                         )
-                )
+                    }
 
-                Column {
+                    Spacer(modifier = Modifier.width(12.dp))
 
-                    Text(
-                        text =
-                            doctor
-                                ?.fullName
-                                ?: "Doctor",
-                        fontWeight =
-                            FontWeight.Bold,
-                        fontSize =
-                            16.sp
-                    )
-
-                    Text(
-                        text =
-                            doctor
-                                ?.discipline
-                                ?.takeIf {
-                                    it.isNotBlank()
-                                }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = doctor?.fullName ?: "Doctor",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = colors.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = doctor?.discipline?.takeIf { it.isNotBlank() }
                                 ?: "Medical consultation",
-                        fontSize =
-                            11.5.sp,
-                        color =
-                            MaterialTheme
-                                .colorScheme
-                                .onSurfaceVariant
-                    )
+                            fontSize = 12.sp,
+                            color = colors.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
-            Spacer(
-                modifier =
-                    Modifier.height(
-                        14.dp
-                    )
-            )
+            Spacer(modifier = Modifier.height(16.dp))
 
             ReviewDetailRow(
-                label =
-                    "Date",
-                value =
-                    appointment.date
-                        ?: "Not available"
+                label = "Date",
+                value = appointment.date ?: "Not available"
             )
-
             ReviewDetailRow(
-                label =
-                    "Time",
-                value =
-                    appointment.time
-                        ?.take(
-                            5
-                        )
-                        ?: "Not available"
+                label = "Time",
+                value = appointment.time?.take(5) ?: "Not available"
             )
-
             ReviewDetailRow(
-                label =
-                    "Visit",
-                value =
-                    when (
-                        appointment
-                            .appointment_type
-                    ) {
-
-                        "online" ->
-                            "Online"
-
-                        "in_person" ->
-                            "In person"
-
-                        else ->
-                            "Medical visit"
-                    }
-            )
-
-            appointment.reason
-                ?.takeIf {
-                    it.isNotBlank()
+                label = "Visit",
+                value = when (appointment.appointment_type) {
+                    "online" -> "Online"
+                    "in_person" -> "In person"
+                    else -> "Medical visit"
                 }
-                ?.let {
-
-                    ReviewDetailRow(
-                        label =
-                            "Reason",
-                        value =
-                            it
-                    )
+            )
+            appointment.reason
+                ?.takeIf { it.isNotBlank() }
+                ?.let { reason ->
+                    ReviewDetailRow(label = "Reason", value = reason)
                 }
         }
     }
@@ -1249,41 +1177,37 @@ private fun ratingDescription(
     }
 }
 
-private fun friendlyReviewError(
-    message: String?
-): String {
-
-    val value =
-        message.orEmpty()
-
+private fun friendlyReviewError(message: String?): String {
+    val value = message.orEmpty()
     return when {
-
-        value.contains(
-            "already",
-            ignoreCase = true
-        ) ->
+        value.contains("already reviewed", ignoreCase = true) ||
+            value.contains("duplicate key", ignoreCase = true) ||
+            value.contains("23505") ->
             "You have already reviewed this appointment."
 
-        value.contains(
-            "completed",
-            ignoreCase = true
-        ) ->
-            "You can only review a completed appointment."
+        value.contains("Only completed appointments", ignoreCase = true) ->
+            "Reviews can only be submitted for completed appointments."
 
-        value.contains(
-            "not found",
-            ignoreCase = true
-        ) ->
-            "This appointment could not be found."
+        value.contains("patient record", ignoreCase = true) ||
+            value.contains("doctor record", ignoreCase = true) ||
+            value.contains("appointment ID", ignoreCase = true) ->
+            "Some visit details are missing. Return to My Visits, refresh and try again."
 
-        value.contains(
-            "permission",
-            ignoreCase = true
-        ) ->
-            "You do not have permission to review this appointment."
+        value.contains("row-level security", ignoreCase = true) ||
+            value.contains("row level security", ignoreCase = true) ||
+            value.contains("42501") ||
+            value.contains("permission denied", ignoreCase = true) ->
+            "We couldn't verify permission to review this visit. Sign in again and retry."
+
+        value.contains("foreign key", ignoreCase = true) ||
+            value.contains("23503") ->
+            "This visit is not correctly linked to its doctor or appointment. Refresh My Visits."
+
+        value.contains("not found", ignoreCase = true) ->
+            "A related patient or visit record could not be loaded. Refresh My Visits and try again."
 
         value.isNotBlank() ->
-            value
+            "Review could not be submitted: " + value.take(180)
 
         else ->
             "We couldn't submit your review. Please try again."

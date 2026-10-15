@@ -758,6 +758,7 @@ fun DoctorDashboard(
                     physicalRequestError = physicalRequestError,
                     acceptingPhysicalRequestId = acceptingPhysicalRequestId,
                     onNavigatePhysicalFollowUps = onOpenPhysicalFollowUps,
+                    onStartScheduledCall = onStartCall,
                     onAcceptPhysicalRequest = { request ->
                         if (acceptingPhysicalRequestId == null) {
                             acceptingPhysicalRequestId = request.id
@@ -1029,6 +1030,7 @@ private fun HomeTabContent(
     physicalRequestError: String?,
     acceptingPhysicalRequestId: String?,
     onNavigatePhysicalFollowUps: () -> Unit,
+    onStartScheduledCall: (String) -> Unit,
     onAcceptPhysicalRequest: suspend (PhysicalVisitRequest) -> Unit,
     onReviewPhysicalRequest: (PhysicalVisitRequest) -> Unit,
 
@@ -1073,6 +1075,15 @@ private fun HomeTabContent(
         appointments.mapNotNull { it.patient_name?.takeIf(String::isNotBlank) }.distinct().size
     }
     val nextAppointment = upcoming.firstOrNull()
+    // Reuse the exact video window check from the doctor's appointment sheet.
+    // The homepage must not permit unpaid/unconfirmed or ended consultations.
+    val scheduledOnline = appointments
+        .filter {
+            it.appointment_type.equals("online", ignoreCase = true) &&
+                it.status.equals("confirmed", ignoreCase = true) &&
+                it.call_ended_at.isNullOrBlank()
+        }
+        .sortedWith(compareBy({ it.date ?: "9999-99-99" }, { it.time ?: "99:99" }))
     val liveRequestScope = rememberCoroutineScope()
 
     val greeting = remember {
@@ -1261,6 +1272,83 @@ private fun HomeTabContent(
             }
         }
 
+        // Scheduled appointments use their existing booked room, not a
+        // broadcast/on-demand request. The detailed appointment tab remains
+        // the place for management, and its timing guard is reused here.
+        if (scheduledOnline.isNotEmpty()) {
+            item {
+                DashboardSectionHeader(
+                    title = "Scheduled video consultations",
+                    subtitle = "Join directly when your booked call window opens",
+                    action = "View appointments",
+                    onAction = onNavigateAppointments
+                )
+            }
+            items(scheduledOnline.take(3), key = { "scheduled_video_" + it.id }) { appointment ->
+                val canJoin = canStartScheduledVideoNow(appointment)
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 5.dp),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(15.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Outlined.CameraAlt,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                appointment.patient_name ?: "Scheduled patient",
+                                modifier = Modifier.weight(1f),
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                if (canJoin) "Ready to join" else "Upcoming",
+                                color = if (canJoin) DoctorGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Text(
+                            "${appointment.date ?: "Date pending"} at ${appointment.time?.take(5) ?: "Time pending"}",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Button(
+                            onClick = {
+                                if (canJoin) onStartScheduledCall(appointment.id)
+                                else onNavigateAppointments()
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(if (canJoin) "Start / Join video consultation" else "View appointment details")
+                        }
+                        if (!canJoin) {
+                            Text(
+                                "Video opens five minutes before the scheduled time.",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+            if (scheduledOnline.size > 3) {
+                item {
+                    TextButton(
+                        onClick = onNavigateAppointments,
+                        modifier = Modifier.padding(horizontal = 18.dp)
+                    ) { Text("See all scheduled calls") }
+                }
+            }
+        }
+
         // Independent dashboard card: physical follow-up requests are NOT
         // appointments or invoices. Each request receives its own card in
         // the dedicated Follow-ups screen, with a separate invoice history.
@@ -1314,6 +1402,70 @@ private fun HomeTabContent(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Open follow-up requests & invoices")
+                    }
+                }
+            }
+        }
+
+        // Individual actionable requests stay visible on Home as quick access.
+        // Accepting here uses the SAME secure RPC as the dedicated request screen.
+        if (physicalRequests.isNotEmpty()) {
+            items(physicalRequests.take(3), key = { "home_followup_" + it.id }) { request ->
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 5.dp),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(15.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Outlined.MedicalServices,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                request.patient_name,
+                                modifier = Modifier.weight(1f),
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                if (request.status == "pending") "Pending" else "Accepted",
+                                color = if (request.status == "pending") DoctorAmber else DoctorGreen,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Text(
+                            request.reason,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (request.status == "pending") {
+                                Button(
+                                    modifier = Modifier.weight(1f),
+                                    enabled = acceptingPhysicalRequestId == null,
+                                    onClick = {
+                                        liveRequestScope.launch {
+                                            onAcceptPhysicalRequest(request)
+                                        }
+                                    }
+                                ) {
+                                    Text(if (acceptingPhysicalRequestId == request.id) "Accepting…" else "Accept")
+                                }
+                            }
+                            androidx.compose.material3.OutlinedButton(
+                                modifier = Modifier.weight(1f),
+                                onClick = onNavigatePhysicalFollowUps
+                            ) {
+                                Text(if (request.status == "accepted") "Issue invoice" else "Review / Decline")
+                            }
+                        }
                     }
                 }
             }

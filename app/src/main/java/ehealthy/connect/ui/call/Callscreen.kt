@@ -224,6 +224,11 @@ fun CallScreen(
             streamCall.microphone.setEnabled(true)
             streamCall.camera.setEnabled(true)
             streamCall.speaker.setSpeakerPhone(true)
+            android.util.Log.d(
+                "ScheduledCall",
+                "Joined scheduled room, camera=${streamCall.camera.status.value}, " +
+                    "microphone=${streamCall.microphone.status.value}"
+            )
 
             waitingSince = System.currentTimeMillis()
             screenState = CallScreenState.Waiting
@@ -303,51 +308,64 @@ fun CallScreen(
             when (val state = screenState) {
                 is CallScreenState.Loading -> LoadingState()
                 is CallScreenState.Error -> ErrorState(state.message, onBack)
-                is CallScreenState.Waiting -> WaitingState(isDoctorView)
-                is CallScreenState.OtherPartyNotAvailable -> NotAvailableState(isDoctorView, onReschedule, onBack)
+                is CallScreenState.OtherPartyNotAvailable ->
+                    NotAvailableState(isDoctorView, onReschedule, onBack)
                 is CallScreenState.AppointmentCancelled -> AppointmentCancelledState(onBack)
                 is CallScreenState.NoAnswer -> NoAnswerState(
                     onRetry = { retryKey++ },
                     onBack = onBack
                 )
-                is CallScreenState.InCall -> {
+                is CallScreenState.Waiting, is CallScreenState.InCall -> {
                     currentCall?.let { activeCall ->
+                        // Stream's CallContent owns the local media renderers and
+                        // camera/microphone lifecycle. Mount it IMMEDIATELY after
+                        // joining; waiting until a remote participant arrives can
+                        // leave both devices showing blank video.
                         Column(modifier = Modifier.fillMaxSize()) {
                             RecordingDisclaimerBanner()
+                            if (state is CallScreenState.Waiting) {
+                                Text(
+                                    text = if (isDoctorView)
+                                        "Connecting video · Waiting for patient"
+                                    else
+                                        "Connecting video · Waiting for doctor",
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(navy)
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    color = Color.White,
+                                    textAlign = TextAlign.Center,
+                                    fontSize = 12.sp
+                                )
+                            }
                             CallContent(
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier.fillMaxWidth().weight(1f),
                                 call = activeCall,
                                 onBackPressed = {
                                     scope.launch {
                                         onEndCall()
                                             .onFailure { error ->
                                                 android.util.Log.e(
-                                                    "CallScreen",
-                                                    "Failed to end scheduled consultation",
+                                                    "ScheduledCall",
+                                                    "Could not mark scheduled consultation ended",
                                                     error
                                                 )
                                             }
-
                                         activeCall.leave()
                                         onBack()
                                     }
                                 },
                                 onCallAction = { action ->
-                                    if (
-                                        action is
-                                                io.getstream.video.android.core.call.state.LeaveCall
-                                    ) {
+                                    if (action is io.getstream.video.android.core.call.state.LeaveCall) {
                                         scope.launch {
-
                                             onEndCall()
                                                 .onFailure { error ->
                                                     android.util.Log.e(
-                                                        "CallScreen",
-                                                        "Failed to end scheduled consultation",
+                                                        "ScheduledCall",
+                                                        "Could not mark scheduled consultation ended",
                                                         error
                                                     )
                                                 }
-
                                             activeCall.leave()
                                             onBack()
                                         }
@@ -355,7 +373,7 @@ fun CallScreen(
                                 }
                             )
                         }
-                    }
+                    } ?: LoadingState()
                 }
             }
         }

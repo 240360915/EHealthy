@@ -3302,6 +3302,9 @@ fun AppNavGraph(pendingRoute: String? = null) {
                         "patientInvoices"
                     )
                 },
+                onOpenAcceptedFollowUps = {
+                    navController.navigate("patientAcceptedFollowUps")
+                },
 
                 onOpenPrescriptions = {
                     navController.navigate("patientPrescriptions")

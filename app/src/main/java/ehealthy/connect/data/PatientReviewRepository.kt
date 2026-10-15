@@ -12,6 +12,15 @@ import kotlinx.serialization.Serializable
  *
  * The database enforces ownership, completed status and one review per visit.
  */
+@Serializable
+internal data class VisitReviewInsert(
+    val patient_id: String,
+    val doctor_id: String,
+    val appointment_id: String,
+    val rating: Int,
+    val comment: String?
+)
+
 object PatientReviewRepository {
 
     private val supabase
@@ -66,13 +75,16 @@ object PatientReviewRepository {
 
         // Server-side RLS independently verifies the active user's patient
         // profile, appointment ownership, the doctor and completed status.
+        // A @Serializable request with concrete field types is required here.
+        // mapOf(String, String, String, Int, String?) infers Map<String, Any?>,
+        // which fails before the POST with "Serializer for class 'Any' is not found".
         supabase.from("reviews").insert(
-            mapOf(
-                "patient_id" to patientId,
-                "doctor_id" to doctorId,
-                "appointment_id" to appointmentId,
-                "rating" to rating,
-                "comment" to comment.trim().takeIf { it.isNotBlank() }
+            VisitReviewInsert(
+                patient_id = patientId,
+                doctor_id = doctorId,
+                appointment_id = appointmentId,
+                rating = rating,
+                comment = comment.trim().takeIf { it.isNotBlank() }
             )
         )
         Unit

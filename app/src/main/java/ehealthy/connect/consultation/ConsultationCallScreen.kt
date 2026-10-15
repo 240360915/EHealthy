@@ -2,6 +2,7 @@ package ehealthy.connect.consultation
 
 import android.Manifest
 import android.content.pm.PackageManager
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -658,6 +659,12 @@ fun ConsultationCallScreen(
         }
     }
 
+    // Android back should follow the same safe end-call path as Stream's hang-up button.
+    BackHandler {
+        val activeCall = call
+        if (activeCall != null) finishConsultation(activeCall) else onBack()
+    }
+
     VideoTheme {
 
         Box(
@@ -707,10 +714,10 @@ fun ConsultationCallScreen(
                 ConsultationCallState.Waiting -> {
 
                     ConsultationWaiting(
-                        isDoctorView =
-                            isDoctorView,
-                        onBack =
-                            onBack
+                        isDoctorView = isDoctorView,
+                        onBack = {
+                            currentCall?.let { finishConsultation(it) } ?: onBack()
+                        }
                     )
                 }
 

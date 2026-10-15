@@ -57,6 +57,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -76,12 +78,15 @@ enum class AppointmentCategory(val label: String) {
 
 @RequiresApi(Build.VERSION_CODES.O)
 fun categorize(appt: Appointment): AppointmentCategory {
-    if (appt.status == "cancelled") return AppointmentCategory.CANCELLED
-    val date = appt.date
-    return if (appt.status == "confirmed" && date != null && date < LocalDate.now().toString()) {
-        AppointmentCategory.COMPLETED
-    } else {
-        AppointmentCategory.UPCOMING
+    val status = appt.status?.trim()?.lowercase().orEmpty()
+    return when {
+        status in setOf("cancelled", "expired", "declined", "rejected") ->
+            AppointmentCategory.CANCELLED
+        status == "completed" -> AppointmentCategory.COMPLETED
+        // A closed call without backend completion is not joinable; show it
+        // with finished visits, without changing the authoritative payment ledger.
+        !appt.call_ended_at.isNullOrBlank() -> AppointmentCategory.COMPLETED
+        else -> AppointmentCategory.UPCOMING
     }
 }
 
@@ -118,6 +123,7 @@ fun PatientAppointmentsScreen(
     var isLoading by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf<String?>(null) }
     var selectedCategory by remember { mutableStateOf(initialCategory) }
+    var refreshKey by remember { mutableIntStateOf(0) }
     var reviewTargetAppointmentId by remember { mutableStateOf<String?>(null) }
     var detailsAppointment by remember { mutableStateOf<Appointment?>(null) }
     var selectedAppointment by remember { mutableStateOf<Appointment?>(null) }
@@ -129,7 +135,11 @@ fun PatientAppointmentsScreen(
     val teal = MaterialTheme.colorScheme.primary
     val bg = MaterialTheme.colorScheme.background
 
-    LaunchedEffect(Unit) {
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        refreshKey++
+    }
+
+    LaunchedEffect(refreshKey) {
         val apptResult = fetchAppointments()
         val reviewResult = fetchReviewedAppointmentIds()
         isLoading = false
@@ -997,19 +1007,20 @@ private fun AppointmentListDetailsDialog(
 
 
     val statusLabel =
-        when (appt.status) {
+        when {
+            appt.status.equals("confirmed", ignoreCase = true) &&
+                !appt.call_ended_at.isNullOrBlank() ->
+                "Call ended · Review pending"
 
-            "confirmed" ->
+            appt.status.equals("confirmed", ignoreCase = true) ->
                 "Accepted & Paid"
 
-            "cancelled" ->
-                "Rejected & Refunded"
+            appt.status.equals("cancelled", ignoreCase = true) ->
+                "Cancelled"
 
             else ->
                 appt.status
-                    ?.replaceFirstChar {
-                        it.uppercase()
-                    }
+                    ?.replaceFirstChar { it.uppercase() }
                     ?: "Unknown"
         }
 
@@ -2157,19 +2168,20 @@ private fun AppointmentDetailCard(
 
 
     val statusLabel =
-        when (appt.status) {
+        when {
+            appt.status.equals("confirmed", ignoreCase = true) &&
+                !appt.call_ended_at.isNullOrBlank() ->
+                "Call ended · Review pending"
 
-            "confirmed" ->
+            appt.status.equals("confirmed", ignoreCase = true) ->
                 "Accepted & Paid"
 
-            "cancelled" ->
-                "Rejected & Refunded"
+            appt.status.equals("cancelled", ignoreCase = true) ->
+                "Cancelled"
 
             else ->
                 appt.status
-                    ?.replaceFirstChar {
-                        it.uppercase()
-                    }
+                    ?.replaceFirstChar { it.uppercase() }
                     ?: "Unknown"
         }
 

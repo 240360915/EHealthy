@@ -76,12 +76,7 @@ fun RescheduleAppointmentScreen(
     isLoading: Boolean,
     errorMessage: String?,
     fetchAvailableTimes: suspend (date: String) -> Result<Set<String>>,
-    onBack: () -> Unit,
-    onConfirmReschedule: (
-        newDate: String,
-        newTime: String,
-        reason: String
-    ) -> Unit
+    onBack: () -> Unit
 ) {
 
     val context =

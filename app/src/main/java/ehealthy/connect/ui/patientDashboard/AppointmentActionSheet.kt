@@ -117,9 +117,12 @@ fun AppointmentActionSheet(
         )
 
 
+    // In-person: after doctor confirmation. Online: after BOTH people finish
+    // the call, including auto-completed DemoPay appointments.
     val canUseCompletionCode =
-        !isOnline &&
-                normalizedStatus == "confirmed"
+        (!isOnline && normalizedStatus == "confirmed") ||
+        (isOnline && !appointment.call_ended_at.isNullOrBlank() &&
+            normalizedStatus in setOf("confirmed", "completed"))
 
     val statusColor =
         when (appointment.status) {

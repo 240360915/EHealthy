@@ -1,10 +1,17 @@
 package ehealthy.connect.ui.doctorDashboard
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,6 +22,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -24,10 +33,12 @@ import androidx.compose.material.icons.outlined.MedicalServices
 import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.Card
+import androidx.activity.compose.BackHandler
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -38,9 +49,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
 import ehealthy.connect.ui.theme.AdaptiveColors
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -58,14 +71,19 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import kotlin.math.roundToInt
+import androidx.compose.ui.platform.LocalContext
+import java.util.Calendar
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 
 
 private enum class PatientCareTab(
     val title: String
 ) {
     OVERVIEW("Overview"),
-    HEALTH("Health"),
-    PHYSICAL_VISITS("Physical visits")
+    HEALTH("Medical history"),
+    PHYSICAL_VISITS("Visits & billing")
 }
 
 
@@ -75,6 +93,9 @@ fun DoctorPatientCareHub(
     patientName: String,
     onBack: () -> Unit
 ) {
+    // Give both the visible back arrow and Android's system back gesture
+    // the same reliable return route to the doctor's Patients tab.
+    BackHandler(onBack = onBack)
 
     var selectedTab by remember {
         mutableStateOf(PatientCareTab.OVERVIEW)
@@ -172,12 +193,14 @@ fun DoctorPatientCareHub(
 
 
     Column(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .background(
-                    DoctorColors.Background
-                )
+        modifier = Modifier
+            .fillMaxSize()
+            .background(DoctorColors.Background)
+            // MainActivity enables edge-to-edge. Without safeDrawing insets
+            // this screen starts under the status bar, which blocks taps
+            // on the top-left back button on Huawei and other devices.
+            // This also keeps visit cards above the bottom gesture bar.
+            .windowInsetsPadding(WindowInsets.safeDrawing)
     ) {
 
         PatientCareTopBar(
@@ -188,32 +211,6 @@ fun DoctorPatientCareHub(
             onRefresh = {
                 refreshTrigger++
             }
-        )
-
-
-        PatientCareHero(
-            patientName =
-                patientName,
-            profile =
-                healthProfile,
-            requestCount =
-                physicalRequests.count {
-                    it.status.equals(
-                        "pending",
-                        ignoreCase = true
-                    )
-                },
-            invoiceCount =
-                invoices.count {
-                    it.status.equals(
-                        "issued",
-                        ignoreCase = true
-                    ) ||
-                            it.status.equals(
-                                "pending",
-                                ignoreCase = true
-                            )
-                }
         )
 
 
@@ -268,12 +265,10 @@ fun DoctorPatientCareHub(
                     PatientCareTab.OVERVIEW -> {
 
                         PatientOverviewContent(
-                            profile =
-                                healthProfile,
-                            physicalRequests =
-                                physicalRequests,
-                            invoices =
-                                invoices
+                            patientName = patientName,
+                            profile = healthProfile,
+                            physicalRequests = physicalRequests,
+                            invoices = invoices
                         )
                     }
 
@@ -310,84 +305,57 @@ private fun PatientCareTopBar(
     onBack: () -> Unit,
     onRefresh: () -> Unit
 ) {
-
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .background(
-                    Color.White
-                )
-                .padding(
-                    horizontal = 10.dp,
-                    vertical = 8.dp
-                ),
-        verticalAlignment =
-            Alignment.CenterVertically
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(DoctorColors.Surface)
     ) {
-
-        IconButton(
-            onClick =
-                onBack
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-
-            Icon(
-                imageVector =
-                    Icons.Outlined.ArrowBack,
-                contentDescription =
-                    "Back",
-                tint =
-                    DoctorColors.Ink
-            )
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.Outlined.ArrowBack,
+                    contentDescription = "Return to patient search",
+                    tint = DoctorColors.Ink
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Patient clinical record",
+                    color = DoctorColors.Ink,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 17.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "Back to Patients · " + patientName.ifBlank { "Patient" },
+                    color = DoctorColors.Muted,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            IconButton(onClick = onRefresh) {
+                Icon(
+                    imageVector = Icons.Outlined.Refresh,
+                    contentDescription = "Refresh patient record",
+                    tint = DoctorColors.Teal
+                )
+            }
         }
-
-
-        Column(
-            modifier =
-                Modifier.weight(1f)
-        ) {
-
-            Text(
-                text =
-                    "Patient Care Hub",
-                color =
-                    DoctorColors.Ink,
-                fontWeight =
-                    FontWeight.ExtraBold,
-                fontSize =
-                    17.sp
-            )
-
-            Text(
-                text =
-                    patientName.ifBlank {
-                        "Patient"
-                    },
-                color =
-                    DoctorColors.Muted,
-                fontSize =
-                    11.sp
-            )
-        }
-
-
-        IconButton(
-            onClick =
-                onRefresh
-        ) {
-
-            Icon(
-                imageVector =
-                    Icons.Outlined.Refresh,
-                contentDescription =
-                    "Refresh",
-                tint =
-                    DoctorColors.Teal
-            )
-        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(DoctorColors.Border)
+        )
     }
 }
-
 
 @Composable
 private fun PatientCareHero(
@@ -396,153 +364,111 @@ private fun PatientCareHero(
     requestCount: Int,
     invoiceCount: Int
 ) {
-
-    Box(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .background(
-                    DoctorColors.PatientCareGradient
-                )
-                .padding(
-                    horizontal = 18.dp,
-                    vertical = 22.dp
-                )
+    // This is a patient record, not another dashboard. Display the identity
+    // first, followed by concise and readable status indicators.
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = DoctorColors.Surface
+        ),
+        border = BorderStroke(1.dp, DoctorColors.Border),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-
-        Column {
-
-            Row(
-                verticalAlignment =
-                    Alignment.CenterVertically
-            ) {
-
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
-                    modifier =
-                        Modifier
-                            .size(58.dp)
-                            .background(
-                                Color.White.copy(
-                                    alpha = 0.18f
-                                ),
-                                CircleShape
-                            ),
-                    contentAlignment =
-                        Alignment.Center
+                    modifier = Modifier
+                        .size(58.dp)
+                        .background(DoctorColors.TealSoft, RoundedCornerShape(17.dp)),
+                    contentAlignment = Alignment.Center
                 ) {
-
                     Text(
-                        text =
-                            initials(
-                                patientName
-                            ),
-                        color =
-                            Color.White,
-                        fontWeight =
-                            FontWeight.ExtraBold,
-                        fontSize =
-                            20.sp
+                        text = initials(patientName.ifBlank {
+                            profile?.patientName ?: "Patient"
+                        }),
+                        color = DoctorColors.Teal,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.ExtraBold
                     )
                 }
-
-
-                Spacer(
-                    modifier =
-                        Modifier.width(
-                            14.dp
-                        )
-                )
-
-
-                Column {
-
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text =
-                            patientName.ifBlank {
-                                profile?.patientName
-                                    ?: "Patient"
-                            },
-                        color =
-                            Color.White,
-                        fontWeight =
-                            FontWeight.ExtraBold,
-                        fontSize =
-                            21.sp
+                        text = "PATIENT PROFILE",
+                        color = DoctorColors.Teal,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 10.sp,
+                        letterSpacing = 1.sp
                     )
-
-                    Spacer(
-                        modifier =
-                            Modifier.height(
-                                3.dp
-                            )
-                    )
-
                     Text(
-                        text =
-                            "Clinical patient workspace",
-                        color =
-                            Color.White.copy(
-                                alpha = 0.82f
-                            ),
-                        fontSize =
-                            11.sp
+                        text = patientName.ifBlank { profile?.patientName ?: "Patient" },
+                        color = DoctorColors.Ink,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 20.sp,
+                        lineHeight = 25.sp,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "File ID: " + (profile?.id?.takeIf { it.isNotBlank() }
+                            ?.take(8)?.uppercase() ?: "Unavailable"),
+                        color = DoctorColors.Muted,
+                        fontSize = 11.sp
                     )
                 }
             }
 
-
-            Spacer(
-                modifier =
-                    Modifier.height(
-                        18.dp
-                    )
-            )
-
-
-            Row(
-                modifier =
-                    Modifier.fillMaxWidth(),
-                horizontalArrangement =
-                    Arrangement.spacedBy(
-                        9.dp
-                    )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(DoctorColors.TealSoft, RoundedCornerShape(13.dp))
+                    .padding(horizontal = 14.dp, vertical = 12.dp)
             ) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Personal details",
+                        color = DoctorColors.Teal,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Gender: " + cleanValue(profile?.gender) +
+                            "    ·    Birth date: " + cleanValue(profile?.date_of_birth),
+                        color = DoctorColors.Ink,
+                        fontSize = 12.sp,
+                        lineHeight = 19.sp
+                    )
+                }
+            }
 
-                HeroMetric(
-                    title =
-                        "Blood group",
-                    value =
-                        cleanValue(
-                            profile?.blood_group
-                        ),
-                    modifier =
-                        Modifier.weight(1f)
-                )
-
-
-                HeroMetric(
-                    title =
-                        "Requests",
-                    value =
-                        requestCount.toString(),
-                    modifier =
-                        Modifier.weight(1f)
-                )
-
-
-                HeroMetric(
-                    title =
-                        "Invoices",
-                    value =
-                        invoiceCount.toString(),
-                    modifier =
-                        Modifier.weight(1f)
-                )
+            // Stack metrics on very narrow devices to prevent small,
+            // unreadable data fields.
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                if (maxWidth < 355.dp) {
+                    Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                        HeroMetric("Blood group", cleanValue(profile?.blood_group), Modifier.fillMaxWidth())
+                        Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                            HeroMetric("Follow-ups", requestCount.toString(), Modifier.weight(1f))
+                            HeroMetric("Invoices", invoiceCount.toString(), Modifier.weight(1f))
+                        }
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                        HeroMetric("Blood group", cleanValue(profile?.blood_group), Modifier.weight(1f))
+                        HeroMetric("Follow-ups", requestCount.toString(), Modifier.weight(1f))
+                        HeroMetric("Invoices", invoiceCount.toString(), Modifier.weight(1f))
+                    }
+                }
             }
         }
     }
 }
-
 
 @Composable
 private fun HeroMetric(
@@ -550,123 +476,63 @@ private fun HeroMetric(
     value: String,
     modifier: Modifier = Modifier
 ) {
-
     Column(
-        modifier =
-            modifier
-                .background(
-                    Color.White.copy(
-                        alpha = 0.14f
-                    ),
-                    RoundedCornerShape(
-                        16.dp
-                    )
-                )
-                .padding(
-                    12.dp
-                )
+        modifier = modifier
+            .background(DoctorColors.Background, RoundedCornerShape(14.dp))
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
-
         Text(
-            text =
-                value,
-            color =
-                Color.White,
-            fontWeight =
-                FontWeight.ExtraBold,
-            fontSize =
-                16.sp
+            text = title,
+            color = DoctorColors.Muted,
+            fontSize = 11.sp,
+            maxLines = 2,
+            lineHeight = 15.sp
         )
-
         Text(
-            text =
-                title,
-            color =
-                Color.White.copy(
-                    alpha = 0.78f
-                ),
-            fontSize =
-                9.sp
+            text = value,
+            color = DoctorColors.Ink,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.ExtraBold,
+            maxLines = 2,
+            lineHeight = 19.sp,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
-
 
 @Composable
 private fun PatientCareTabs(
     selectedTab: PatientCareTab,
     onSelected: (PatientCareTab) -> Unit
 ) {
-
     Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .background(
-                    Color.White
-                )
-                .padding(
-                    horizontal = 12.dp,
-                    vertical = 10.dp
-                ),
-        horizontalArrangement =
-            Arrangement.spacedBy(
-                6.dp
-            )
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(DoctorColors.Surface)
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-
-        PatientCareTab.entries.forEach {
-                tab ->
-
-            val selected =
-                tab == selectedTab
-
-
+        PatientCareTab.entries.forEach { tab ->
+            val selected = tab == selectedTab
             Box(
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .background(
-                            if (selected) {
-                                DoctorColors.TealSoft
-                            } else {
-                                Color.Transparent
-                            },
-                            RoundedCornerShape(
-                                14.dp
-                            )
-                        )
-                        .clickable {
-                            onSelected(
-                                tab
-                            )
-                        }
-                        .padding(
-                            vertical = 10.dp
-                        ),
-                contentAlignment =
-                    Alignment.Center
+                modifier = Modifier
+                    .clip(RoundedCornerShape(13.dp))
+                    .background(
+                        if (selected) DoctorColors.Teal else DoctorColors.Background
+                    )
+                    .clickable { onSelected(tab) }
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                contentAlignment = Alignment.Center
             ) {
-
                 Text(
-                    text =
-                        tab.title,
-                    color =
-                        if (selected) {
-                            DoctorColors.Teal
-                        } else {
-                            DoctorColors.Muted
-                        },
-                    fontWeight =
-                        if (selected) {
-                            FontWeight.Bold
-                        } else {
-                            FontWeight.Medium
-                        },
-                    fontSize =
-                        11.sp,
-                    textAlign =
-                        TextAlign.Center
+                    text = tab.title,
+                    color = if (selected) Color.White else DoctorColors.Ink,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    maxLines = 1
                 )
             }
         }
@@ -676,6 +542,7 @@ private fun PatientCareTabs(
 
 @Composable
 private fun PatientOverviewContent(
+    patientName: String,
     profile: PatientHealthProfile?,
     physicalRequests: List<PhysicalVisitRequest>,
     invoices: List<PhysicalVisitInvoice>
@@ -693,55 +560,71 @@ private fun PatientOverviewContent(
                 14.dp
             )
     ) {
+        // The identity banner scrolls with the overview rather than
+        // permanently consuming vertical space above the clinical details.
+        item {
+            PatientCareHero(
+                patientName = patientName,
+                profile = profile,
+                requestCount = physicalRequests.count {
+                    it.status.equals("pending", ignoreCase = true)
+                },
+                invoiceCount = invoices.count {
+                    it.status.equals("issued", ignoreCase = true) ||
+                        it.status.equals("pending", ignoreCase = true)
+                }
+            )
+        }
 
         item {
 
             SectionTitle(
                 title =
-                    "Clinical snapshot",
+                    "Clinical summary",
                 subtitle =
-                    "Important information before consultation"
+                    "Allergies, ongoing conditions and prescribed medications"
             )
         }
 
 
         item {
-
-            Row(
-                modifier =
-                    Modifier.fillMaxWidth(),
-                horizontalArrangement =
-                    Arrangement.spacedBy(
-                        10.dp
-                    )
-            ) {
-
-                SnapshotCard(
-                    title =
-                        "Allergies",
-                    value =
-                        cleanValue(
-                            profile?.allergies
-                        ),
-                    background =
-                        DoctorColors.RedSoft,
-                    modifier =
-                        Modifier.weight(1f)
-                )
-
-
-                SnapshotCard(
-                    title =
-                        "Chronic",
-                    value =
-                        cleanValue(
-                            profile?.chronic
-                        ),
-                    background =
-                        DoctorColors.AmberSoft,
-                    modifier =
-                        Modifier.weight(1f)
-                )
+            // Use a single column on narrower phones so medical values do
+            // not get squeezed into two tiny cards.
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                if (maxWidth < 360.dp) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        SnapshotCard(
+                            title = "Allergies",
+                            value = cleanValue(profile?.allergies),
+                            background = DoctorColors.RedSoft,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        SnapshotCard(
+                            title = "Chronic conditions",
+                            value = cleanValue(profile?.chronic),
+                            background = DoctorColors.AmberSoft,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        SnapshotCard(
+                            title = "Allergies",
+                            value = cleanValue(profile?.allergies),
+                            background = DoctorColors.RedSoft,
+                            modifier = Modifier.weight(1f)
+                        )
+                        SnapshotCard(
+                            title = "Chronic conditions",
+                            value = cleanValue(profile?.chronic),
+                            background = DoctorColors.AmberSoft,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
             }
         }
 
@@ -767,9 +650,9 @@ private fun PatientOverviewContent(
 
             SectionTitle(
                 title =
-                    "Current concern",
+                    "Symptoms and concerns",
                 subtitle =
-                    "Patient-reported symptoms"
+                    "Patient-reported symptoms to review during consultation"
             )
         }
 
@@ -779,8 +662,7 @@ private fun PatientOverviewContent(
             Card(
                 colors =
                     CardDefaults.cardColors(
-                        containerColor =
-                            Color.White
+                        containerColor = DoctorColors.Surface
                     ),
                 shape =
                     RoundedCornerShape(
@@ -840,9 +722,9 @@ private fun PatientOverviewContent(
 
             SectionTitle(
                 title =
-                    "Care workflow",
+                    "Follow-ups and billing",
                 subtitle =
-                    "Physical follow-up and billing activity"
+                    "Physical visit requests and invoicing activity"
             )
         }
 
@@ -1066,7 +948,8 @@ private fun PatientHealthContent(
 private fun PhysicalVisitContent(
     requests: List<PhysicalVisitRequest>,
     invoices: List<PhysicalVisitInvoice>,
-    onRequestUpdated: () -> Unit
+    onRequestUpdated: () -> Unit,
+    showRequests: Boolean = true
 ){
 
     LazyColumn(
@@ -1082,6 +965,7 @@ private fun PhysicalVisitContent(
             )
     ) {
 
+        if (showRequests) {
         item {
 
             SectionTitle(
@@ -1127,6 +1011,8 @@ private fun PhysicalVisitContent(
             }
         }
 
+
+        }
 
         if (
             invoices.isNotEmpty()
@@ -1213,8 +1099,7 @@ private fun PhysicalRequestCard(
             Modifier.fillMaxWidth(),
         colors =
             CardDefaults.cardColors(
-                containerColor =
-                    Color.White
+                containerColor = DoctorColors.Surface
             ),
         shape =
             RoundedCornerShape(
@@ -1281,7 +1166,7 @@ private fun PhysicalRequestCard(
 
                     Text(
                         text =
-                            "Physical visit request",
+                            "Physical follow-up • ${request.patient_name}",
                         color =
                             DoctorColors.Ink,
                         fontWeight =
@@ -1292,10 +1177,15 @@ private fun PhysicalRequestCard(
 
                     Text(
                         text =
-                            request.status
-                                .replaceFirstChar {
-                                    it.uppercase()
-                                },
+                            when (request.status.lowercase()) {
+                                "pending" -> "Awaiting doctor decision"
+                                "accepted" -> "Accepted · Invoice needed"
+                                "declined" -> "Follow-up declined"
+                                "invoiced" -> "Invoice sent · Awaiting patient"
+                                "patient_accepted" -> "Patient accepted proposed visit"
+                                "patient_declined" -> "Patient declined invoice"
+                                else -> request.status.replace('_', ' ')
+                            },
                         color =
                             when {
                                 request.status.equals(
@@ -1306,7 +1196,11 @@ private fun PhysicalRequestCard(
                                 request.status.equals(
                                     "declined",
                                     ignoreCase = true
-                                ) -> DoctorColors.Red
+                                ) || request.status.equals("patient_declined", ignoreCase = true)
+                                    -> DoctorColors.Red
+
+                                request.status.equals("patient_accepted", ignoreCase = true)
+                                    -> DoctorColors.Green
 
                                 else ->
                                     DoctorColors.Amber
@@ -1348,14 +1242,21 @@ private fun PhysicalRequestCard(
             )
 
 
-            Text(
-                text =
-                    request.reason,
-                color =
-                    DoctorColors.Ink,
-                fontSize =
-                    13.sp
-            )
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(13.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Text(
+                    text = request.reason,
+                    modifier = Modifier.fillMaxWidth().padding(13.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
 
 
             request
@@ -1585,10 +1486,7 @@ private fun PhysicalRequestCard(
                     )
                 }
             }
-            if (
-                isAccepted &&
-                hasInvoice
-            ) {
+            if (hasInvoice && request.status.equals("invoiced", ignoreCase = true)) {
 
                 Spacer(
                     modifier =
@@ -1906,10 +1804,9 @@ private fun PhysicalVisitInvoiceDialog(
         mutableStateOf("")
     }
 
-    var location by remember {
-        mutableStateOf("")
-    }
-
+    var location by remember { mutableStateOf("") }
+    var locationReady by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     var notes by remember {
         mutableStateOf("")
     }
@@ -1922,6 +1819,20 @@ private fun PhysicalVisitInvoiceDialog(
         mutableStateOf(false)
     }
 
+    LaunchedEffect(requestId) {
+        DoctorPatientCareRepository.getMyInvoiceLocation()
+            .onSuccess {
+                location = it.displayAddress
+                locationReady = it.has_pin
+                if (!it.has_pin) {
+                    errorMessage = "Save your practice address and map pin in the Doctor Portal before issuing this invoice."
+                }
+            }
+            .onFailure {
+                locationReady = false
+                errorMessage = it.message ?: "Could not load your saved practice location."
+            }
+    }
 
     AlertDialog(
         onDismissRequest = {
@@ -2045,87 +1956,69 @@ private fun PhysicalVisitInvoiceDialog(
                         )
                 ) {
 
-                    OutlinedTextField(
-                        value =
-                            date,
-                        onValueChange = {
-                            date =
-                                it
-
-                            errorMessage =
-                                null
-                        },
-                        label = {
-                            Text(
-                                "Date"
-                            )
-                        },
-                        placeholder = {
-                            Text(
-                                "2026-10-15"
-                            )
-                        },
-                        modifier =
-                            Modifier.weight(
-                                1f
-                            ),
-                        singleLine =
-                            true
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        OutlinedTextField(
+                            value = date,
+                            onValueChange = {},
+                            label = { Text("Visit date") },
+                            placeholder = { Text("YYYY-MM-DD") },
+                            modifier = Modifier.fillMaxWidth(),
+                            readOnly = true,
+                            singleLine = true
+                        )
+                        TextButton(onClick = {
+                            val today = Calendar.getInstance()
+                            android.app.DatePickerDialog(
+                                context,
+                                { _, year, month, day ->
+                                    date = "%04d-%02d-%02d".format(year, month + 1, day)
+                                    errorMessage = null
+                                },
+                                today.get(Calendar.YEAR),
+                                today.get(Calendar.MONTH),
+                                today.get(Calendar.DAY_OF_MONTH)
+                            ).apply { datePicker.minDate = today.timeInMillis - 60_000L }.show()
+                        }) { Text("Choose date") }
+                    }
 
 
-                    OutlinedTextField(
-                        value =
-                            time,
-                        onValueChange = {
-                            time =
-                                it
-
-                            errorMessage =
-                                null
-                        },
-                        label = {
-                            Text(
-                                "Time"
-                            )
-                        },
-                        placeholder = {
-                            Text(
-                                "10:30"
-                            )
-                        },
-                        modifier =
-                            Modifier.weight(
-                                1f
-                            ),
-                        singleLine =
-                            true
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        OutlinedTextField(
+                            value = time,
+                            onValueChange = {},
+                            label = { Text("Visit time") },
+                            placeholder = { Text("HH:mm") },
+                            modifier = Modifier.fillMaxWidth(),
+                            readOnly = true,
+                            singleLine = true
+                        )
+                        TextButton(onClick = {
+                            val now = Calendar.getInstance()
+                            android.app.TimePickerDialog(
+                                context,
+                                { _, hour, minute ->
+                                    time = "%02d:%02d".format(hour, minute)
+                                    errorMessage = null
+                                },
+                                now.get(Calendar.HOUR_OF_DAY),
+                                now.get(Calendar.MINUTE), true
+                            ).show()
+                        }) { Text("Choose time") }
+                    }
                 }
 
 
                 OutlinedTextField(
-                    value =
-                        location,
-                    onValueChange = {
-                        location =
-                            it
-
-                        errorMessage =
-                            null
-                    },
-                    label = {
-                        Text(
-                            "Location"
-                        )
-                    },
-                    placeholder = {
-                        Text(
-                            "e.g. Riverside Medical Centre"
-                        )
-                    },
-                    modifier =
-                        Modifier.fillMaxWidth()
+                    value = location,
+                    onValueChange = {},
+                    label = { Text("Saved practice location") },
+                    placeholder = { Text("Save your address and map pin in the Doctor Portal") },
+                    readOnly = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    "This invoice will use your verified practice map pin so the patient can view directions.",
+                    color = DoctorColors.Muted, fontSize = 10.sp
                 )
 
 
@@ -2175,8 +2068,7 @@ private fun PhysicalVisitInvoiceDialog(
         confirmButton = {
 
             Button(
-                enabled =
-                    !isSaving,
+                enabled = !isSaving && locationReady,
 
                 onClick = {
 
@@ -2203,24 +2095,19 @@ private fun PhysicalVisitInvoiceDialog(
                         }
 
 
-                        date.isBlank() -> {
+                        runCatching {
+                            LocalDate.parse(date)
+                        }.getOrNull() == null || LocalDate.parse(date).isBefore(LocalDate.now()) -> {
+                            errorMessage = "Choose today or a future visit date."
+                        }
 
-                            errorMessage =
-                                "Enter the proposed visit date."
+                        runCatching { LocalTime.parse(time) }.getOrNull() == null -> {
+                            errorMessage = "Choose a valid visit time."
                         }
 
 
-                        time.isBlank() -> {
-
-                            errorMessage =
-                                "Enter the proposed visit time."
-                        }
-
-
-                        location.trim().length < 3 -> {
-
-                            errorMessage =
-                                "Enter the physical visit location."
+                        !locationReady || location.trim().length < 3 -> {
+                            errorMessage = "Save the practice location and map pin first."
                         }
 
 
@@ -2336,8 +2223,7 @@ private fun PhysicalVisitInvoiceDialog(
             }
         },
 
-        containerColor =
-            Color.White,
+        containerColor = DoctorColors.Surface,
 
         shape =
             RoundedCornerShape(
@@ -2358,7 +2244,11 @@ private fun PhysicalInvoiceCard(
         colors =
             CardDefaults.cardColors(
                 containerColor =
-                    DoctorColors.GreenSoft
+                    when (invoice.status.lowercase()) {
+                        "declined" -> DoctorColors.RedSoft
+                        "accepted" -> DoctorColors.GreenSoft
+                        else -> DoctorColors.Surface
+                    }
             ),
         shape =
             RoundedCornerShape(
@@ -2419,12 +2309,18 @@ private fun PhysicalInvoiceCard(
 
                     Text(
                         text =
-                            invoice.status
-                                .replaceFirstChar {
-                                    it.uppercase()
+                            when (invoice.status.lowercase()) {
+                                    "sent" -> "Waiting for patient decision"
+                                    "accepted" -> "Patient accepted arrangement"
+                                    "declined" -> "Patient declined arrangement"
+                                    else -> invoice.status.replace('_', ' ')
                                 },
                         color =
-                            DoctorColors.Green,
+                            when (invoice.status.lowercase()) {
+                                "declined" -> DoctorColors.Red
+                                "accepted" -> DoctorColors.Green
+                                else -> DoctorColors.Amber
+                            },
                         fontSize =
                             10.sp,
                         fontWeight =
@@ -2447,6 +2343,9 @@ private fun PhysicalInvoiceCard(
                 )
             }
 
+
+            Spacer(modifier = Modifier.height(10.dp))
+            CareInfoRow(label = "Patient", value = invoice.patient_name)
 
             Spacer(
                 modifier =
@@ -2497,8 +2396,7 @@ private fun HealthSectionCard(
             Modifier.fillMaxWidth(),
         colors =
             CardDefaults.cardColors(
-                containerColor =
-                    Color.White
+                containerColor = DoctorColors.Surface
             ),
         shape =
             RoundedCornerShape(
@@ -2705,46 +2603,51 @@ private fun CareInfoRow(
     label: String,
     value: String
 ) {
-
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(
-                    vertical = 7.dp
-                ),
-        verticalAlignment =
-            Alignment.Top
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
     ) {
-
-        Text(
-            text =
-                label,
-            modifier =
-                Modifier.weight(
-                    0.42f
-                ),
-            color =
-                DoctorColors.Muted,
-            fontSize =
-                11.sp
-        )
-
-
-        Text(
-            text =
-                value,
-            modifier =
-                Modifier.weight(
-                    0.58f
-                ),
-            color =
-                DoctorColors.Ink,
-            fontSize =
-                11.sp,
-            fontWeight =
-                FontWeight.SemiBold
-        )
+        if (maxWidth < 330.dp) {
+            // Narrow phone / large text: let long clinical values use the
+            // full width instead of forcing them into half a line.
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = label,
+                    color = DoctorColors.Muted,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = value,
+                    color = DoctorColors.Ink,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = 17.sp
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = label,
+                    modifier = Modifier.weight(0.35f),
+                    color = DoctorColors.Muted,
+                    fontSize = 11.sp
+                )
+                Text(
+                    text = value,
+                    modifier = Modifier.weight(0.65f),
+                    color = DoctorColors.Ink,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = 17.sp
+                )
+            }
+        }
     }
 }
 
@@ -2977,4 +2880,154 @@ private fun formatInvoiceAmount(
     return "${invoice.currency} %.2f".format(
         amount
     )
+}
+
+// Dedicated doctor follow-up inbox. A request has its own card and workflow;
+// invoices are shown in a SEPARATE section and are never ordinary appointments.
+@Composable
+fun DoctorPhysicalFollowUpsScreen(
+    onBack: () -> Unit,
+    initialFilter: String = "pending",
+    onOpenPracticeLocation: () -> Unit = {}
+) {
+    BackHandler(onBack = onBack)
+    var requests by remember { mutableStateOf<List<PhysicalVisitRequest>>(emptyList()) }
+    var invoices by remember { mutableStateOf<List<PhysicalVisitInvoice>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var errors by remember { mutableStateOf<String?>(null) }
+    var revision by remember { mutableStateOf(0) }
+    var selectedFilter by remember(initialFilter) { mutableStateOf(initialFilter) }
+
+    LaunchedEffect(revision) {
+        loading = true
+        errors = null
+        DoctorPatientCareRepository.getMyPhysicalVisitHistory()
+            .onSuccess { requests = it }
+            .onFailure { errors = it.message ?: "Could not load physical follow-ups." }
+        DoctorPatientCareRepository.getMyPhysicalInvoiceHistory()
+            .onSuccess { invoices = it }
+            .onFailure { errors = listOfNotNull(errors, it.message).joinToString(". ")
+                .ifBlank { "Could not load physical invoices." } }
+        loading = false
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize()
+            .background(DoctorColors.Background)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth()
+                .background(DoctorColors.Surface).padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Outlined.ArrowBack, contentDescription = "Back", tint = DoctorColors.Ink)
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Physical follow-ups", color = DoctorColors.Ink,
+                    fontWeight = FontWeight.ExtraBold, fontSize = 19.sp)
+                Text("Requests, invoices and patient decisions", fontSize = 11.sp,
+                    color = DoctorColors.Muted)
+            }
+            IconButton(onClick = { revision++ }) {
+                Icon(Icons.Outlined.Refresh, contentDescription = "Refresh",
+                    tint = DoctorColors.Teal)
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                .padding(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf("pending" to "Pending", "accepted" to "Accepted",
+                "invoices" to "Invoices", "history" to "History").forEach { (value,label) ->
+                FilterChip(
+                    selected = selectedFilter == value,
+                    onClick = { selectedFilter = value },
+                    label = { Text(label) }
+                )
+            }
+        }
+        if (selectedFilter == "accepted") {
+            Card(
+                modifier = Modifier.fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(9.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Outlined.MedicalServices,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(26.dp)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "Accepted follow-up requests",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                "Requests awaiting a proposed visit invoice",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                        Text(
+                            requests.count { it.status.equals("accepted", true) }.toString(),
+                            fontWeight = FontWeight.ExtraBold, fontSize = 23.sp,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                    Text(
+                        "Each accepted request has its own card. Choose Create invoice to propose a date, time and fee, using your saved practice map pin.",
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Button(
+                        onClick = onOpenPracticeLocation,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("View or update practice map pin") }
+                }
+            }
+        }
+        errors?.let {
+            Text(it, modifier = Modifier.padding(16.dp),
+                color = DoctorColors.Red, fontSize = 12.sp)
+        }
+        if (loading) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = DoctorColors.Teal)
+            }
+        } else {
+            // Individual cards include Accept/Decline, then Issue Invoice.
+            // Invoice cards below are separate and reflect patient decision.
+            val shownRequests = when (selectedFilter) {
+                "pending" -> requests.filter { it.status.equals("pending", true) }
+                "accepted" -> requests.filter { it.status.equals("accepted", true) }
+                "invoices" -> emptyList()
+                else -> requests.filter {
+                    !it.status.equals("pending", true) &&
+                    !it.status.equals("accepted", true)
+                }
+            }
+            PhysicalVisitContent(
+                requests = shownRequests,
+                invoices = if (selectedFilter == "invoices") invoices else emptyList(),
+                showRequests = selectedFilter != "invoices",
+                onRequestUpdated = { revision++ }
+            )
+        }
+    }
 }

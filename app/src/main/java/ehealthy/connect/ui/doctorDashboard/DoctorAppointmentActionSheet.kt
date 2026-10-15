@@ -121,6 +121,23 @@ private fun doctorCallWindowState(
     }
 }
 
+// One source of truth for the doctor's video call entry points.
+// The homepage must not bypass the exact window used by the appointment sheet.
+@RequiresApi(Build.VERSION_CODES.O)
+internal fun isScheduledVideoUpcoming(appt: Appointment): Boolean =
+    appt.appointment_type.equals("online", ignoreCase = true) &&
+        appt.status.equals("confirmed", ignoreCase = true) &&
+        appt.call_ended_at.isNullOrBlank() &&
+        doctorCallWindowState(appt) in setOf(
+            DoctorCallWindowState.OPEN,
+            DoctorCallWindowState.TOO_EARLY
+        )
+
+@RequiresApi(Build.VERSION_CODES.O)
+internal fun canStartScheduledVideoNow(appt: Appointment): Boolean =
+    isScheduledVideoUpcoming(appt) &&
+        doctorCallWindowState(appt) == DoctorCallWindowState.OPEN
+
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -412,7 +429,8 @@ fun DoctorAppointmentActionSheet(
 
             if (
                 appointment.appointment_type == "online" &&
-                status == "confirmed"
+                status == "confirmed" &&
+                appointment.call_ended_at.isNullOrBlank()
             ) {
                 val windowState =
                     doctorCallWindowState(
@@ -481,8 +499,27 @@ fun DoctorAppointmentActionSheet(
                 )
             }
 
+            if (appointment.appointment_type == "online" &&
+                status == "confirmed" &&
+                !appointment.call_ended_at.isNullOrBlank()
+            ) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "Consultation ended — this video room cannot be reopened. Completion may require review.",
+                    color = ActionMuted,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                )
+            }
+
             if (
-                status == "confirmed"
+                (status == "confirmed" &&
+                    (appointment.appointment_type != "online" ||
+                        !appointment.call_ended_at.isNullOrBlank())) ||
+                (status == "completed" &&
+                    appointment.appointment_type == "online" &&
+                    !appointment.call_ended_at.isNullOrBlank() &&
+                    appointment.completion_code_verified != true)
             ) {
                 Spacer(
                     modifier = Modifier.height(10.dp)
@@ -491,7 +528,9 @@ fun DoctorAppointmentActionSheet(
                 DoctorSheetActionCard(
                     icon = Icons.Outlined.CheckCircle,
                     label =
-                        if (appointment.appointment_type == "online") {
+                        if (status == "completed") {
+                            "Verify post-call completion code"
+                        } else if (appointment.appointment_type == "online") {
                             "Complete consultation"
                         } else {
                             "Complete in-person visit"

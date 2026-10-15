@@ -46,6 +46,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -123,6 +124,8 @@ fun HealthTipsScreen(
     var selectedCategory by remember {
         mutableStateOf(TipCategory.ALL)
     }
+    // Local educational-topic matching. Typed symptoms are not sent to an AI or a search server.
+    var symptomSearch by remember { mutableStateOf("") }
 
     var tips by remember {
         mutableStateOf<List<ExternalHealthTip>>(emptyList())
@@ -202,12 +205,37 @@ fun HealthTipsScreen(
         }
 
 
+    /* Educational suggestions based on locally loaded content, not a diagnosis. */
+    val matchedTips = remember(tips, restTips, symptomSearch) {
+        val query = symptomSearch.trim().lowercase()
+        if (query.isBlank()) restTips
+        else {
+            val words = query.split(Regex("[^a-z0-9]+"))
+                .filter { it.length >= 3 && it !in setOf("have", "with", "feel", "feeling", "symptom", "symptoms") }
+            val relatedTerms = words.flatMap { word ->
+                when (word) {
+                    "headache", "migraine" -> listOf(word, "head", "pain")
+                    "cough", "cold" -> listOf(word, "respiratory", "breathing")
+                    "fever" -> listOf(word, "fever", "infection")
+                    "anxiety" -> listOf(word, "stress", "mental")
+                    "insomnia" -> listOf(word, "sleep")
+                    "rash" -> listOf(word, "skin")
+                    else -> listOf(word)
+                }
+            }.distinct()
+            tips.filter { tip ->
+                val text = (tip.title + " " + tip.teaser + " " + tip.fullSummary).lowercase()
+                relatedTerms.isNotEmpty() && relatedTerms.any { text.contains(it) }
+            }
+        }
+    }
+
     /*
      * Group tips by selected category
      */
     val groupedTips =
         remember(
-            restTips,
+            matchedTips,
             selectedCategory
         ) {
 
@@ -233,7 +261,7 @@ fun HealthTipsScreen(
             categories.mapNotNull { category ->
 
                 val categoryTips =
-                    restTips
+                    matchedTips
                         .filter {
                             it.category == category
                         }
@@ -763,10 +791,45 @@ fun HealthTipsScreen(
                     }
 
 
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = symptomSearch,
+                                onValueChange = { symptomSearch = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text("Search health topics") },
+                                placeholder = { Text("e.g. headache, cough, sleep, anxiety") },
+                                singleLine = true
+                            )
+                            Text(
+                                "Educational articles matched to your words, not medical diagnosis. " +
+                                    "If symptoms are severe, sudden or worsening, seek medical help.",
+                                color = PatientColors.TextSecondary,
+                                fontSize = 10.5.sp,
+                                lineHeight = 15.sp
+                            )
+                        }
+                    }
+
+                    if (symptomSearch.isNotBlank() && groupedTips.isEmpty()) {
+                        item {
+                            Text(
+                                "No relevant article in the loaded library. Try a broader topic or consult a doctor.",
+                                modifier = Modifier.padding(20.dp),
+                                color = PatientColors.TextSecondary,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+
                     /*
                      * Tip of the day
                      */
-                    todayTip?.let { tip ->
+                    if (symptomSearch.isBlank()) todayTip?.let { tip ->
 
                         item {
 

@@ -172,8 +172,7 @@ fun RateVisitScreen(
 
             PatientReviewRepository
                 .submitReview(
-                    appointmentId =
-                        appointment.id,
+                    appointment = appointment,
                     rating =
                         rating,
                     comment =
@@ -776,133 +775,75 @@ private fun RatingCard(
     rating: Int,
     onRatingChange: (Int) -> Unit
 ) {
+    val colors = MaterialTheme.colorScheme
 
     ElevatedCard(
-        modifier =
-            Modifier.fillMaxWidth(),
-        shape =
-            RoundedCornerShape(
-                20.dp
-            )
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = colors.surface),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp)
     ) {
-
         Column(
-            modifier =
-                Modifier.padding(
-                    20.dp
-                ),
-            horizontalAlignment =
-                Alignment.CenterHorizontally
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-
             Text(
-                text =
-                    "How was your experience?",
-                fontSize =
-                    18.sp,
-                fontWeight =
-                    FontWeight.Bold
+                text = "How was your experience?",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                color = colors.onSurface,
+                modifier = Modifier.fillMaxWidth()
             )
-
-            Spacer(
-                modifier =
-                    Modifier.height(
-                        5.dp
-                    )
-            )
-
             Text(
-                text =
-                    ratingDescription(
-                        rating
-                    ),
-                fontSize =
-                    12.5.sp,
-                color =
-                    MaterialTheme
-                        .colorScheme
-                        .onSurfaceVariant
+                text = ratingDescription(rating),
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+                color = colors.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(
-                modifier =
-                    Modifier.height(
-                        18.dp
-                    )
-            )
-
+            // Give each star an equal share of available width. This prevents
+            // clipping on narrow devices and with increased display font sizes.
             Row(
-                horizontalArrangement =
-                    Arrangement.Center,
-                verticalAlignment =
-                    Alignment.CenterVertically
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(0.dp)
             ) {
-
-                repeat(
-                    5
-                ) { index ->
-
-                    val star =
-                        index + 1
-
-                    Icon(
-                        imageVector =
-                            if (
-                                star <= rating
-                            ) {
-                                Icons.Filled.Star
-                            } else {
-                                Icons.Filled.StarBorder
-                            },
-                        contentDescription =
-                            "$star star",
-                        tint =
-                            if (
-                                star <= rating
-                            ) {
-                                ReviewGold
-                            } else {
-                                MaterialTheme
-                                    .colorScheme
-                                    .outline
-                            },
-                        modifier =
-                            Modifier
-                                .size(
-                                    46.dp
-                                )
-                                .clickable {
-
-                                    onRatingChange(
-                                        star
-                                    )
-                                }
-                                .padding(
-                                    5.dp
-                                )
-                    )
+                repeat(5) { index ->
+                    val star = index + 1
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(54.dp)
+                            .clickable { onRatingChange(star) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (star <= rating)
+                                Icons.Filled.Star else Icons.Filled.StarBorder,
+                            contentDescription = "$star star",
+                            tint = if (star <= rating) ReviewGold else colors.outline,
+                            modifier = Modifier.size(34.dp)
+                        )
+                    }
                 }
             }
 
-            if (
-                rating > 0
-            ) {
-
-                Spacer(
-                    modifier =
-                        Modifier.height(
-                            8.dp
-                        )
-                )
-
-                Text(
-                    text =
-                        "$rating / 5",
-                    color =
-                        ReviewGold,
-                    fontWeight =
-                        FontWeight.Bold
-                )
+            if (rating > 0) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = colors.primaryContainer
+                ) {
+                    Text(
+                        text = "$rating / 5",
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+                        color = colors.onPrimaryContainer,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }

@@ -8,7 +8,19 @@ import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.serialization.Serializable
 
+
+@Serializable
+data class DoctorInvoicePracticeLocation(
+    val location_name: String? = null,
+    val location_address: String? = null,
+    val has_pin: Boolean = false
+) {
+    val displayAddress: String
+        get() = listOfNotNull(location_name?.takeIf(String::isNotBlank),
+            location_address?.takeIf(String::isNotBlank)).joinToString(" — ")
+}
 
 object DoctorPatientCareRepository {
 
@@ -105,6 +117,46 @@ object DoctorPatientCareRepository {
         }
 
 
+    /** Pending physical follow-up requests for the logged-in doctor across all patients.
+     * The RPC verifies auth.uid() against doctors.user_id on the server.
+     */
+    suspend fun getPendingPhysicalVisitRequests(): Result<List<PhysicalVisitRequest>> =
+        runCatching {
+            supabase.auth.awaitInitialization()
+            supabase.postgrest
+                .rpc(function = "doctor_get_my_physical_visit_requests")
+                .decodeList<PhysicalVisitRequest>()
+        }
+
+
+    /** Doctor's standalone follow-up inbox (all request statuses).
+     * Both this and invoice history are scoped to auth.uid() in Supabase.
+     */
+    suspend fun getMyPhysicalVisitHistory(): Result<List<PhysicalVisitRequest>> =
+        runCatching {
+            supabase.auth.awaitInitialization()
+            supabase.postgrest
+                .rpc(function = "doctor_get_my_physical_visit_history")
+                .decodeList<PhysicalVisitRequest>()
+        }
+
+    suspend fun getMyPhysicalInvoiceHistory(): Result<List<PhysicalVisitInvoice>> =
+        runCatching {
+            supabase.auth.awaitInitialization()
+            supabase.postgrest
+                .rpc(function = "doctor_get_my_physical_invoice_history")
+                .decodeList<PhysicalVisitInvoice>()
+        }
+
+    suspend fun getMyInvoiceLocation(): Result<DoctorInvoicePracticeLocation> =
+        runCatching {
+            supabase.auth.awaitInitialization()
+            supabase.postgrest
+                .rpc(function = "doctor_get_my_invoice_location")
+                .decodeList<DoctorInvoicePracticeLocation>()
+                .firstOrNull() ?: error("Doctor practice location not configured.")
+        }
+
     /*
      * ---------------------------------------------------------
      * PHYSICAL VISIT INVOICES
@@ -164,7 +216,7 @@ object DoctorPatientCareRepository {
                     )
 
                     put(
-                        "p_doctor_note",
+                        "p_note",
                         doctorNote
                     )
                 }
@@ -173,7 +225,7 @@ object DoctorPatientCareRepository {
                 .postgrest
                 .rpc(
                     function =
-                        "doctor_decide_physical_visit_request",
+                        "doctor_update_physical_visit_request",
                     parameters =
                         parameters
                 )
@@ -203,7 +255,7 @@ object DoctorPatientCareRepository {
                     )
 
                     put(
-                        "p_doctor_note",
+                        "p_note",
                         doctorNote
                     )
                 }
@@ -212,7 +264,7 @@ object DoctorPatientCareRepository {
                 .postgrest
                 .rpc(
                     function =
-                        "doctor_decide_physical_visit_request",
+                        "doctor_update_physical_visit_request",
                     parameters =
                         parameters
                 )
@@ -272,11 +324,6 @@ object DoctorPatientCareRepository {
                     )
 
                     put(
-                        "p_currency",
-                        "ZAR"
-                    )
-
-                    put(
                         "p_proposed_date",
                         proposedDate.trim()
                     )
@@ -301,7 +348,7 @@ object DoctorPatientCareRepository {
                 .postgrest
                 .rpc(
                     function =
-                        "doctor_issue_physical_visit_invoice",
+                        "doctor_create_physical_visit_invoice",
                     parameters =
                         parameters
                 )

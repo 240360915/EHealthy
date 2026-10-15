@@ -62,7 +62,9 @@ fun EHealthyPaymentCheckout(
     var savedCard by remember(accountId) {
         mutableStateOf(DemoSavedCardStore.load(context, accountId))
     }
-    var useSaved by remember(accountId) { mutableStateOf(savedCard != null) }
+    // Start with empty fields so patients can always enter their own fictional card.
+    // An existing saved demo profile stays available as an explicit opt-in choice.
+    var useSaved by remember(accountId) { mutableStateOf(false) }
     var rememberTestCard by remember { mutableStateOf(false) }
     var localProcessing by remember { mutableStateOf(false) }
     val paymentScope = rememberCoroutineScope()
@@ -88,8 +90,10 @@ fun EHealthyPaymentCheckout(
 
         error = when {
             selected == null && holder.trim().length < 2 -> "Enter the demo cardholder name."
-            selected == null && digits !in DemoSavedCardStore.supportedTestNumbers ->
-                "Only synthetic DemoPay test cards are accepted (e.g. 4242 4242 4242 4242). Never enter a real card."
+            selected == null && digits.isEmpty() ->
+                "Enter a fictional 16-digit demo card number."
+            selected == null && !DemoSavedCardStore.isValidDemoNumber(digits) ->
+                "The demo card number must contain exactly 16 digits."
             !validExpiry -> "Enter a valid test card expiry date."
             selected == null && cvv.length != 3 -> "Enter a 3-digit demo security code."
             else -> null
@@ -397,7 +401,7 @@ fun EHealthyPaymentCheckout(
                         error = null
                     },
                     label = { Text("Name on card") },
-                    placeholder = { Text("TEST PATIENT") },
+                    placeholder = { Text("Fictional cardholder name") },
                     singleLine = true,
                     enabled = !busy,
                     shape = RoundedCornerShape(12.dp),
@@ -421,7 +425,7 @@ fun EHealthyPaymentCheckout(
                     },
 
                     placeholder = {
-                        Text("0000 0000 0000 0000")
+                        Text("16-digit fictional number")
                     },
 
                     visualTransformation = CardNumberFormatting,
@@ -436,6 +440,11 @@ fun EHealthyPaymentCheckout(
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                Text(
+                    "Demo only: invent 16 digits. Do not enter a real bank card number.",
+                    color = PayMuted,
+                    fontSize = 11.sp
+                )
 
                 Row(
                     horizontalArrangement =

@@ -97,6 +97,7 @@ private val VisitCancelled = Color(0xFFB91C1C)
 fun PatientVisitsScreen(
     onBack: () -> Unit,
     onOpenInvoices: () -> Unit,
+    onOpenAcceptedFollowUps: () -> Unit,
     onOpenPrescriptions: () -> Unit,
     onReschedule: (appointmentId: String) -> Unit,
     onMessageDoctor: (doctorId: String) -> Unit,
@@ -527,6 +528,15 @@ fun PatientVisitsScreen(
                         .isCancelledStatus()
             }
         }
+        // Newest visit date/time first, including completed appointments
+        // that are eligible for reviews.
+        .sortedWith(
+            compareByDescending<PatientAppointment> {
+                it.date ?: it.created_at?.take(10).orEmpty()
+            }.thenByDescending {
+                it.time ?: it.created_at?.substringAfter('T')?.take(8).orEmpty()
+            }
+        )
 
     cancellingAppointment
         ?.let { appointment ->
@@ -1096,6 +1106,7 @@ fun PatientVisitsScreen(
                                     linkedPrescriptionAppointments?.contains(appointment.id),
 
                                 onOpenPrescriptions = onOpenPrescriptions,
+                                onOpenAcceptedFollowUps = onOpenAcceptedFollowUps,
 
                                 physicalRequest =
                                     physicalVisitRequests
@@ -1416,6 +1427,7 @@ private fun VisitCard(
     physicalInvoice: PhysicalVisitInvoice?,
     invoiceDecisionInProgress: Boolean,
     onRequestPhysicalVisit: () -> Unit,
+    onOpenAcceptedFollowUps: () -> Unit,
     onAcceptPhysicalInvoice: (PhysicalVisitInvoice) -> Unit,
     onDeclinePhysicalInvoice: (PhysicalVisitInvoice) -> Unit
 ) {
@@ -1426,8 +1438,8 @@ private fun VisitCard(
             .lowercase()
 
     val isActive =
-        appointment.status
-            .isUpcomingStatus()
+        appointment.status.isUpcomingStatus() &&
+            appointment.call_ended_at.isNullOrBlank()
 
     val isCompleted =
         status == "completed"
@@ -1734,6 +1746,28 @@ private fun VisitCard(
 
             Spacer(Modifier.height(12.dp))
 
+            // Generate an optional clinical handoff code after the call,
+            // even when automated DemoPay completion already ran.
+            if (isOnline &&
+                !appointment.call_ended_at.isNullOrBlank() &&
+                (isCompleted || status == "confirmed")
+            ) {
+                OutlinedButton(
+                    onClick = onCompleteConsultation,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(13.dp)
+                ) {
+                    Icon(Icons.Filled.CheckCircle, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        if (appointment.completion_code.isNullOrBlank())
+                            "Generate 6-digit completion code"
+                        else "Show completion code to doctor"
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+            }
+
             if (
                 isCompleted &&
                 isOnline
@@ -1748,6 +1782,7 @@ private fun VisitCard(
                         invoiceDecisionInProgress,
                     onRequestPhysicalVisit =
                         onRequestPhysicalVisit,
+                    onOpenAcceptedFollowUps = onOpenAcceptedFollowUps,
                     onAcceptInvoice =
                         onAcceptPhysicalInvoice,
                     onDeclineInvoice =
@@ -2063,6 +2098,7 @@ private fun PhysicalVisitWorkflowCard(
     invoice: PhysicalVisitInvoice?,
     invoiceDecisionInProgress: Boolean,
     onRequestPhysicalVisit: () -> Unit,
+    onOpenAcceptedFollowUps: () -> Unit,
     onAcceptInvoice: (PhysicalVisitInvoice) -> Unit,
     onDeclineInvoice: (PhysicalVisitInvoice) -> Unit
 ) {
@@ -2202,13 +2238,16 @@ private fun PhysicalVisitWorkflowCard(
                 ) -> {
 
                     PhysicalStatusText(
-                        title =
-                            "Doctor accepted your request",
-                        body =
-                            "The doctor is preparing the invoice and proposed physical visit arrangement.",
-                        color =
-                            VisitSuccess
+                        title = "Doctor accepted your request",
+                        body = "View the doctor's saved practice map. The visit date, time and fee are not final until you accept the invoice.",
+                        color = VisitSuccess
                     )
+                    OutlinedButton(
+                        onClick = onOpenAcceptedFollowUps,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("View practice location on map")
+                    }
                 }
 
 
@@ -2755,38 +2794,6 @@ private fun ActiveVisitActions(
                 Text(
                     "Open scheduled call"
                 )
-            }
-            if (online) {
-
-                OutlinedButton(
-                    onClick =
-                        onCompleteConsultation,
-                    modifier =
-                        Modifier.fillMaxWidth(),
-                    shape =
-                        RoundedCornerShape(
-                            13.dp
-                        )
-                ) {
-
-                    Icon(
-                        imageVector =
-                            Icons.Filled.CheckCircle,
-                        contentDescription =
-                            null
-                    )
-
-                    Spacer(
-                        modifier =
-                            Modifier.width(
-                                7.dp
-                            )
-                    )
-
-                    Text(
-                        "Finish consultation"
-                    )
-                }
             }
         }
 

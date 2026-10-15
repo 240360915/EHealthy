@@ -69,6 +69,8 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -90,6 +92,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import ehealthy.connect.data.patient.PatientAppointment
+import ehealthy.connect.data.patient.PhysicalVisitRequest
 import ehealthy.connect.data.patient.PatientRepository
 import ehealthy.connect.data.patient.PatientReviewDisplay
 import ehealthy.connect.ml.DoctorRecommendation
@@ -121,6 +124,7 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 data class Appointment(
     val id: String,
     val patient_name: String? = null,
+    val patient_id: String? = null,
     val reason: String? = null,
     val date: String? = null,
     val time: String? = null,
@@ -133,7 +137,9 @@ data class Appointment(
     val price_minor: Int? = null,
     val currency: String? = null,
     val completion_code: String? = null,
-    val cancelled_reason: String? = null
+    val cancelled_reason: String? = null,
+    val call_ended_at: String? = null,
+    val completion_code_verified: Boolean? = null
 )
 
 @Serializable
@@ -185,6 +191,10 @@ private fun Appointment.isUpcoming(
         status
             ?.lowercase()
             .orEmpty()
+
+    // A finished call is not an upcoming appointment even if an older
+    // backend record has not been marked completed yet.
+    if (!call_ended_at.isNullOrBlank()) return false
 
     if (
         currentStatus !in setOf(
@@ -244,7 +254,8 @@ private fun PatientAppointment.toUiAppointment() =
         price_minor = price_minor,
         currency = currency,
         completion_code = completion_code,
-        cancelled_reason = cancelled_reason
+        cancelled_reason = cancelled_reason,
+        call_ended_at = call_ended_at
     )
 
 private fun PatientReviewDisplay.toUiReview() = ReviewDisplay(
@@ -293,13 +304,15 @@ fun PatientDashboard(
     // Existing MainActivity callers continue compiling; wire these to the
     // dedicated routes for direct dashboard shortcuts (see README).
     onNavigateHealthProfile: () -> Unit = onNavigateSettings,
-    onNavigateInvoices: () -> Unit = onNavigateSettings
+    onNavigateInvoices: () -> Unit = onNavigateSettings,
+    onNavigateFollowUps: () -> Unit = onNavigateAppointments
 ) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
     var selectedTab by remember { mutableStateOf(PatientTab.HOME) }
     var appointments by remember { mutableStateOf<List<Appointment>>(emptyList()) }
+    var homePhysicalRequests by remember { mutableStateOf<List<PhysicalVisitRequest>>(emptyList()) }
     var reviews by remember { mutableStateOf<List<ReviewDisplay>>(emptyList()) }
     var unreadNotificationCount by remember {
         mutableStateOf(0)
@@ -399,6 +412,17 @@ fun PatientDashboard(
         // Load profile and appointments concurrently for a responsive home screen.
         launch { refreshDashboard() }
         launch { refreshSmartRecommendation() }
+        launch {
+            // The same patient-owned request and invoice sources as My Visits.
+            PatientRepository.getMyPhysicalVisitRequests()
+                .onSuccess { homePhysicalRequests = it }
+        }
+    }
+
+    // Navigating back from the call resumes this destination; refresh immediately
+    // so the previous Join Consultation card cannot remain with stale data.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        refreshKey++
     }
 
     LaunchedEffect(Unit) {
@@ -469,6 +493,7 @@ fun PatientDashboard(
                 modifier = Modifier.padding(paddingValues),
                 patientName = patientName,
                 appointments = appointments,
+                physicalRequests = homePhysicalRequests,
                 upcomingAppointments = upcomingAppointments,
                 nextAppointment = nextAppointment,
                 reviews = reviews,
@@ -487,6 +512,7 @@ fun PatientDashboard(
                 onNavigateHealthTips = onNavigateHealthTips,
                 onNavigateHealthProfile = onNavigateHealthProfile,
                 onNavigateInvoices = onNavigateInvoices,
+                onNavigateFollowUps = onNavigateFollowUps,
                 onNavigateNotifications = onNavigateNotifications,
                 onAppointmentClick = { selectedAppointment = it },
                 onStartCall = onStartCall
@@ -1003,6 +1029,7 @@ private fun ModernHomeTab(
     modifier: Modifier,
     patientName: String,
     appointments: List<Appointment>,
+    physicalRequests: List<PhysicalVisitRequest>,
     upcomingAppointments: List<Appointment>,
     nextAppointment: Appointment?,
     reviews: List<ReviewDisplay>,
@@ -1021,6 +1048,7 @@ private fun ModernHomeTab(
     onNavigateHealthTips: () -> Unit,
     onNavigateHealthProfile: () -> Unit,
     onNavigateInvoices: () -> Unit,
+    onNavigateFollowUps: () -> Unit,
     onNavigateNotifications: () -> Unit,
     onAppointmentClick: (Appointment) -> Unit,
     onStartCall: (String) -> Unit
@@ -1119,6 +1147,28 @@ private fun ModernHomeTab(
         }
 
         item { OnDemandCareHero(onClick = onNavigateConsultations) }
+
+        // One entry point for every request; details and maps live on their own screens.
+        item {
+            SectionHeader(
+                title = "In-person follow-ups",
+                subtitle = if (physicalRequests.isEmpty())
+                    "Review your requests, accepted visits and practice maps"
+                else
+                    physicalRequests.size.toString() + " requests · see statuses and accepted visits"
+            )
+        }
+        item {
+            Button(
+                onClick = onNavigateFollowUps,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Icon(Icons.Outlined.CalendarMonth, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("View Follow Ups")
+            }
+        }
 
         item {
             DashboardStatsRow(

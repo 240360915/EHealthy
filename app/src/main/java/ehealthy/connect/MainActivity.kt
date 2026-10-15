@@ -49,6 +49,8 @@ import ehealthy.connect.ui.common.isValidEmail
 import ehealthy.connect.ui.common.normalizeEmail
 import ehealthy.connect.ui.doctorDashboard.DoctorAccountSettings
 import ehealthy.connect.ui.doctorDashboard.DoctorDashboard
+import ehealthy.connect.ui.doctorDashboard.DoctorPhysicalFollowUpsScreen
+import ehealthy.connect.ui.doctorDashboard.DoctorPracticeLocationScreen
 import ehealthy.connect.ui.doctorDashboard.DoctorDemoEarningsScreen
 import ehealthy.connect.ui.doctorDashboard.DoctorPatientCareFileScreen
 import ehealthy.connect.ui.doctorDashboard.DoctorForgotPassword
@@ -140,6 +142,8 @@ import ehealthy.connect.ui.patientDashboard.myVisits.RescheduleAppointmentScreen
 import ehealthy.connect.ui.doctorDashboard.RefillRequest
 import ehealthy.connect.ui.patientDashboard.PatientNotificationsScreen
 import ehealthy.connect.ui.patientDashboard.PatientInvoicesScreen
+import ehealthy.connect.ui.patientDashboard.PatientAcceptedFollowUpsScreen
+import ehealthy.connect.ui.patientDashboard.PatientFollowUpsScreen
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import ehealthy.connect.ui.doctorDashboard.DoctorPatientCareHub
@@ -148,6 +152,18 @@ import kotlinx.serialization.json.put
 private object BookingConfirmationHolder {
     var confirmation: BookingConfirmation? = null
 }
+
+// Patient-owned completed on-demand consultations appear in medical history.
+@Serializable
+private data class PatientConsultationHistoryRow(
+    val id: String,
+    val mode: String,
+    val status: String,
+    val service: String? = null,
+    val claimed_doctor_id: String? = null,
+    val created_at: String,
+    val symptom_notes: String? = null
+)
 
 @Serializable
 private data class PatientLookup(
@@ -219,6 +235,15 @@ fun AppNavGraph(pendingRoute: String? = null) {
         }
     }
 
+    // Call routes may be launched directly from notifications with no previous destination.
+    // Always replace an ended call with the signed-in role's home screen.
+    fun returnHomeAfterCall(isDoctor: Boolean) {
+        navController.navigate(if (isDoctor) "doctorDashboard" else "patientDashboard") {
+            popUpTo(navController.graph.id) { inclusive = false }
+            launchSingleTop = true
+        }
+    }
+
     fun doctorBackToDashboard() {
         val wentBack =
             navController.popBackStack()
@@ -273,9 +298,7 @@ fun AppNavGraph(pendingRoute: String? = null) {
                     "Patient"
                 },
                 isDoctorView = isDoctor,
-                onBack = {
-                    navController.popBackStack()
-                }
+                onBack = { returnHomeAfterCall(isDoctor) }
             )
         }
         composable("splash") {
@@ -1402,6 +1425,9 @@ fun AppNavGraph(pendingRoute: String? = null) {
             DoctorDashboard(
                 onNavigateAvailability = { navController.navigate("doctorAvailability") },
                 onNavigateNotifications = { navController.navigate("doctorNotifications") },
+                onOpenPhysicalFollowUps = { navController.navigate("doctorPhysicalFollowUps") },
+                onOpenAcceptedFollowUps = { navController.navigate("doctorAcceptedFollowUps") },
+                onOpenPracticeLocation = { navController.navigate("doctorPracticeLocation") },
                 doctorProfile = doctorProfile,
                 isLoadingProfile = isLoadingProfile,
                 isUploadingPhoto = isUploadingPhoto,
@@ -1493,31 +1519,16 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 },
                 onVerifyCompletionCode = { appointmentId, enteredCode ->
                     try {
-                        val row = SupabaseClientProvider.client.postgrest
-                            .from("appointments")
-                            .select(columns = Columns.list("completion_code")) {
-                                filter { eq("id", appointmentId) }
+                        SupabaseClientProvider.client.postgrest.rpc(
+                            function = "doctor_verify_appointment_completion_code",
+                            parameters = buildJsonObject {
+                                put("p_appointment_id", appointmentId)
+                                put("p_code", enteredCode)
                             }
-                            .decodeSingleOrNull<Map<String, String?>>()
-                        val realCode = row?.get("completion_code")
-
-                        if (realCode.isNullOrBlank()) {
-                            Result.failure(Exception("The patient hasn't requested a completion code yet."))
-                        } else if (realCode != enteredCode) {
-                            Result.failure(Exception("Incorrect code — please try again."))
-                        } else {
-                            SupabaseClientProvider.client.postgrest.from("appointments")
-                                .update({
-                                    set("status", "completed")
-                                    set("funds_released", true)
-                                    set("completion_code_verified", true)
-                                }) {
-                                    filter { eq("id", appointmentId) }
-                                }
-                            Result.success(Unit)
-                        }
+                        )
+                        Result.success(Unit)
                     } catch (e: Exception) {
-                        Result.failure(e)
+                        Result.failure(Exception(friendlyAuthError(e)))
                     }
                 }
             )
@@ -1629,10 +1640,26 @@ fun AppNavGraph(pendingRoute: String? = null) {
                         Result.failure(e)
                     }
                 },
-                onBack = {
-                    doctorBackToDashboard()
-                }
+                onBack = { returnHomeAfterCall(true) }
             )
+        }
+
+        composable("doctorPhysicalFollowUps") {
+            DoctorPhysicalFollowUpsScreen(
+                initialFilter = "pending",
+                onOpenPracticeLocation = { navController.navigate("doctorPracticeLocation") },
+                onBack = { navController.popBackStack() }
+            )
+        }
+        composable("doctorAcceptedFollowUps") {
+            DoctorPhysicalFollowUpsScreen(
+                initialFilter = "accepted",
+                onOpenPracticeLocation = { navController.navigate("doctorPracticeLocation") },
+                onBack = { navController.popBackStack() }
+            )
+        }
+        composable("doctorPracticeLocation") {
+            DoctorPracticeLocationScreen(onBack = { navController.popBackStack() })
         }
 
         composable(
@@ -2209,6 +2236,7 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 },
                 onViewPrivacyPolicy = { navController.navigate("privacyPolicy") },
                 onNavigateAppPin = { navController.navigate("appPinSettings") },
+                onNavigatePracticeLocation = { navController.navigate("doctorPracticeLocation") },
                 onLogout = {
                     scope.launch {
                         ehealthy.connect.consultation.ConsultationDevices.signOut()
@@ -2304,6 +2332,20 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 onBack = {
                     navController.popBackStack()
                 }
+            )
+        }
+
+        composable("patientFollowUps") {
+            PatientFollowUpsScreen(
+                onBack = { navController.popBackStack() },
+                onViewAccepted = { navController.navigate("patientAcceptedFollowUps") }
+            )
+        }
+
+        composable("patientAcceptedFollowUps") {
+            PatientAcceptedFollowUpsScreen(
+                onBack = { navController.popBackStack() },
+                onOpenInvoices = { navController.navigate("patientInvoices") }
             )
         }
 
@@ -2416,6 +2458,9 @@ fun AppNavGraph(pendingRoute: String? = null) {
                 },
                 onNavigateInvoices = {
                     navController.navigate("patientInvoices")
+                },
+                onNavigateFollowUps = {
+                    navController.navigate("patientFollowUps")
                 },
 
                 onNavigateSettings = {
@@ -2599,10 +2644,11 @@ fun AppNavGraph(pendingRoute: String? = null) {
                         Result.failure(e)
                     }
                 },
-                onBack = { navController.popBackStack() },
+                onBack = { returnHomeAfterCall(false) },
                 onReschedule = {
+                    // Preserve the originating page on the back stack.
                     navController.navigate("rescheduleAppointment/$appointmentId") {
-                        popUpTo("patientDashboard") { inclusive = false }
+                        launchSingleTop = true
                     }
                 }
             )
@@ -2926,7 +2972,32 @@ fun AppNavGraph(pendingRoute: String? = null) {
                                 .select { filter { eq("patient_id", patientId) } }
                                 .decodeList<Prescription>()
 
-                            val doctorIds = (records.mapNotNull { it.doctor_id } + prescriptions.mapNotNull { it.doctor_id }).distinct()
+                            // The medical timeline includes existing appointments and
+                            // the doctor's patient-visible care notes, without copying them
+                            // into extra medical_records rows.
+                            val appointments = ehealthy.connect.data.patient.PatientRepository
+                                .getMyAppointments().getOrThrow()
+                            val careNotes = ehealthy.connect.data.CareFileRepository
+                                .getMyCareNotes().getOrDefault(emptyList())
+                            val completedOnDemand = SupabaseClientProvider.client.postgrest
+                                .from("consultation_requests")
+                                .select(
+                                    columns = Columns.list(
+                                        "id", "mode", "status", "service",
+                                        "claimed_doctor_id", "created_at", "symptom_notes"
+                                    )
+                                ) {
+                                    filter {
+                                        eq("patient_id", patientId)
+                                        eq("status", "completed")
+                                    }
+                                }
+                                .decodeList<PatientConsultationHistoryRow>()
+
+                            val doctorIds = (records.mapNotNull { it.doctor_id } +
+                                prescriptions.mapNotNull { it.doctor_id } +
+                                appointments.mapNotNull { it.doctor_id } +
+                                completedOnDemand.mapNotNull { it.claimed_doctor_id }).distinct()
                             val doctorNames: Map<String, String>
                             val doctorPhotos: Map<String, String>
                             if (doctorIds.isEmpty()) {
@@ -2966,7 +3037,70 @@ fun AppNavGraph(pendingRoute: String? = null) {
                                 )
                             }
 
-                            val display = (recordDisplays + prescriptionDisplays)
+                            val appointmentDisplays = appointments.map { appt ->
+                                MedicalRecordDisplay(
+                                    record = MedicalRecord(
+                                        id = "appointment-" + appt.id,
+                                        record_type = "appointment",
+                                        notes = listOfNotNull(
+                                            ("Appointment: " + appt.date.orEmpty() + " " + appt.time.orEmpty()).trim(),
+                                            "Status: " + appt.status.orEmpty(),
+                                            appt.reason?.takeIf { it.isNotBlank() }?.let { "Reason: " + it }
+                                        ).joinToString("\n"),
+                                        created_at = appt.created_at ?: (appt.date?.plus("T00:00:00") ?: ""),
+                                        doctor_id = appt.doctor_id
+                                    ),
+                                    doctorName = doctorNames[appt.doctor_id] ?: "Doctor",
+                                    doctorPhoto = appt.doctor_id?.let { doctorPhotos[it] }
+                                )
+                            }
+
+                            val careNoteDisplays = careNotes.map { note ->
+                                MedicalRecordDisplay(
+                                    record = MedicalRecord(
+                                        id = "care-note-" + note.appointment_id,
+                                        record_type = "care_note",
+                                        notes = listOfNotNull(
+                                            note.consultation_summary.takeIf { it.isNotBlank() }
+                                                ?.let { "Consultation summary: " + it },
+                                            note.care_plan.takeIf { it.isNotBlank() }
+                                                ?.let { "Care plan: " + it }
+                                        ).joinToString("\n\n"),
+                                        created_at = note.updated_at ?: (note.visit_date?.plus("T00:00:00") ?: ""),
+                                        doctor_id = null
+                                    ),
+                                    doctorName = note.doctor_name ?: "Doctor"
+                                )
+                            }
+
+                            val onDemandDisplays = completedOnDemand.map { consultation ->
+                                val type = if (consultation.mode == "broadcast") {
+                                    "Broadcast consultation"
+                                } else {
+                                    "Private consultation"
+                                }
+                                MedicalRecordDisplay(
+                                    record = MedicalRecord(
+                                        id = "consultation-" + consultation.id,
+                                        record_type = "consultation",
+                                        notes = listOfNotNull(
+                                            type,
+                                            "Status: " + consultation.status,
+                                            consultation.service?.takeIf { it.isNotBlank() }
+                                                ?.let { "Service: " + it },
+                                            consultation.symptom_notes?.takeIf { it.isNotBlank() }
+                                                ?.let { "Symptoms reported: " + it }
+                                        ).joinToString("\n"),
+                                        created_at = consultation.created_at,
+                                        doctor_id = consultation.claimed_doctor_id
+                                    ),
+                                    doctorName = doctorNames[consultation.claimed_doctor_id] ?: "Doctor",
+                                    doctorPhoto = consultation.claimed_doctor_id?.let { doctorPhotos[it] }
+                                )
+                            }
+
+                            val display = (recordDisplays + prescriptionDisplays + appointmentDisplays +
+                                careNoteDisplays + onDemandDisplays)
                                 .sortedByDescending { it.record.created_at }
 
                             Result.success(display)
@@ -3182,6 +3316,9 @@ fun AppNavGraph(pendingRoute: String? = null) {
                     navController.navigate(
                         "patientInvoices"
                     )
+                },
+                onOpenAcceptedFollowUps = {
+                    navController.navigate("patientAcceptedFollowUps")
                 },
 
                 onOpenPrescriptions = {
@@ -3417,9 +3554,9 @@ fun AppNavGraph(pendingRoute: String? = null) {
                             doctorIdForFetch?.let { BookingRepository.availableTimes(it, date) }
                                 ?: Result.failure(IllegalStateException("Doctor not found."))
                         },
-                        onConfirmReschedule = { _, _, _ ->
-                            errorMessage = "Rescheduling requires secure server support. Your existing appointment has not changed."
-                        }
+                        // RescheduleAppointmentScreen calls the existing
+                        // secure PatientRepository.rescheduleAppointment RPC.
+                        // It must not present a misleading backend placeholder.
                     )
                 }
             }

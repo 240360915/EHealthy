@@ -337,7 +337,8 @@ object PatientRepository {
                         "rescheduled_at",
                         "completion_code",
                         "cancelled_reason",
-                        "cancelled_at"
+                        "cancelled_at",
+                        "call_ended_at"
                     )
                 ) {
                     filter {
@@ -1722,7 +1723,9 @@ data class PatientAppointment(
 
     val cancelled_reason: String? = null,
 
-    val cancelled_at: String? = null
+    val cancelled_at: String? = null,
+
+    val call_ended_at: String? = null
 )
 
 @Serializable

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -276,9 +277,9 @@ fun MedicalRecordsScreen(
 
         Column(
             modifier =
-                Modifier.padding(
-                    paddingValues
-                )
+                Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
         ) {
 
             /*
@@ -891,6 +892,31 @@ fun MedicalRecordsScreen(
                         background =
                             PatientColors.RecordsCard
                     )
+                }
+
+                else -> {
+                    // The header count reflects records; this success branch
+                    // must actually render them. Use the remaining screen
+                    // height so the record cards can be scrolled on small phones.
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        contentPadding = PaddingValues(
+                            start = 20.dp,
+                            end = 20.dp,
+                            top = 10.dp,
+                            bottom = 24.dp
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(
+                            items = displayedRecords,
+                            key = { it.record.id }
+                        ) { item ->
+                            RecordCard(item)
+                        }
+                    }
                 }
             }
         }

@@ -227,6 +227,8 @@ fun DoctorDashboard(
     onNavigateAvailability: () -> Unit = {},
     onNavigateNotifications: () -> Unit = {},
     onOpenPhysicalFollowUps: () -> Unit = {},
+    onOpenAcceptedFollowUps: () -> Unit = {},
+    onOpenPracticeLocation: () -> Unit = {},
     onStartCall: (appointmentId: String) -> Unit = {},
     onVerifyCompletionCode: suspend (appointmentId: String, code: String) -> Result<Unit> = { _, _ -> Result.failure(Exception("Not available")) },
     onOpenPatientFile: (appointmentId: String) -> Unit = {}
@@ -758,6 +760,8 @@ fun DoctorDashboard(
                     physicalRequestError = physicalRequestError,
                     acceptingPhysicalRequestId = acceptingPhysicalRequestId,
                     onNavigatePhysicalFollowUps = onOpenPhysicalFollowUps,
+                    onNavigateAcceptedFollowUps = onOpenAcceptedFollowUps,
+                    onNavigatePracticeLocation = onOpenPracticeLocation,
                     onStartScheduledCall = onStartCall,
                     onAcceptPhysicalRequest = { request ->
                         if (acceptingPhysicalRequestId == null) {
@@ -1030,6 +1034,8 @@ private fun HomeTabContent(
     physicalRequestError: String?,
     acceptingPhysicalRequestId: String?,
     onNavigatePhysicalFollowUps: () -> Unit,
+    onNavigateAcceptedFollowUps: () -> Unit,
+    onNavigatePracticeLocation: () -> Unit,
     onStartScheduledCall: (String) -> Unit,
     onAcceptPhysicalRequest: suspend (PhysicalVisitRequest) -> Unit,
     onReviewPhysicalRequest: (PhysicalVisitRequest) -> Unit,
@@ -1393,11 +1399,20 @@ private fun HomeTabContent(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp
                     )
-                    Button(
-                        onClick = onNavigatePhysicalFollowUps,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Open follow-up requests & invoices")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = onNavigatePhysicalFollowUps,
+                            modifier = Modifier.weight(1f)
+                        ) { Text("Pending requests") }
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = onNavigateAcceptedFollowUps,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Accepted (${physicalRequests.count { it.status == "accepted" }})")
+                        }
+                    }
+                    TextButton(onClick = onNavigatePracticeLocation) {
+                        Text("Set your practice map pin")
                     }
                 }
             }
@@ -1405,8 +1420,9 @@ private fun HomeTabContent(
 
         // Individual actionable requests stay visible on Home as quick access.
         // Accepting here uses the SAME secure RPC as the dedicated request screen.
-        if (physicalRequests.isNotEmpty()) {
-            items(physicalRequests.take(3), key = { "home_followup_" + it.id }) { request ->
+        val pendingOnly = physicalRequests.filter { it.status.equals("pending", true) }
+        if (pendingOnly.isNotEmpty()) {
+            items(pendingOnly.take(3), key = { "home_followup_" + it.id }) { request ->
                 Card(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 5.dp),
                     shape = RoundedCornerShape(18.dp),

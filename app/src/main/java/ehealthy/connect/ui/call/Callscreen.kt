@@ -45,7 +45,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import ehealthy.connect.util.fetchStreamToken
 import io.getstream.video.android.compose.theme.VideoTheme
 import io.getstream.video.android.compose.ui.components.call.activecall.CallContent
 import io.getstream.video.android.compose.ui.components.call.controls.actions.DefaultOnCallActionHandler
@@ -165,16 +164,20 @@ fun CallScreen(
                 return@LaunchedEffect
             }
 
-            val tokenResult = fetchStreamToken()
-            val tokenResponse = tokenResult.getOrElse {
-                screenState = CallScreenState.Error(it.message ?: "Could not start the call.")
-                return@LaunchedEffect
-            }
+            // The working broadcast uses a server-created "consultation"
+            // room with both doctor/patient membership, NOT a client-created
+            // default room. Scheduled calls now follow that exact pattern.
+            val credentials = ScheduledStreamRepository.getCredentials(appointmentId)
+                .getOrElse { error ->
+                    screenState = CallScreenState.Error(
+                        error.message ?: "Could not prepare the scheduled video room."
+                    )
+                    return@LaunchedEffect
+                }
             android.util.Log.d(
                 "ScheduledCall",
-                "role=${if (isDoctorView) "doctor" else "patient"} " +
-                        "appointmentId=$appointmentId " +
-                        "streamUserId=${tokenResponse.userId}"
+                "Joining authorized shared scheduled room; role=" +
+                    if (isDoctorView) "doctor" else "patient"
             )
 
             // Always tear down any previous client before building a new one —
@@ -186,21 +189,23 @@ fun CallScreen(
                 // No client was installed yet — fine, nothing to remove.
             }
 
-            val user = User(id = tokenResponse.userId, name = displayName, role = "user")
+            val user = User(id = credentials.userId, name = displayName, role = "user")
             val client = StreamVideoBuilder(
                 context = context.applicationContext,
                 apiKey = STREAM_API_KEY,
                 geo = GEO.GlobalEdgeNetwork,
                 user = user,
-                token = tokenResponse.token
+                token = credentials.token
             ).build()
 
-            val streamCall = client.call(type = "default", id = appointmentId)
-            val joinResult = streamCall.join(create = true)
+            val streamCall = client.call(type = credentials.callType, id = credentials.callId)
+            // The room has already been created securely by Supabase.
+            // Both participants join the SAME room, as in broadcast.
+            val joinResult = streamCall.join(create = false)
 
             if (joinResult.isFailure) {
                 val cause = joinResult.errorOrNull()
-                android.util.Log.e("CallScreen", "Stream join failed")
+                android.util.Log.e("ScheduledCall", "Stream scheduled room join failed: $cause")
                 screenState = CallScreenState.Error(
                     "Could not join the call.\n\nDetails: ${cause?.message ?: cause.toString()}"
                 )

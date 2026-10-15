@@ -25,6 +25,7 @@ import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.ExitToApp
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.PrivacyTip
 import androidx.compose.material.icons.outlined.Sms
 import androidx.compose.material.icons.outlined.Visibility
@@ -92,6 +93,7 @@ fun DoctorSettingsScreen(
     onToggleDarkMode: (Boolean) -> Unit,
     onViewPrivacyPolicy: () -> Unit,
     onNavigateAppPin: () -> Unit = {},
+    onNavigatePracticeLocation: () -> Unit = {},
     onLogout: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -418,6 +420,16 @@ fun DoctorSettingsScreen(
                     description = "Keep important booking and consultation alerts enabled.",
                     accent = SettingsAmber,
                     soft = SettingsAmberSoft
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+                DoctorSettingsLinkRow(
+                    icon = Icons.Outlined.LocationOn,
+                    label = "Practice location on map",
+                    description = "Set the fixed clinic pin shown to accepted follow-up patients",
+                    accent = SettingsAmber,
+                    soft = SettingsAmberSoft,
+                    onClick = onNavigatePracticeLocation
                 )
             }
 

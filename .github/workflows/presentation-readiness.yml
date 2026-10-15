@@ -4,6 +4,7 @@ on:
     branches:
       - feature/patient-id-search-and-tips-20261014
       - fix/unified-patient-follow-ups-20261015
+      - fix/visit-review-submission-card-20261015
   workflow_dispatch:
 
 permissions:

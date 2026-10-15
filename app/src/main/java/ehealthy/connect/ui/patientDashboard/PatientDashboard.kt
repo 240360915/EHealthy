@@ -137,7 +137,8 @@ data class Appointment(
     val currency: String? = null,
     val completion_code: String? = null,
     val cancelled_reason: String? = null,
-    val call_ended_at: String? = null
+    val call_ended_at: String? = null,
+    val completion_code_verified: Boolean? = null
 )
 
 @Serializable

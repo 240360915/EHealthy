@@ -1078,11 +1078,7 @@ private fun HomeTabContent(
     // Reuse the exact video window check from the doctor's appointment sheet.
     // The homepage must not permit unpaid/unconfirmed or ended consultations.
     val scheduledOnline = appointments
-        .filter {
-            it.appointment_type.equals("online", ignoreCase = true) &&
-                it.status.equals("confirmed", ignoreCase = true) &&
-                it.call_ended_at.isNullOrBlank()
-        }
+        .filter { isScheduledVideoUpcoming(it) }
         .sortedWith(compareBy({ it.date ?: "9999-99-99" }, { it.time ?: "99:99" }))
     val liveRequestScope = rememberCoroutineScope()
 

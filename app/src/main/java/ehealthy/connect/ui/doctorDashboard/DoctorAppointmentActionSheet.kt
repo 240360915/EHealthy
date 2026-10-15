@@ -124,10 +124,18 @@ private fun doctorCallWindowState(
 // One source of truth for the doctor's video call entry points.
 // The homepage must not bypass the exact window used by the appointment sheet.
 @RequiresApi(Build.VERSION_CODES.O)
-internal fun canStartScheduledVideoNow(appt: Appointment): Boolean =
+internal fun isScheduledVideoUpcoming(appt: Appointment): Boolean =
     appt.appointment_type.equals("online", ignoreCase = true) &&
         appt.status.equals("confirmed", ignoreCase = true) &&
         appt.call_ended_at.isNullOrBlank() &&
+        doctorCallWindowState(appt) in setOf(
+            DoctorCallWindowState.OPEN,
+            DoctorCallWindowState.TOO_EARLY
+        )
+
+@RequiresApi(Build.VERSION_CODES.O)
+internal fun canStartScheduledVideoNow(appt: Appointment): Boolean =
+    isScheduledVideoUpcoming(appt) &&
         doctorCallWindowState(appt) == DoctorCallWindowState.OPEN
 
 @RequiresApi(Build.VERSION_CODES.O)

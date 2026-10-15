@@ -412,7 +412,8 @@ fun DoctorAppointmentActionSheet(
 
             if (
                 appointment.appointment_type == "online" &&
-                status == "confirmed"
+                status == "confirmed" &&
+                appointment.call_ended_at.isNullOrBlank()
             ) {
                 val windowState =
                     doctorCallWindowState(
@@ -478,6 +479,19 @@ fun DoctorAppointmentActionSheet(
                             onStartCall()
                         }
                     }
+                )
+            }
+
+            if (appointment.appointment_type == "online" &&
+                status == "confirmed" &&
+                !appointment.call_ended_at.isNullOrBlank()
+            ) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "Consultation ended — this video room cannot be reopened. Completion may require review.",
+                    color = ActionMuted,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(horizontal = 8.dp)
                 )
             }
 

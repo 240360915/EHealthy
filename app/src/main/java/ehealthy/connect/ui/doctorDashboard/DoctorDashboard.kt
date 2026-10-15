@@ -761,8 +761,13 @@ fun DoctorDashboard(
                             acceptingPhysicalRequestId = request.id
                             DoctorPatientCareRepository.acceptPhysicalVisitRequest(request.id)
                                 .onSuccess {
+                                    // Remain visible as "Accepted" until the
+                                    // doctor issues the physical-visit invoice.
                                     pendingPhysicalRequests =
-                                        pendingPhysicalRequests.filterNot { it.id == request.id }
+                                        pendingPhysicalRequests.map {
+                                            if (it.id == request.id) it.copy(status = "accepted")
+                                            else it
+                                        }
                                     physicalRequestError = null
                                     refreshTrigger++
                                 }
@@ -1305,34 +1310,42 @@ private fun HomeTabContent(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            "Pending in-person follow-up",
-                            color = DoctorAmber,
+                            if (request.status == "pending")
+                                "Pending in-person follow-up"
+                            else "Accepted · Invoice needed",
+                            color = if (request.status == "pending") DoctorAmber else DoctorGreen,
                             fontSize = 11.sp
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                            Button(
-                                modifier = Modifier.weight(1f),
-                                enabled = acceptingPhysicalRequestId == null,
-                                onClick = {
-                                    liveRequestScope.launch {
-                                        onAcceptPhysicalRequest(request)
+                            if (request.status == "pending") {
+                                Button(
+                                    modifier = Modifier.weight(1f),
+                                    enabled = acceptingPhysicalRequestId == null,
+                                    onClick = {
+                                        liveRequestScope.launch {
+                                            onAcceptPhysicalRequest(request)
+                                        }
                                     }
+                                ) {
+                                    Text(
+                                        if (acceptingPhysicalRequestId == request.id)
+                                            "Accepting…" else "Accept"
+                                    )
                                 }
-                            ) {
-                                Text(
-                                    if (acceptingPhysicalRequestId == request.id)
-                                        "Accepting…" else "Accept"
-                                )
                             }
                             OutlinedButton(
                                 modifier = Modifier.weight(1f),
                                 onClick = { onReviewPhysicalRequest(request) }
                             ) {
-                                Text("Review / Decline")
+                                Text(
+                                    if (request.status == "pending")
+                                        "Review / Decline"
+                                    else "Issue invoice"
+                                )
                             }
                         }
                         Text(
-                            "Review / Decline opens the patient's care record. Choose Visits & billing for decisions and invoices.",
+                            "Open the patient care record and select Visits & billing to decline or issue an invoice.",
                             fontSize = 10.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

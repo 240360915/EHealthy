@@ -2,6 +2,8 @@ package ehealthy.connect.ui.doctorDashboard
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,6 +38,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -945,7 +948,8 @@ private fun PatientHealthContent(
 private fun PhysicalVisitContent(
     requests: List<PhysicalVisitRequest>,
     invoices: List<PhysicalVisitInvoice>,
-    onRequestUpdated: () -> Unit
+    onRequestUpdated: () -> Unit,
+    showRequests: Boolean = true
 ){
 
     LazyColumn(
@@ -961,6 +965,7 @@ private fun PhysicalVisitContent(
             )
     ) {
 
+        if (showRequests) {
         item {
 
             SectionTitle(
@@ -1006,6 +1011,8 @@ private fun PhysicalVisitContent(
             }
         }
 
+
+        }
 
         if (
             invoices.isNotEmpty()
@@ -2871,13 +2878,17 @@ private fun formatInvoiceAmount(
 // Dedicated doctor follow-up inbox. A request has its own card and workflow;
 // invoices are shown in a SEPARATE section and are never ordinary appointments.
 @Composable
-fun DoctorPhysicalFollowUpsScreen(onBack: () -> Unit) {
+fun DoctorPhysicalFollowUpsScreen(
+    onBack: () -> Unit,
+    initialFilter: String = "pending"
+) {
     BackHandler(onBack = onBack)
     var requests by remember { mutableStateOf<List<PhysicalVisitRequest>>(emptyList()) }
     var invoices by remember { mutableStateOf<List<PhysicalVisitInvoice>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var errors by remember { mutableStateOf<String?>(null) }
     var revision by remember { mutableStateOf(0) }
+    var selectedFilter by remember(initialFilter) { mutableStateOf(initialFilter) }
 
     LaunchedEffect(revision) {
         loading = true
@@ -2916,6 +2927,20 @@ fun DoctorPhysicalFollowUpsScreen(onBack: () -> Unit) {
                     tint = DoctorColors.Teal)
             }
         }
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                .padding(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf("pending" to "Pending", "accepted" to "Accepted",
+                "invoices" to "Invoices", "history" to "History").forEach { (value,label) ->
+                FilterChip(
+                    selected = selectedFilter == value,
+                    onClick = { selectedFilter = value },
+                    label = { Text(label) }
+                )
+            }
+        }
         errors?.let {
             Text(it, modifier = Modifier.padding(16.dp),
                 color = DoctorColors.Red, fontSize = 12.sp)
@@ -2927,9 +2952,19 @@ fun DoctorPhysicalFollowUpsScreen(onBack: () -> Unit) {
         } else {
             // Individual cards include Accept/Decline, then Issue Invoice.
             // Invoice cards below are separate and reflect patient decision.
+            val shownRequests = when (selectedFilter) {
+                "pending" -> requests.filter { it.status.equals("pending", true) }
+                "accepted" -> requests.filter { it.status.equals("accepted", true) }
+                "invoices" -> emptyList()
+                else -> requests.filter {
+                    !it.status.equals("pending", true) &&
+                    !it.status.equals("accepted", true)
+                }
+            }
             PhysicalVisitContent(
-                requests = requests,
-                invoices = invoices,
+                requests = shownRequests,
+                invoices = if (selectedFilter == "invoices") invoices else emptyList(),
+                showRequests = selectedFilter != "invoices",
                 onRequestUpdated = { revision++ }
             )
         }
